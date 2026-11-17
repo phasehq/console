@@ -6,8 +6,8 @@ that only uses AWS and PostgreSQL must still match it byte for byte, once the
 values that differ on every run (session identifiers, timestamps and decoys)
 are replaced by placeholders.
 
-Access policies and time-limited access added keys to a session payload after
-the recording. A Connection with no policy and a grant with no expiry gain
+Access policies, time-limited access and app Connections added keys to a
+session payload after the recording. A Connection with no policy and a grant with no expiry gain
 exactly those: they are checked for their one expected value here and taken
 out, and everything else is still compared with the recording.
 
@@ -242,6 +242,8 @@ def _without_later_additions(text):
     if "connections" not in body:
         return text
     assert body.pop("expiredConnections") == []
+    # App Connections are listed apart; this Workflow has none.
+    assert body.pop("appConnections") == []
     for connection in body["connections"]:
         if connection["protocol"] == "http":
             assert connection.pop("policy") == _UNRESTRICTED_POLICY

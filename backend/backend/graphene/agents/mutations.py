@@ -42,6 +42,20 @@ from api.utils.agent_access import (
     granted_duration,
     iso_timestamp,
 )
+from api.utils.agent_app_access import (
+    DEFAULT_POLICY as DEFAULT_APP_POLICY,
+    AppAccessError,
+    check_app_connection,
+    connection_environments,
+    released_classes,
+    require_member_can_release,
+    require_member_can_release_grant,
+    require_sse,
+    resolve_app,
+    resolve_environments,
+    set_connection_environments,
+    validate_app_policy,
+)
 from api.utils.agent_config.access_policy import (
     live_temporary_allows,
     takes_operations,
@@ -100,10 +114,12 @@ from backend.graphene.agents.types import (
     MintedAgentTokenType,
 )
 from api.utils.agent_config import (
+    APP_SERVICE_TYPE,
     HTTP_SERVICE_TYPE,
     ConfigRegistryError,
     get_config_registry,
     host_rules_require_independent_approval,
+    is_app_service,
     is_custom_service,
     service_for_connection,
 )
@@ -774,6 +790,12 @@ class CreateAgentConnectionMutation(graphene.Mutation):
             raise GraphQLError(
                 "Create a custom Connection with createCustomAgentConnection"
             )
+        if isinstance(service_type, str) and is_app_service(
+            service_type.strip().lower()
+        ):
+            raise GraphQLError(
+                "Create an app Connection with createAgentAppConnection"
+            )
         require_role(member, "read", "IntegrationCredentials")
         service_type = _text(service_type, "serviceType", maximum=64).lower()
         registry = get_config_registry()
@@ -850,6 +872,10 @@ class UpdateAgentConnectionMutation(graphene.Mutation):
         if is_custom_service(initial.service_type):
             raise GraphQLError(
                 "Change a custom Connection with updateCustomAgentConnection"
+            )
+        if is_app_service(initial.service_type):
+            raise GraphQLError(
+                "Change an app Connection with updateAgentAppConnection"
             )
         registry = get_config_registry()
         try:
@@ -1053,6 +1079,194 @@ class UpdateCustomAgentConnectionMutation(graphene.Mutation):
             hosts=bound_hosts(connection.config),
             key_version=connection.key_version,
             value_revision=connection.value_revision,
+            **changes,
+        )
+        return cls(connection=connection)
+
+
+@contextmanager
+def _app_access_errors():
+    try:
+        yield
+    except AppAccessError as exc:
+        raise GraphQLError(str(exc)) from exc
+    except ConfigRegistryError as exc:
+        raise GraphQLError(str(exc)) from exc
+
+
+def _live_allow_classes(connection):
+    """Classes the Connection's grants have temporary allows for now."""
+
+    now = timezone.now()
+    return {
+        allow.get("class")
+        for allows in connection.workflow_grants.active(now).values_list(
+            "temporary_allows", flat=True
+        )
+        for allow in live_temporary_allows(allows, now)
+    }
+
+
+class CreateAgentAppConnectionMutation(graphene.Mutation):
+    """Create a Connection to an app's secrets, for some of its environments.
+
+    The app must have server-side encryption. ``policy`` takes rules by the
+    classes read, create, update and delete; without it reads are allowed and
+    writes ask. The member must reach the app and every environment, and hold
+    the ``Secrets`` permissions for what the policy allows.
+    """
+
+    class Arguments:
+        organisation_id = graphene.ID(required=True)
+        name = graphene.String(required=True)
+        app_id = graphene.ID(required=True)
+        environment_ids = graphene.List(graphene.NonNull(graphene.ID), required=True)
+        policy = GenericScalar()
+
+    connection = graphene.Field(AgentConnectionType, required=True)
+
+    @classmethod
+    def mutate(
+        cls, root, info, organisation_id, name, app_id, environment_ids, policy=None
+    ):
+        organisation, member = organisation_for(
+            info, organisation_id, "create", "AgentConnections"
+        )
+        name = _text(name, "name")
+        with transaction.atomic(), _app_access_errors():
+            app = require_sse(resolve_app(organisation.id, app_id=str(app_id)))
+            environments = resolve_environments(
+                app, [str(value) for value in environment_ids]
+            )
+            checked = (
+                deepcopy(DEFAULT_APP_POLICY)
+                if policy is None
+                else validate_app_policy(policy)
+            )
+            require_member_can_release(
+                member, app, environments, released_classes(checked)
+            )
+            connection = AgentConnection(
+                organisation=organisation,
+                name=name,
+                service_type=APP_SERVICE_TYPE,
+                app=app,
+                state=AgentConnection.ACTIVE,
+                policy=checked,
+                created_by=member,
+                updated_by=member,
+            )
+            _clean_save(connection)
+            set_connection_environments(connection, environments)
+        _audit(
+            info,
+            organisation,
+            AuditEvent.CREATE,
+            AuditEvent.AGENT_CONNECTION,
+            connection,
+            f"Created Agent Connection '{connection.name}'",
+            service_type=APP_SERVICE_TYPE,
+            app_id=str(app.id),
+            environment_ids=[str(environment.id) for environment in environments],
+            policy=connection.policy,
+        )
+        return cls(connection=connection)
+
+
+class UpdateAgentAppConnectionMutation(graphene.Mutation):
+    """Rename an app Connection or change the environments it covers.
+
+    Nothing ends by itself: every Workflow granted the Connection is held to
+    the new environments from its next call. Adding an environment needs what
+    creating the Connection needs, for what its grants allow.
+    """
+
+    class Arguments:
+        connection_id = graphene.ID(required=True)
+        name = graphene.String()
+        environment_ids = graphene.List(graphene.NonNull(graphene.ID))
+
+    connection = graphene.Field(AgentConnectionType, required=True)
+
+    @classmethod
+    def mutate(cls, root, info, connection_id, name=None, environment_ids=None):
+        try:
+            initial = AgentConnection.objects.only("organisation_id").get(
+                id=connection_id,
+                service_type=APP_SERVICE_TYPE,
+                deleted_at__isnull=True,
+            )
+        except (AgentConnection.DoesNotExist, ValueError) as exc:
+            raise GraphQLError("Agent Connection not found") from exc
+        member = organisation_member(info, initial.organisation_id)
+        require_role(member, "update", "AgentConnections")
+        if name is None and environment_ids is None:
+            raise GraphQLError("Nothing to change")
+        if name is not None:
+            name = _text(name, "name")
+        changes = {}
+        with transaction.atomic(), _app_access_errors():
+            try:
+                connection = (
+                    AgentConnection.objects.select_for_update(of=("self",))
+                    .select_related("organisation", "app")
+                    .get(id=connection_id, deleted_at__isnull=True)
+                )
+            except AgentConnection.DoesNotExist as exc:
+                raise GraphQLError("Agent Connection not found") from exc
+            if environment_ids is not None:
+                if connection.app is None:
+                    raise GraphQLError("The app this Connection covers no longer exists")
+                previous = connection_environments(connection)
+                environments = resolve_environments(
+                    connection.app, [str(value) for value in environment_ids]
+                )
+                added = [
+                    environment
+                    for environment in environments
+                    if environment not in previous
+                ]
+                if added:
+                    require_sse(connection.app)
+                    require_member_can_release(
+                        member,
+                        connection.app,
+                        added,
+                        released_classes(
+                            connection.policy, _live_allow_classes(connection)
+                        ),
+                    )
+                if {environment.id for environment in environments} != {
+                    environment.id for environment in previous
+                }:
+                    set_connection_environments(connection, environments)
+                    changes["environment_ids"] = [
+                        str(environment.id) for environment in environments
+                    ]
+            if name is not None and name != connection.name:
+                connection.name = name
+                changes["name"] = name
+            if changes:
+                connection.updated_by = member
+                connection.save(update_fields=["name", "updated_by", "updated_at"])
+                workflow_ids = list(
+                    connection.workflow_grants.active().values_list(
+                        "workflow_id", flat=True
+                    )
+                )
+        if not changes:
+            return cls(connection=connection)
+        # Their context text names the environments.
+        _refresh_workflow_sessions(workflow_ids)
+        _audit(
+            info,
+            connection.organisation,
+            AuditEvent.UPDATE,
+            AuditEvent.AGENT_CONNECTION,
+            connection,
+            f"Updated Agent Connection '{connection.name}'",
+            service_type=APP_SERVICE_TYPE,
+            app_id=str(connection.app_id or ""),
             **changes,
         )
         return cls(connection=connection)
@@ -1360,6 +1574,8 @@ def _connection_policy(connection, policy):
     """A policy a member gave for this Connection, as it is stored."""
 
     try:
+        if is_app_service(connection.service_type):
+            return validate_app_policy(policy)
         checked = validate_policy(
             policy, operations=takes_operations(connection.service_type)
         )
@@ -1407,6 +1623,16 @@ class SetAgentConnectionPolicyMutation(graphene.Mutation):
             checked = _connection_policy(connection, policy)
             previous = connection.policy
             changed = previous != checked
+            if changed and is_app_service(connection.service_type):
+                # Allowing a class outright gives it to every Workflow granted
+                # the Connection, so it needs what granting it would need.
+                opened = released_classes(checked) - released_classes(previous)
+                if opened:
+                    with _app_access_errors():
+                        app, environments = check_app_connection(connection)
+                        require_member_can_release(
+                            member, app, environments, opened
+                        )
             if changed:
                 connection.policy = checked
                 connection.updated_by = member
@@ -1482,6 +1708,24 @@ class GrantAgentWorkflowMutation(graphene.Mutation):
             if custom:
                 if not connection.sealed_value:
                     raise GraphQLError("Active Agent Connection not found")
+            elif is_app_service(connection.service_type):
+                existing = (
+                    AgentWorkflowGrant.objects.active()
+                    .filter(workflow=workflow, connection=connection)
+                    .first()
+                )
+                with _app_access_errors():
+                    require_member_can_release_grant(
+                        member,
+                        connection,
+                        [
+                            allow.get("class")
+                            for allow in live_temporary_allows(
+                                existing.temporary_allows if existing else [],
+                                timezone.now(),
+                            )
+                        ],
+                    )
             else:
                 service = get_config_registry().get_service(connection.service_type)
                 if connection.authentication.provider not in _providers_for_service(

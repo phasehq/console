@@ -428,6 +428,7 @@ class ServiceAccountTokenType(DjangoObjectType):
 class MemberType(graphene.Enum):
     USER = "user"
     SERVICE = "service"
+    AGENT = "agent"
 
 
 class ProviderType(graphene.ObjectType):
@@ -523,8 +524,28 @@ class SecretFolderType(DjangoObjectType):
         )
 
 
+class SecretEventAgentRefType(graphene.ObjectType):
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+
+
+class SecretEventAgentType(graphene.ObjectType):
+    """The Agent that made a secrets call, with the Workflow and token it
+    used. Names only: nothing here reaches the Agent's credentials."""
+
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+    harness_type = graphene.String(required=True)
+    deleted = graphene.Boolean(required=True)
+    workflow = graphene.Field(SecretEventAgentRefType)
+    token = graphene.Field(SecretEventAgentRefType)
+
+
 class SecretEventType(DjangoObjectType):
     actor_deleted = graphene.Boolean()
+    # Set when an Agent token made the call; ``user`` and the service
+    # account fields are then null.
+    agent = graphene.Field(SecretEventAgentType)
 
     class Meta:
         model = SecretEvent
@@ -561,6 +582,23 @@ class SecretEventType(DjangoObjectType):
             return self.user
         return None
 
+    def resolve_agent(self, info):
+        agent = self.agent if self.agent_id else None
+        if agent is None:
+            return None
+        workflow = self.agent_workflow if self.agent_workflow_id else None
+        token = self.agent_token if self.agent_token_id else None
+        return {
+            "id": str(agent.id),
+            "name": agent.name,
+            "harness_type": agent.harness_type,
+            "deleted": agent.deleted_at is not None,
+            "workflow": (
+                {"id": str(workflow.id), "name": workflow.name} if workflow else None
+            ),
+            "token": {"id": str(token.id), "name": token.name} if token else None,
+        }
+
     def resolve_actor_deleted(self, info):
         # A hard-deleted account SET_NULLs the actor FKs. The client can't
         # infer "deleted" from a null user: resolve_user also nulls for
@@ -571,6 +609,8 @@ class SecretEventType(DjangoObjectType):
             or self.service_token_id
             or self.service_account_id
             or self.service_account_token_id
+            or self.agent_id
+            or self.agent_token_id
         )
         if has_actor:
             return False

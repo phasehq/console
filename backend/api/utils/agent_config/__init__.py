@@ -7,9 +7,12 @@ outside ``ee/`` because ``api.models`` validates Connections against it.
 """
 
 from .http_definition import (
+    APP_DISPLAY_NAME,
+    APP_SERVICE_TYPE,
     HTTP_DISPLAY_NAME,
     HTTP_SERVICE_TYPE,
     DefinitionError,
+    is_app_service,
     is_custom_service,
     load_definition,
     service_for_connection,
@@ -32,6 +35,8 @@ from .registry import (
 )
 
 __all__ = [
+    "APP_DISPLAY_NAME",
+    "APP_SERVICE_TYPE",
     "CLIENT_MATCHER_SCHEMA_VERSION",
     "DEFAULT_SERVICE_ROOT",
     "HTTP_DISPLAY_NAME",
@@ -46,6 +51,7 @@ __all__ = [
     "expand_preset",
     "get_config_registry",
     "host_rules_require_independent_approval",
+    "is_app_service",
     "is_custom_service",
     "list_presets",
     "load_definition",

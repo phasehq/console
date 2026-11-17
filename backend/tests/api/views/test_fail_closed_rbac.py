@@ -83,6 +83,7 @@ _EXEMPT = {
     ("api.views.auth", "SecretsTokensView"),
     ("api.views.audit", "PublicAuditLogsView"),
     # Agent views check their principal and Workflow access; see tests/api/agents.
+    ("api.views.agents.app_secrets", "AgentAppAccessView"),
     ("api.views.agents.events", "AgentSessionEventsView"),
     ("api.views.agents.management", "AgentCollectionView"),
     ("api.views.agents.management", "AgentRegistryView"),

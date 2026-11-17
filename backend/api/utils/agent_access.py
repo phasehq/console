@@ -294,6 +294,16 @@ def access_record(request, seconds, expires_at):
     }
 
 
+def applied_access(applied_action):
+    """The record ``access_record`` made for an approved request. An app
+    access action already uses ``access`` for its level, so it keeps the
+    record under ``accessRecord``."""
+
+    applied_action = applied_action or {}
+    record = applied_action.get("access")
+    return record if isinstance(record, dict) else applied_action.get("accessRecord")
+
+
 def iso_timestamp(value):
     """A timestamp in the spelling the runtime API renders."""
 
@@ -309,12 +319,15 @@ class AccessError(ValueError):
 
 def lock_grantable_connection(organisation_id, connection_id):
     """Lock a Connection and check a Workflow can be granted it: active, with
-    a live integration credential or, for a custom Connection, a stored value.
+    a live integration credential or, for a custom Connection, a stored value;
+    an app Connection must still cover environments of an SSE app.
     Call inside a transaction."""
 
+    from api.utils.agent_app_access import AppAccessError, check_app_connection
     from api.utils.agent_config import (
         ConfigRegistryError,
         get_config_registry,
+        is_app_service,
         is_custom_service,
     )
 
@@ -337,6 +350,12 @@ def lock_grantable_connection(organisation_id, connection_id):
         if not connection.sealed_value:
             raise AccessError("Active Agent Connection not found")
         return connection
+    if is_app_service(connection.service_type):
+        try:
+            check_app_connection(connection)
+        except AppAccessError as exc:
+            raise AccessError(str(exc)) from exc
+        return connection
     try:
         service = get_config_registry().get_service(connection.service_type)
     except ConfigRegistryError as exc:
@@ -349,10 +368,17 @@ def lock_grantable_connection(organisation_id, connection_id):
 
 
 def connection_takes_policy(connection):
-    """Access policies apply to HTTP Connections, packaged or custom."""
+    """Access policies apply to HTTP Connections, packaged or custom, and to
+    app Connections, where the Console enforces them."""
 
-    from api.utils.agent_config import ConfigRegistryError, service_for_connection
+    from api.utils.agent_config import (
+        ConfigRegistryError,
+        is_app_service,
+        service_for_connection,
+    )
 
+    if is_app_service(connection.service_type):
+        return True
     try:
         return service_for_connection(connection)["protocol"] == "http"
     except ConfigRegistryError:

@@ -1339,6 +1339,20 @@ class SecretEvent(models.Model):
     service_account_token = models.ForeignKey(
         ServiceAccountToken, on_delete=models.SET_NULL, blank=True, null=True
     )
+    # Set when an Agent token made the call, through an app Connection of
+    # this Workflow.
+    agent = models.ForeignKey(
+        "Agent", on_delete=models.SET_NULL, blank=True, null=True,
+        related_name="secret_events",
+    )
+    agent_token = models.ForeignKey(
+        "AgentToken", on_delete=models.SET_NULL, blank=True, null=True,
+        related_name="secret_events",
+    )
+    agent_workflow = models.ForeignKey(
+        "AgentWorkflow", on_delete=models.SET_NULL, blank=True, null=True,
+        related_name="secret_events",
+    )
     key = models.TextField()
     key_digest = models.TextField()
     value = models.TextField()
@@ -1943,14 +1957,12 @@ class Agent(models.Model):
     CLAUDE_CODE = "claude_code"
     CODEX = "codex"
     CURSOR = "cursor"
-    DEVIN = "devin"
     OPENCODE = "opencode"
     OTHER = "other"
     HARNESS_CHOICES = [
         (CLAUDE_CODE, "Claude Code"),
         (CODEX, "Codex"),
         (CURSOR, "Cursor"),
-        (DEVIN, "Devin"),
         (OPENCODE, "OpenCode"),
         (OTHER, "Other"),
     ]
@@ -2350,8 +2362,20 @@ class AgentConnection(models.Model):
     )
     # One inline access policy, as api.utils.agent_config.access_policy stores
     # it, for every Workflow granted this Connection. Empty means every call
-    # the Connection allows is allowed. HTTP Connections only.
+    # the Connection allows is allowed. HTTP and app Connections only.
     policy = models.JSONField(default=dict, blank=True)
+    # App Connections ("phase_app") only: the SSE app whose secrets the
+    # Console serves to the Workflows granted this Connection, for the
+    # environments listed in AgentConnectionEnvironment. Apps are hard
+    # deleted and grants hold their Connection, so a deleted app leaves the
+    # Connection covering nothing rather than taking it with it.
+    app = models.ForeignKey(
+        App,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_connections",
+    )
     created_by = models.ForeignKey(
         OrganisationMember,
         on_delete=models.SET_NULL,
@@ -2394,13 +2418,27 @@ class AgentConnection(models.Model):
                 raise ValidationError(
                     "Connection authentication provider is incompatible with its service"
                 )
-        # A custom Connection holds its own sealed value instead.
+        from api.utils.agent_config import APP_SERVICE_TYPE, HTTP_SERVICE_TYPE
+
+        # A custom Connection holds its own sealed value instead, and an app
+        # Connection needs no credential: the Console serves the secrets.
         if (
             self.state == self.ACTIVE
             and not self.authentication_id
-            and self.service_type != "http"
+            and self.service_type not in (HTTP_SERVICE_TYPE, APP_SERVICE_TYPE)
         ):
             raise ValidationError("Active connections require authentication")
+        if self.service_type == APP_SERVICE_TYPE:
+            if (self._state.adding and not self.app_id) or self.authentication_id:
+                raise ValidationError(
+                    "App Connections name an app and carry no credential"
+                )
+            if self.app_id and not _same_text_id(
+                self.app.organisation_id, self.organisation_id
+            ):
+                raise ValidationError("Connection app must belong to the same organisation")
+        elif self.app_id:
+            raise ValidationError("Only app Connections name an app")
         configured_hosts = (self.config or {}).get("hosts")
         if configured_hosts:
             if not self.host_rules_authored_by_id:
@@ -2466,6 +2504,27 @@ class AgentConnection(models.Model):
                 raise ValidationError(
                     "Changing configured host rules requires a new approval version"
                 )
+
+
+class AgentConnectionEnvironment(models.Model):
+    """One environment an app Connection covers."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    connection = models.ForeignKey(
+        AgentConnection, on_delete=models.CASCADE, related_name="app_environments"
+    )
+    environment = models.ForeignKey(
+        Environment, on_delete=models.CASCADE, related_name="agent_connections"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["connection", "environment"],
+                name="unique_agent_connection_environment",
+            )
+        ]
 
 
 class AgentConnectionKeyCopy(models.Model):

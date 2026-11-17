@@ -38,13 +38,18 @@ from api.utils.agent_sessions import (
     rotate_session_credential,
     verify_session_credential,
 )
-from api.utils.agent_access import DurationError, requested_duration
+from api.utils.agent_access import (
+    DurationError,
+    applied_access,
+    requested_duration,
+)
 from api.utils.agents import close_agent_request, expire_overdue_requests
 from api.utils.agent_config import (
     CLIENT_MATCHER_SCHEMA_VERSION,
     ConfigCompatibilityError,
     ConfigRegistryError,
     get_config_registry,
+    is_app_service,
     is_custom_service,
 )
 from api.utils.request_actions import (
@@ -347,7 +352,7 @@ def _request_response(agent_request, *, cooldown=False):
     if agent_request.duration_seconds is not None:
         # How long the access this request ends in was asked to last.
         payload["duration_seconds"] = agent_request.duration_seconds
-    access = (agent_request.applied_action or {}).get("access")
+    access = applied_access(agent_request.applied_action)
     if agent_request.status == AgentRequest.APPROVED and access:
         # What was asked for and what the member granted.
         payload["access"] = access
@@ -819,6 +824,12 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     "action_required",
                     "Ask for a custom HTTP Connection with an "
                     "agent_connection.create action.",
+                )
+            if is_app_service(service_type):
+                raise AgentRuntimeError(
+                    "action_required",
+                    "Ask for an app's secrets with an "
+                    "agent_connection.app_access action.",
                 )
             try:
                 service = get_config_registry().get_service(service_type)
