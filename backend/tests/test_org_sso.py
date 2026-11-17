@@ -1599,7 +1599,7 @@ class SSOEnforcementBypassTest(unittest.TestCase):
         """Regression: only SSO admin mutations carry the bypass."""
         from backend.graphene.middleware import _bypasses_sso_enforcement
         self.assertFalse(
-            _bypasses_sso_enforcement(self._info_for("editSecret"))
+            _bypasses_sso_enforcement(self._info_for("editSecrets"))
         )
 
     @patch("backend.graphene.middleware.Organisation")
@@ -1654,8 +1654,8 @@ class SSOEnforcementBypassTest(unittest.TestCase):
         mock_org_cls.objects.only.return_value.get.return_value = org
 
         info = self._make_request(auth_method="password")
-        info.return_type = self._info_for("editSecret").return_type
-        info.field_name = "editSecret"
+        info.return_type = self._info_for("editSecrets").return_type
+        info.field_name = "editSecrets"
 
         mw = OrgSSOEnforcementMiddleware()
         with self.assertRaises(SSORequiredError):
@@ -1672,11 +1672,11 @@ class ModelForMutationDerivationTest(unittest.TestCase):
         return gql_schema.mutation_type.fields[field_name].type
 
     def test_derives_model_from_djangoobjecttype_output(self):
-        """editSecret returns SecretType → walks output, finds Secret."""
+        """editSecrets returns SecretType (list) → walks output, finds Secret."""
         from backend.graphene.middleware import _model_for_mutation
 
         info = MagicMock()
-        info.return_type = self._gql_return_type("editSecret")
+        info.return_type = self._gql_return_type("editSecrets")
         self.assertEqual(_model_for_mutation(info), "Secret")
 
     def test_explicit_org_resource_model_takes_precedence(self):
