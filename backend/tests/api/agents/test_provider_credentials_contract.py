@@ -553,6 +553,8 @@ def test_aws_runtime_keeps_live_access_key_server_side_and_emits_stable_decoys(
         workflow=contract["workflow"],
         opened_by_member=contract["member"],
         idempotency_key="aws-runtime-direct-access-key",
+        # An AWS Connection reaches only a client that enforces its rules.
+        client_info={"features": ["provider_rules"], "injectionActions": ["aws_sigv4"]},
     )
 
     runtime = resolve_workflow_config(session)
@@ -1480,6 +1482,8 @@ def test_discover_reuses_safe_assume_role_runtime_without_resolving_again(
         workflow=contract["workflow"],
         opened_by_member=contract["member"],
         idempotency_key="aws-runtime-assume-role-snapshot",
+        # An AWS Connection reaches only a client that enforces its rules.
+        client_info={"features": ["provider_rules"], "injectionActions": ["aws_sigv4"]},
     )
     expires_at = timezone.now() + timedelta(minutes=45)
     resolution_count = 0
@@ -1643,6 +1647,8 @@ def test_assumed_role_credentials_carry_the_sts_expiry(contract, monkeypatch):
         workflow=contract["workflow"],
         opened_by_member=contract["member"],
         idempotency_key="aws-assume-role-expiry",
+        # An AWS Connection reaches only a client that enforces its rules.
+        client_info={"features": ["provider_rules"], "injectionActions": ["aws_sigv4"]},
     )
     expiration = timezone.now().replace(microsecond=0) + timedelta(hours=1)
     calls = []

@@ -21,7 +21,7 @@ from api.utils.audit_logging import get_actor_info, log_audit_event
 from api.utils.rest import get_resolver_request_meta
 from api.utils.agent_config import get_config_registry, preset_summaries
 from api.views.agents.base import AgentRuntimeError, SCHEMA_VERSION
-from api.views.agents.views import AgentRuntimeAPIView
+from api.views.agents.views import AgentRuntimeAPIView, ProviderRulesJSONRenderer
 
 
 def _principal(request):
@@ -252,6 +252,8 @@ class AgentTokenCreateView(AgentRuntimeAPIView):
 
 
 class AgentRegistryView(AgentRuntimeAPIView):
+    renderer_classes = [ProviderRulesJSONRenderer]
+
     def get(self, request):
         # Safe for Agent auth: registry metadata contains no configured hosts,
         # credential values, grants, or organisation data. Presets are public

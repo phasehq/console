@@ -454,8 +454,11 @@ def test_injections_compile_to_the_wire_list():
 def test_a_definition_compiles_to_the_shape_of_a_packaged_service():
     service = compile_service(validate_definition(_definition()))
 
+    # A custom Connection has no secret guard or call classes, and holds its
+    # own value rather than reading a stored credential.
+    manifest_only = {"secret_guard", "action_classes", "credential_fields"}
     for packaged in get_config_registry().services.values():
-        assert set(packaged) <= set(service)
+        assert set(packaged) - manifest_only <= set(service)
     assert service["service_type"] == "http"
     assert service["protocol"] == "http"
     assert service["host_rules_mode"] == "required_endpoint"

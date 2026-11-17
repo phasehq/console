@@ -149,6 +149,20 @@ class AgentRuntimeAPIView(APIView):
         return exception_error_response(exc)
 
 
+class ProviderRulesJSONRenderer(CamelCaseJSONRenderer):
+    """Leaves the keys of a manifest's data maps as written.
+
+    Their keys are names from the provider (``cognito-identity``,
+    ``kms:CreateGrant``, ``publicAccessBlock``), not schema keys, and the
+    client looks them up exactly.
+    """
+
+    json_underscoreize = {
+        **CamelCaseJSONRenderer.json_underscoreize,
+        "ignore_fields": ("operations", "exact", "s3Subresources"),
+    }
+
+
 class AgentIdentityView(AgentRuntimeAPIView):
     """Return the workflow-scoped identity represented by an Agent token."""
 
@@ -376,6 +390,8 @@ def _request_response(agent_request, *, cooldown=False):
 
 
 class AgentSessionCollectionView(AgentRuntimeAPIView):
+    renderer_classes = [ProviderRulesJSONRenderer]
+
     def post(self, request):
         if request.data.get("schema_version") != SCHEMA_VERSION:
             raise AgentRuntimeError(
@@ -453,6 +469,8 @@ class AgentSessionCollectionView(AgentRuntimeAPIView):
 
 
 class AgentSessionConfigView(AgentRuntimeAPIView):
+    renderer_classes = [ProviderRulesJSONRenderer]
+
     def get(self, request, session_uid):
         session = resolve_session_for_request(request, session_uid)
         config = resolve_workflow_config(
@@ -543,6 +561,8 @@ class AgentSessionCapabilitiesView(AgentRuntimeAPIView):
 
 
 class AgentSessionDiscoverView(AgentRuntimeAPIView):
+    renderer_classes = [ProviderRulesJSONRenderer]
+
     def get(self, request, session_uid):
         session = resolve_session_for_request(request, session_uid)
         config = resolve_workflow_config(

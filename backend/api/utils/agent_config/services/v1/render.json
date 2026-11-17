@@ -23,5 +23,11 @@
   ],
   "credential_providers": ["render"],
   "client_matchers": [{"kind": "executable", "values": ["render"]}],
-  "context_template": "The Render API through the Phase proxy. RENDER_API_KEY holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached."
+  "context_template": "The Render API through the Phase proxy. RENDER_API_KEY holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached.",
+  "credential_environment": [
+    "RENDER_API_KEY"
+  ],
+  "credential_fields": {
+    "token": "api_key"
+  }
 }

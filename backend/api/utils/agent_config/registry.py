@@ -29,7 +29,13 @@ from urllib.parse import urlparse
 
 from api.services import Providers
 
-from .access_policy import validate_operation_classes
+from .access_policy import (
+    HTTP_METHODS,
+    USER_CLASSES,
+    is_operation,
+    validate_operation_classes,
+    validate_path_glob,
+)
 from .errors import ConfigCompatibilityError, ConfigRegistryError
 
 
@@ -126,6 +132,36 @@ _CONTEXT_VARIABLE = re.compile(r"\{\{\s*([a-z][a-z0-9_.]*)\s*\}\}")
 _CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _EXECUTABLE_MATCHER_VALUE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,63}$")
 _URI_SCHEME_MATCHER_VALUE = re.compile(r"^[a-z][a-z0-9+.-]{0,63}$")
+
+# What a client must list in ``client.features`` to be sent a Connection whose
+# service has a secret guard or call classes: it enforces them from the
+# manifest instead of from a copy of its own.
+PROVIDER_RULES_FEATURE = "provider_rules"
+# The client rejects the whole session on a name outside these limits.
+_MAX_CREDENTIAL_ENVIRONMENT_NAMES = 64
+_MAX_CREDENTIAL_ENVIRONMENT_LENGTH = 128
+_MAX_PROVIDER_RULES = 256
+_MAX_RULE_TEXT_LENGTH = 256
+# An AWS signing service name, as the operation matcher spells it.
+_AWS_SERVICE = re.compile(r"^[a-z0-9-]{1,64}$")
+_AWS_ACTION = re.compile(r"^[A-Za-z0-9]{1,128}$")
+_QUERY_PARAMETER = re.compile(r"^[A-Za-z0-9._~-]{1,128}$")
+ACTION_CLASSES_SCHEME = "aws_actions"
+ACTION_CLASSES_VERSION = 1
+_ACTION_CLASS_LISTS = (
+    "read_verbs",
+    "create_verbs",
+    "delete_verbs",
+    "admin_services",
+    "admin_suffixes",
+    "query_protocol_services",
+    "dual_protocol_services",
+    "json_target_services",
+    "mixed_services",
+)
+# The injection the CLI treats as an AWS call. Its secret guard and call
+# classes must always reach the client, or the Connection is unusable.
+_AWS_INJECTION = "aws_sigv4"
 
 
 class _DuplicateKeyError(ValueError):
@@ -988,6 +1024,268 @@ def _validate_config_value(
     raise AssertionError(f"unhandled config input type {input_type}")
 
 
+def _rule_text(value: Any, location: str) -> str:
+    text = _string(value, location)
+    if len(text) > _MAX_RULE_TEXT_LENGTH or _CONTROL_CHARACTER.search(text):
+        raise ConfigRegistryError(
+            f"{location}: expected at most {_MAX_RULE_TEXT_LENGTH} characters "
+            "without control characters"
+        )
+    return text
+
+
+def _patterned_list(
+    value: Any, pattern: re.Pattern, location: str, *, allow_empty: bool = False
+) -> list[str]:
+    items = _string_list(value, location, allow_empty=allow_empty)
+    if len(items) > _MAX_PROVIDER_RULES:
+        raise ConfigRegistryError(
+            f"{location}: expected at most {_MAX_PROVIDER_RULES} entries"
+        )
+    for index, item in enumerate(items):
+        if not pattern.fullmatch(item):
+            raise ConfigRegistryError(f"{location}[{index}]: invalid value {item!r}")
+    return items
+
+
+def _http_method(value: Any, location: str) -> str:
+    if not isinstance(value, str) or value not in HTTP_METHODS:
+        raise ConfigRegistryError(f"{location}: expected one upper-case HTTP method")
+    return value
+
+
+def _validate_credential_environment(value: Any, location: str) -> list[str]:
+    """The variables a provider's own tools read credentials from."""
+
+    names = _string_list(value, location, allow_empty=True)
+    if len(names) > _MAX_CREDENTIAL_ENVIRONMENT_NAMES:
+        raise ConfigRegistryError(
+            f"{location}: expected at most {_MAX_CREDENTIAL_ENVIRONMENT_NAMES} names"
+        )
+    for index, name in enumerate(names):
+        if (
+            len(name) > _MAX_CREDENTIAL_ENVIRONMENT_LENGTH
+            or not _ENVIRONMENT_NAME.fullmatch(name)
+        ):
+            raise ConfigRegistryError(
+                f"{location}[{index}]: expected an upper-case environment variable "
+                f"name of at most {_MAX_CREDENTIAL_ENVIRONMENT_LENGTH} characters"
+            )
+    return names
+
+
+def _validate_secret_guard(
+    value: Any, *, aws: bool, location: str
+) -> dict[str, Any]:
+    """The calls that would hand back a new credential, which the proxy blocks.
+
+    ``operations`` and a path rule's ``services`` name AWS calls, which only
+    a client signing for AWS can tell apart.
+    """
+
+    guard = _mapping(value, location)
+    _check_keys(guard, optional={"operations", "paths"}, location=location)
+    if not guard.get("operations") and not guard.get("paths"):
+        raise ConfigRegistryError(f"{location}: expected operations, paths, or both")
+    checked: dict[str, Any] = {}
+    if "operations" in guard:
+        operations_location = f"{location}.operations"
+        if not aws:
+            raise ConfigRegistryError(
+                f"{operations_location}: only valid for a service signed with "
+                f"{_AWS_INJECTION}"
+            )
+        operations = _mapping(guard["operations"], operations_location)
+        if not operations:
+            raise ConfigRegistryError(f"{operations_location}: must not be empty")
+        checked["operations"] = {}
+        for service, names in operations.items():
+            if not isinstance(service, str) or not _AWS_SERVICE.fullmatch(service):
+                raise ConfigRegistryError(
+                    f"{operations_location}: invalid service {service!r}"
+                )
+            checked["operations"][service] = _patterned_list(
+                names, _AWS_ACTION, f"{operations_location}.{service}"
+            )
+    if "paths" in guard:
+        paths = _list(guard["paths"], f"{location}.paths")
+        if not paths or len(paths) > _MAX_PROVIDER_RULES:
+            raise ConfigRegistryError(
+                f"{location}.paths: expected 1 to {_MAX_PROVIDER_RULES} rules"
+            )
+        checked["paths"] = []
+        for index, raw in enumerate(paths):
+            rule_location = f"{location}.paths[{index}]"
+            rule = _mapping(raw, rule_location)
+            _check_keys(
+                rule,
+                required={"pattern", "operation"},
+                optional={"method", "query", "services", "host_label"},
+                location=rule_location,
+            )
+            entry: dict[str, Any] = {}
+            if "method" in rule:
+                entry["method"] = _http_method(rule["method"], f"{rule_location}.method")
+            entry["pattern"] = validate_path_glob(
+                rule["pattern"], f"{rule_location}.pattern"
+            )
+            if "query" in rule:
+                query = _string(rule["query"], f"{rule_location}.query")
+                if not _QUERY_PARAMETER.fullmatch(query):
+                    raise ConfigRegistryError(
+                        f"{rule_location}.query: expected the name of one query "
+                        "parameter"
+                    )
+                entry["query"] = query
+            entry["operation"] = _rule_text(
+                rule["operation"], f"{rule_location}.operation"
+            )
+            if "services" in rule:
+                if not aws:
+                    raise ConfigRegistryError(
+                        f"{rule_location}.services: only valid for a service "
+                        f"signed with {_AWS_INJECTION}"
+                    )
+                entry["services"] = _patterned_list(
+                    rule["services"], _AWS_SERVICE, f"{rule_location}.services"
+                )
+            if "host_label" in rule:
+                host_label = _string(rule["host_label"], f"{rule_location}.host_label")
+                if not _HOST_LABEL.fullmatch(host_label):
+                    raise ConfigRegistryError(
+                        f"{rule_location}.host_label: expected one lower-case DNS "
+                        "label"
+                    )
+                entry["host_label"] = host_label
+            checked["paths"].append(entry)
+    return checked
+
+
+def _class_table(
+    value: Any, key_pattern: re.Pattern | None, location: str
+) -> dict[str, str]:
+    table = _mapping(value, location)
+    if len(table) > _MAX_PROVIDER_RULES:
+        raise ConfigRegistryError(
+            f"{location}: expected at most {_MAX_PROVIDER_RULES} entries"
+        )
+    for key, class_name in table.items():
+        if not isinstance(key, str) or not key or (
+            key_pattern is not None and not key_pattern.fullmatch(key)
+        ):
+            raise ConfigRegistryError(f"{location}: invalid key {key!r}")
+        if class_name not in USER_CLASSES:
+            raise ConfigRegistryError(
+                f"{location}.{key}: expected one of {', '.join(USER_CLASSES)}"
+            )
+    return dict(table)
+
+
+def _validate_action_classes(value: Any, location: str) -> dict[str, Any]:
+    """How an AWS call is classed by the action it names (CLI ``awsClasses``)."""
+
+    classes = _mapping(value, location)
+    _check_keys(
+        classes,
+        required={
+            "scheme",
+            "version",
+            "exact",
+            "s3_subresources",
+            "rest_operations",
+            *_ACTION_CLASS_LISTS,
+        },
+        location=location,
+    )
+    if classes["scheme"] != ACTION_CLASSES_SCHEME:
+        raise ConfigRegistryError(
+            f"{location}.scheme: expected {ACTION_CLASSES_SCHEME!r}"
+        )
+    version = classes["version"]
+    if isinstance(version, bool) or version != ACTION_CLASSES_VERSION:
+        raise ConfigRegistryError(
+            f"{location}.version: expected {ACTION_CLASSES_VERSION}"
+        )
+    checked: dict[str, Any] = {
+        "scheme": ACTION_CLASSES_SCHEME,
+        "version": ACTION_CLASSES_VERSION,
+    }
+    for key in _ACTION_CLASS_LISTS:
+        pattern = _AWS_SERVICE if key.endswith("_services") else _AWS_ACTION
+        checked[key] = _patterned_list(
+            classes[key], pattern, f"{location}.{key}", allow_empty=True
+        )
+    checked["exact"] = _class_table(classes["exact"], None, f"{location}.exact")
+    for key in checked["exact"]:
+        if not is_operation(key):
+            raise ConfigRegistryError(
+                f"{location}.exact: expected keys spelled service:Action, got {key!r}"
+            )
+    checked["s3_subresources"] = _class_table(
+        classes["s3_subresources"], _QUERY_PARAMETER, f"{location}.s3_subresources"
+    )
+    operations = _list(classes["rest_operations"], f"{location}.rest_operations")
+    if len(operations) > _MAX_PROVIDER_RULES:
+        raise ConfigRegistryError(
+            f"{location}.rest_operations: expected at most {_MAX_PROVIDER_RULES} "
+            "entries"
+        )
+    checked["rest_operations"] = []
+    for index, raw in enumerate(operations):
+        entry_location = f"{location}.rest_operations[{index}]"
+        entry = _mapping(raw, entry_location)
+        _check_keys(
+            entry,
+            required={"service", "method", "pattern", "action"},
+            location=entry_location,
+        )
+        service = _string(entry["service"], f"{entry_location}.service")
+        action = _string(entry["action"], f"{entry_location}.action")
+        if not _AWS_SERVICE.fullmatch(service):
+            raise ConfigRegistryError(f"{entry_location}.service: invalid service")
+        if not _AWS_ACTION.fullmatch(action):
+            raise ConfigRegistryError(f"{entry_location}.action: invalid action")
+        checked["rest_operations"].append(
+            {
+                "service": service,
+                "method": _http_method(entry["method"], f"{entry_location}.method"),
+                "pattern": validate_path_glob(
+                    entry["pattern"], f"{entry_location}.pattern"
+                ),
+                "action": action,
+            }
+        )
+    return checked
+
+
+def _validate_credential_fields(
+    value: Any,
+    *,
+    provider: Any,
+    fields: Mapping[str, Mapping[str, Any]],
+    location: str,
+) -> dict[str, str]:
+    """Which stored credential field fills each service field, for a provider
+    whose credential is read as it is stored (a token and its identifiers)."""
+
+    mapping = _mapping(value, location)
+    if set(mapping) != set(fields):
+        raise ConfigRegistryError(
+            f"{location}: must name a credential field for every service field"
+        )
+    declared = Providers.get_provider_config(provider)
+    stored = set(declared.get("expected_credentials", ())) | set(
+        declared.get("optional_credentials", ())
+    )
+    for service_field, credential_field in mapping.items():
+        if credential_field not in stored:
+            raise ConfigRegistryError(
+                f"{location}.{service_field}: {credential_field!r} is not a "
+                f"{provider} credential field"
+            )
+    return dict(mapping)
+
+
 def _validate_service(document: Mapping[str, Any], path: Path) -> dict[str, Any]:
     location = str(path)
     _check_keys(
@@ -1009,7 +1307,15 @@ def _validate_service(document: Mapping[str, Any], path: Path) -> dict[str, Any]
             "client_matchers",
             "context_template",
         },
-        optional={"proxy_only", "on_refresh", "operation_classes"},
+        optional={
+            "proxy_only",
+            "on_refresh",
+            "operation_classes",
+            "credential_environment",
+            "secret_guard",
+            "action_classes",
+            "credential_fields",
+        },
         location=location,
     )
     _validate_schema_version(document, location)
@@ -1156,6 +1462,48 @@ def _validate_service(document: Mapping[str, Any], path: Path) -> dict[str, Any]
             document["operation_classes"], f"{location}.operation_classes"
         )
 
+    aws = document["injection"]["action"] == _AWS_INJECTION
+    credential_environment = _validate_credential_environment(
+        document.get("credential_environment", []),
+        f"{location}.credential_environment",
+    )
+    secret_guard = None
+    if "secret_guard" in document:
+        secret_guard = _validate_secret_guard(
+            document["secret_guard"], aws=aws, location=f"{location}.secret_guard"
+        )
+    action_classes = None
+    if "action_classes" in document:
+        if not aws:
+            raise ConfigRegistryError(
+                f"{location}.action_classes: only valid for a service signed with "
+                f"{_AWS_INJECTION}"
+            )
+        action_classes = _validate_action_classes(
+            document["action_classes"], f"{location}.action_classes"
+        )
+    # The client refuses an AWS Connection that arrives without either, so a
+    # manifest missing one fails here rather than in a member's session.
+    if aws and (secret_guard is None or action_classes is None):
+        raise ConfigRegistryError(
+            f"{location}: a service signed with {_AWS_INJECTION} needs "
+            "secret_guard and action_classes"
+        )
+    credential_fields = None
+    if "credential_fields" in document:
+        # A finalizer's credential is resolved by code of its own.
+        if document["injection"]["action"] in FINALIZER_ACTIONS or proxy_only:
+            raise ConfigRegistryError(
+                f"{location}.credential_fields: only valid for a service that "
+                "injects a stored token"
+            )
+        credential_fields = _validate_credential_fields(
+            document["credential_fields"],
+            provider=provider,
+            fields=fields,
+            location=f"{location}.credential_fields",
+        )
+
     on_refresh = document.get("on_refresh", "none")
     if on_refresh not in ON_REFRESH_MODES:
         raise ConfigRegistryError(
@@ -1176,6 +1524,13 @@ def _validate_service(document: Mapping[str, Any], path: Path) -> dict[str, Any]
     checked["client_matchers"] = client_matchers
     if operation_classes is not None:
         checked["operation_classes"] = operation_classes
+    checked["credential_environment"] = credential_environment
+    if secret_guard is not None:
+        checked["secret_guard"] = secret_guard
+    if action_classes is not None:
+        checked["action_classes"] = action_classes
+    if credential_fields is not None:
+        checked["credential_fields"] = credential_fields
     return checked
 
 
@@ -1205,6 +1560,12 @@ class ConfigRegistry:
     schema_version: int
     _services: Mapping[str, Mapping[str, Any]]
     _capabilities: Mapping[str, Any]
+    # Lower-cased ``service:Action`` names of every call a secret guard blocks.
+    minting_operations: frozenset[str] = frozenset()
+    # The services whose calls the client names by action.
+    operation_service_types: frozenset[str] = frozenset()
+    # {credential provider: the service whose ``credential_fields`` read it}
+    _token_services: Mapping[str, str] = MappingProxyType({})
 
     @classmethod
     def load(
@@ -1213,11 +1574,36 @@ class ConfigRegistry:
         raw_services = _load_documents(Path(service_root))
         services: dict[str, dict[str, Any]] = {}
         host_owners: dict[tuple[Any, ...], str] = {}
+        minting_operations: set[str] = set()
+        operation_service_types: set[str] = set()
+        token_services: dict[str, str] = {}
         for path, document in raw_services:
             checked = _validate_service(document, path)
             service_type = checked["service_type"]
             if service_type in services:
                 raise ConfigRegistryError(f"Duplicate service type {service_type!r}")
+            guard = checked.get("secret_guard", {})
+            for aws_service, actions in guard.get("operations", {}).items():
+                minting_operations.update(
+                    f"{aws_service}:{action}".lower() for action in actions
+                )
+            # A path rule names its call as an operation when it can, so a
+            # rule or an allow naming that operation is refused too.
+            minting_operations.update(
+                rule["operation"].lower()
+                for rule in guard.get("paths", [])
+                if is_operation(rule["operation"])
+            )
+            if "action_classes" in checked:
+                operation_service_types.add(service_type)
+            if "credential_fields" in checked:
+                provider = checked["provider"]
+                if provider in token_services:
+                    raise ConfigRegistryError(
+                        f"{path}.credential_fields: provider {provider!r} is "
+                        "already read by another service"
+                    )
+                token_services[provider] = service_type
             for rule in checked["hosts"]:
                 identity = (
                     checked["protocol"],
@@ -1255,11 +1641,21 @@ class ConfigRegistry:
             schema_version=SCHEMA_VERSION,
             _services=MappingProxyType(services),
             _capabilities=MappingProxyType(capabilities),
+            minting_operations=frozenset(minting_operations),
+            operation_service_types=frozenset(operation_service_types),
+            _token_services=MappingProxyType(token_services),
         )
 
     @property
     def services(self) -> dict[str, dict[str, Any]]:
         return deepcopy(dict(self._services))
+
+    def token_service(self, provider: str) -> dict[str, Any] | None:
+        """The service whose manifest says how this provider's stored
+        credential fills its fields, or None for a provider resolved by code."""
+
+        service_type = self._token_services.get(provider)
+        return self.get_service(service_type) if service_type else None
 
     @property
     def capabilities(self) -> dict[str, Any]:

@@ -128,6 +128,7 @@ def _open_session(runtime):
                 "supportedSchemaVersions": [1],
                 "protocols": ["http"],
                 "injectionActions": ["aws_sigv4"],
+                "features": ["provider_rules"],
             },
         },
         format="json",

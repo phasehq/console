@@ -46,7 +46,10 @@ from api.utils.agent_config import (
     load_definition,
 )
 from api.utils.agent_config.http_definition import compile_service
-from api.utils.agent_config.registry import WHEN_ABSENT_FEATURE
+from api.utils.agent_config.registry import (
+    PROVIDER_RULES_FEATURE,
+    WHEN_ABSENT_FEATURE,
+)
 from api.views.agents.base import AgentRuntimeError, SCHEMA_VERSION
 
 
@@ -185,8 +188,8 @@ def required_client_features(item):
     A custom Connection needs its injection features, and a packaged service
     that attaches its credential to a request carrying none needs a client
     that does so. A Connection whose policy can stop a call needs a client
-    that enforces policies; the secret guard needs nothing, since every client
-    already blocks credential minting.
+    that enforces policies. A service whose manifest carries a secret guard or
+    call classes needs a client that enforces them from the manifest.
     """
 
     service = item["service"]
@@ -198,6 +201,8 @@ def required_client_features(item):
         required.append(WHEN_ABSENT_FEATURE)
     if requires_client_feature(item["grant"].connection.policy):
         required.append(ACCESS_POLICY_FEATURE)
+    if service.get("secret_guard") or service.get("action_classes"):
+        required.append(PROVIDER_RULES_FEATURE)
     return required
 
 
@@ -750,6 +755,7 @@ def _connection_payload(
         "environment_bindings": environment_bindings,
         "authorization": authorization,
     }
+    payload.update(provider_rules(service))
     if custom:
         payload["injections"] = service["injections"]
         payload["allow_plain_http"] = service["allow_plain_http"]
@@ -775,6 +781,21 @@ def _connection_payload(
         else:
             payload["secret_material"] = material
     return payload
+
+
+def provider_rules(service):
+    """A Connection's provider rules from its manifest, in the runtime API's
+    spelling: the variables its tools read credentials from, and its secret
+    guard and call classes where it has them. A custom Connection's variables
+    are the ones its own fields are exported under; it has no guard or
+    classes.
+    """
+
+    rules = {"credential_environment": list(service["credential_environment"])}
+    for key in ("secret_guard", "action_classes"):
+        if key in service:
+            rules[key] = deepcopy(service[key])
+    return rules
 
 
 def resolve_workflow_config(

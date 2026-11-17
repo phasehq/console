@@ -41,56 +41,7 @@ MAX_RULES = 50
 MAX_OPERATION_CLASSES = 50
 MAX_PATH_LENGTH = 1024
 
-# The services whose calls are classified by a named operation, so a rule or
-# an allow may name one: an AWS action such as ``ec2:TerminateInstances``.
-OPERATION_SERVICE_TYPES = frozenset({"aws"})
 _OPERATION = re.compile(r"^[a-z0-9-]{1,64}:[A-Za-z0-9]{1,128}$")
-# The AWS actions the proxy's secret guard blocks, as the CLI lists them. The
-# proxy is what enforces the guard; this copy only refuses to store a rule or
-# file an allow that could never apply.
-_MINTING_OPERATIONS = frozenset(
-    f"{service}:{action}".lower()
-    for service, actions in {
-        "sts": (
-            "AssumeRole",
-            "AssumeRoleWithSAML",
-            "AssumeRoleWithWebIdentity",
-            "AssumeRoot",
-            "GetFederationToken",
-            "GetSessionToken",
-            "GetWebIdentityToken",
-        ),
-        "iam": (
-            "CreateAccessKey",
-            "CreateLoginProfile",
-            "UpdateLoginProfile",
-            "CreateServiceSpecificCredential",
-            "ResetServiceSpecificCredential",
-            "UploadSSHPublicKey",
-            "UploadSigningCertificate",
-        ),
-        "ecr": ("GetAuthorizationToken",),
-        "ecr-public": ("GetAuthorizationToken",),
-        "codeartifact": ("GetAuthorizationToken",),
-        "redshift": ("GetClusterCredentials", "GetClusterCredentialsWithIAM"),
-        "redshift-serverless": ("GetCredentials",),
-        "cognito-identity": (
-            "GetCredentialsForIdentity",
-            "GetOpenIdToken",
-            "GetOpenIdTokenForDeveloperIdentity",
-        ),
-        "ec2": ("CreateKeyPair",),
-        "elasticmapreduce": ("GetClusterSessionCredentials",),
-        "lightsail": (
-            "GetInstanceAccessDetails",
-            "CreateKeyPair",
-            "DownloadDefaultKeyPair",
-            "CreateBucketAccessKey",
-        ),
-        "s3express": ("CreateSession",),
-    }.items()
-    for action in actions
-)
 
 SECRET_GUARD_ID = "secret_guard"
 _SECRET_GUARD = {
@@ -187,10 +138,19 @@ def _class(value, location):
     return value
 
 
-def takes_operations(service_type: Any) -> bool:
-    """Whether a Connection of this service takes rules by named operation."""
+def _registry():
+    # The registry validates manifests with this module, so it is read lazily.
+    from .registry import get_config_registry
 
-    return service_type in OPERATION_SERVICE_TYPES
+    return get_config_registry()
+
+
+def takes_operations(service_type: Any) -> bool:
+    """Whether a Connection of this service takes rules by named operation:
+    one whose manifest classes calls by action, such as AWS's
+    ``ec2:TerminateInstances``."""
+
+    return service_type in _registry().operation_service_types
 
 
 def is_operation(value: Any) -> bool:
@@ -207,9 +167,13 @@ def same_operation(first: str, second: str) -> bool:
 
 
 def is_minting_operation(value: Any) -> bool:
-    """Whether an operation mints credentials or assumes another identity."""
+    """Whether an operation mints credentials or assumes another identity.
 
-    return isinstance(value, str) and value.lower() in _MINTING_OPERATIONS
+    The proxy enforces the manifests' secret guards; this only refuses to store
+    a rule or file an allow that could never apply.
+    """
+
+    return isinstance(value, str) and value.lower() in _registry().minting_operations
 
 
 def validate_operation(value: Any, location: str) -> str:

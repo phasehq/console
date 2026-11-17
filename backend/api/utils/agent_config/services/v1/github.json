@@ -29,5 +29,23 @@
     {"match": {"methods": ["POST"], "path": "/graphql"}, "class": "update"},
     {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"}
   ],
-  "context_template": "The GitHub API through the Phase proxy. GITHUB_TOKEN and GH_TOKEN hold a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached. Reads and writes share the GraphQL endpoint, so this Connection's access rules treat every call to it as an update."
+  "context_template": "The GitHub API through the Phase proxy. GITHUB_TOKEN and GH_TOKEN hold a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached. Reads and writes share the GraphQL endpoint, so this Connection's access rules treat every call to it as an update.",
+  "credential_environment": [
+    "GH_ENTERPRISE_TOKEN",
+    "GH_TOKEN",
+    "GITHUB_ENTERPRISE_TOKEN",
+    "GITHUB_TOKEN"
+  ],
+  "secret_guard": {
+    "paths": [
+      {
+        "method": "POST",
+        "pattern": "/app/installations/*/access_tokens",
+        "operation": "GitHub App installation access token"
+      }
+    ]
+  },
+  "credential_fields": {
+    "token": "access_token"
+  }
 }
