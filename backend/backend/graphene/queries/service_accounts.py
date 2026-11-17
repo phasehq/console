@@ -118,7 +118,7 @@ def resolve_app_service_accounts(root, info, app_id):
     app = App.objects.get(id=app_id)
 
     if not user_has_permission(
-        info.context.user, "read", "ServiceAccounts", app.organisation, True
+        info.context.user, "read", "ServiceAccounts", app.organisation, True, app=app
     ):
         return []
 
