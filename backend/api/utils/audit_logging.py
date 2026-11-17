@@ -382,10 +382,15 @@ def log_secret_events_bulk(
     service_account_token=None,
     ip_address=None,
     user_agent=None,
+    *,
+    agent=None,
+    agent_token=None,
+    agent_workflow=None,
 ):
     """
     Bulk version of log_secret_event. Logs events for multiple secrets
-    using bulk_create to reduce database round-trips.
+    using bulk_create to reduce database round-trips. A call made with an
+    Agent token is attributed to the Agent, its token and its Workflow.
     """
 
     if not secrets:
@@ -406,6 +411,9 @@ def log_secret_events_bulk(
             user=user,
             service_account=service_account,
             service_account_token=service_account_token,
+            agent=agent,
+            agent_token=agent_token,
+            agent_workflow=agent_workflow,
             key=secret.key,
             key_digest=secret.key_digest,
             value=secret.value,

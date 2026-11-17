@@ -142,5 +142,6 @@ def fit_title(text, maximum=120):
 
 # Importing a handler module registers its action types.
 from . import agent_connections  # noqa: E402,F401
+from . import agent_app_access  # noqa: E402,F401
 from . import agent_grants  # noqa: E402,F401
 from . import agent_workflows  # noqa: E402,F401

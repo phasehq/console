@@ -214,9 +214,19 @@ class SecretSerializer(serializers.ModelSerializer):
 
     def get_value(self, obj):
         if self.context.get("sse"):
+            if self.context.get("hide_values"):
+                return None
             account = _require_account(self.context)
             crypto_context = self.context.get("crypto_context")
             context_cache = self.context.get("context_cache")
+
+            if self.context.get("raw"):
+                # As stored: a reference stays ``${...}`` and reaches nothing.
+                if crypto_context:
+                    _, env_pubkey, env_privkey = crypto_context
+                else:
+                    env_pubkey, env_privkey = get_environment_keys(obj.environment.id)
+                return decrypt_asymmetric(obj.value, env_privkey, env_pubkey)
 
             try:
                 value = decrypt_secret_value(
@@ -233,6 +243,8 @@ class SecretSerializer(serializers.ModelSerializer):
 
     def get_comment(self, obj):
         if self.context.get("sse"):
+            if self.context.get("hide_values"):
+                return None
             crypto_context = self.context.get("crypto_context")
             if crypto_context:
                 _, env_pubkey, env_privkey = crypto_context

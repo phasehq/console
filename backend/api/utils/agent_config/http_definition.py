@@ -27,6 +27,10 @@ from .registry import (
 
 HTTP_SERVICE_TYPE = "http"
 HTTP_DISPLAY_NAME = "Custom HTTP"
+# The built-in Connection to an app's secrets. The Console serves them itself,
+# so it has no definition, credential or proxy configuration.
+APP_SERVICE_TYPE = "phase_app"
+APP_DISPLAY_NAME = "App secrets"
 LATEST_SPEC_VERSION = 1
 
 MAX_HOSTS = 20
@@ -161,6 +165,10 @@ _UPGRADES: dict[int, Any] = {}
 
 def is_custom_service(service_type: Any) -> bool:
     return service_type == HTTP_SERVICE_TYPE
+
+
+def is_app_service(service_type: Any) -> bool:
+    return service_type == APP_SERVICE_TYPE
 
 
 def upgrade_definition(definition: Any) -> dict[str, Any]:

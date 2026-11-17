@@ -19,11 +19,13 @@ from api.views.agents.management import (
     AgentTokenCreateView,
 )
 from api.views.agents.events import AgentSessionEventsView
+from api.views.agents.app_secrets import AgentAppAccessView
 
 
 urlpatterns = [
     path("", AgentCollectionView.as_view(), name="agents"),
     path("identity/", AgentIdentityView.as_view(), name="agent-identity"),
+    path("app-access/", AgentAppAccessView.as_view(), name="agent-app-access"),
     path("registry/", AgentRegistryView.as_view(), name="agent-registry"),
     path(
         "<str:agent_id>/tokens/",

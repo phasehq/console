@@ -19,7 +19,20 @@ from api.utils.agent_access import (
     lock_grantable_connection,
     renewable_grant,
 )
-from api.utils.agent_config import ConfigRegistryError, service_for_connection
+from api.utils.agent_app_access import (
+    APP_CLASSES,
+    AppAccessError,
+    blocked_classes,
+    check_app_connection,
+    describe_classes,
+    ordered_classes,
+    require_member_can_release,
+)
+from api.utils.agent_config import (
+    ConfigRegistryError,
+    is_app_service,
+    service_for_connection,
+)
 from api.utils.agent_config.access_policy import (
     CREDENTIAL_MINTING,
     USER_CLASSES,
@@ -116,7 +129,51 @@ def _operation_classes(connection):
         return None
 
 
+def _app_allow(value):
+    """What a temporary allow on an app Connection covers: one class, or
+    several that end together."""
+
+    if not isinstance(value, dict):
+        raise ActionError("action.allow must be an object.", code="invalid_access_allow")
+    if set(value) == {"class"}:
+        names = [value["class"]]
+    elif set(value) == {"classes"} and isinstance(value["classes"], list):
+        names = value["classes"]
+    else:
+        raise ActionError(
+            "action.allow on an app Connection is {\"classes\": [...]} or "
+            "{\"class\": ...}, naming read, create, update or delete.",
+            code="invalid_access_allow",
+        )
+    if (
+        not names
+        or any(not isinstance(name, str) or name not in APP_CLASSES for name in names)
+        or len(set(names)) != len(names)
+    ):
+        raise ActionError(
+            "action.allow names each of read, create, update or delete at most once.",
+            code="invalid_access_allow",
+        )
+    if "class" in value:
+        return {"class": names[0]}
+    return {"classes": ordered_classes(names)}
+
+
+def _allow_classes(allow):
+    return [allow["class"]] if "class" in allow else list(allow["classes"])
+
+
 def _refuse_blocked(connection, allow):
+    if is_app_service(connection.service_type):
+        blocked = blocked_classes(connection.policy, _allow_classes(allow))
+        if blocked:
+            raise ActionError(
+                f"The access rules of '{connection.name}' block "
+                f"{describe_classes(blocked)} calls, and a temporary allow never "
+                "changes a block. A member has to change those rules first.",
+                code="access_policy_blocks_allow",
+            )
+        return
     if allow_is_blocked(
         connection.policy, allow, operation_classes=_operation_classes(connection)
     ):
@@ -127,7 +184,20 @@ def _refuse_blocked(connection, allow):
         )
 
 
-def _describe_allow(allow):
+def _require_app_release(member, connection, classes):
+    """Section of the approver check for an app Connection: the member must
+    reach its app and environments and may do what the Agent is allowed."""
+
+    try:
+        app, environments = check_app_connection(connection)
+        require_member_can_release(member, app, environments, classes)
+    except AppAccessError as exc:
+        raise ActionError(str(exc), code=exc.code) from exc
+
+
+def _describe_allow(allow, connection=None):
+    if connection is not None and is_app_service(connection.service_type):
+        return f"{describe_classes(_allow_classes(allow))} secrets"
     if "class" in allow:
         return f"{allow['class']} calls"
     if "operation" in allow:
@@ -138,6 +208,23 @@ def _describe_allow(allow):
         for part in ("/".join(match.get("methods", [])), match.get("path", ""))
         if part
     )
+
+
+def _app_summary(connection):
+    from api.utils.agent_app_access import connection_environments
+
+    app = connection.app
+    return {
+        "app": None if app is None else {"id": str(app.id), "name": app.name},
+        "environments": [
+            {
+                "id": str(environment.id),
+                "name": environment.name,
+                "envType": environment.env_type,
+            }
+            for environment in connection_environments(connection)
+        ],
+    }
 
 
 class AllowCall(ActionHandler):
@@ -156,14 +243,17 @@ class AllowCall(ActionHandler):
                 "Access policies apply only to HTTP Connections.",
                 code="access_policy_not_supported",
             )
-        try:
-            allow = validate_allow(
-                action["allow"],
-                "action.allow",
-                operations=takes_operations(grant.connection.service_type),
-            )
-        except PolicyError as exc:
-            raise ActionError(str(exc), code="invalid_access_allow") from exc
+        if is_app_service(grant.connection.service_type):
+            allow = _app_allow(action["allow"])
+        else:
+            try:
+                allow = validate_allow(
+                    action["allow"],
+                    "action.allow",
+                    operations=takes_operations(grant.connection.service_type),
+                )
+            except PolicyError as exc:
+                raise ActionError(str(exc), code="invalid_access_allow") from exc
         checked = {
             "type": self.type,
             "version": action["version"],
@@ -188,23 +278,26 @@ class AllowCall(ActionHandler):
     def describe(self, request, action, member):
         connection, grant = request.connection, request.grant
         name = connection.name if connection else "a Connection"
+        current = None
+        if grant is not None and connection is not None:
+            current = {
+                "name": name,
+                # The Connection's rules, and what this Workflow has already
+                # been allowed past them.
+                "policy": full_policy(connection.policy),
+                "temporaryAllows": live_temporary_allows(
+                    grant.temporary_allows, timezone.now()
+                ),
+            }
+            if is_app_service(connection.service_type):
+                current.update(_app_summary(connection))
         return {
             "type": self.type,
-            "title": fit_title(f"Allow {_describe_allow(action['allow'])} on {name}"),
-            "requiresSecret": False,
-            "current": (
-                None
-                if grant is None or connection is None
-                else {
-                    "name": name,
-                    # The Connection's rules, and what this Workflow has
-                    # already been allowed past them.
-                    "policy": full_policy(connection.policy),
-                    "temporaryAllows": live_temporary_allows(
-                        grant.temporary_allows, timezone.now()
-                    ),
-                }
+            "title": fit_title(
+                f"Allow {_describe_allow(action['allow'], connection)} on {name}"
             ),
+            "requiresSecret": False,
+            "current": current,
             "requested": {
                 "allow": action["allow"],
                 "blockedCall": action.get("blockedCall"),
@@ -227,20 +320,31 @@ class AllowCall(ActionHandler):
         )
         # The policy may have changed since the request was filed.
         _refuse_blocked(connection, action["allow"])
-        allows = live_temporary_allows(grant.temporary_allows, timezone.now())
-        if len(allows) >= MAX_TEMPORARY_ALLOWS:
-            raise ActionError(
-                f"This grant already has {MAX_TEMPORARY_ALLOWS} temporary allows."
-            )
-        grant.temporary_allows = [
-            *allows,
-            {
-                "id": str(uuid4()),
-                **action["allow"],
-                "expiresAt": iso_timestamp(expires_at),
-                "requestId": str(request.id),
-            },
-        ]
+        now = timezone.now()
+        allows = live_temporary_allows(grant.temporary_allows, now)
+        if is_app_service(connection.service_type):
+            from .agent_app_access import merge_temporary_allows, write_expiry
+
+            classes = _allow_classes(action["allow"])
+            _require_app_release(member, connection, classes)
+            # One entry per class, all ending together and never after the
+            # grant.
+            expires_at = write_expiry(grant, seconds, now)
+            merge_temporary_allows(grant, classes, expires_at, str(request.id), now)
+        else:
+            if len(allows) >= MAX_TEMPORARY_ALLOWS:
+                raise ActionError(
+                    f"This grant already has {MAX_TEMPORARY_ALLOWS} temporary allows."
+                )
+            grant.temporary_allows = [
+                *allows,
+                {
+                    "id": str(uuid4()),
+                    **action["allow"],
+                    "expiresAt": iso_timestamp(expires_at),
+                    "requestId": str(request.id),
+                },
+            ]
         grant.save(update_fields=["temporary_allows", "updated_at"])
         _refresh_after_commit(request.workflow_id)
         return AppliedAction(
@@ -321,7 +425,25 @@ class RenewAccess(ActionHandler):
             raise ActionError(
                 "The Agent Connection changed; start a new request"
             ) from exc
-        self._target(request, action["connectionId"])
+        renewed = self._target(request, action["connectionId"])
+        if is_app_service(connection.service_type):
+            # Renewing gives back what the policy allows and any temporary
+            # allow still running.
+            from api.utils.agent_app_access import released_classes
+
+            _require_app_release(
+                member,
+                connection,
+                released_classes(
+                    connection.policy,
+                    [
+                        allow.get("class")
+                        for allow in live_temporary_allows(
+                            renewed.temporary_allows, timezone.now()
+                        )
+                    ],
+                ),
+            )
         with _connection_errors():
             grant, created = grant_connection_access(
                 request.workflow,

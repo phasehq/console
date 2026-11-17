@@ -489,3 +489,58 @@ def resolve_agent_connection_presets(root, info, organisation_id, preset_id=None
         for preset in list_presets()
         if preset_id in (None, preset["id"])
     ]
+
+
+def resolve_app_agent_access(root, info, app_id):
+    """Every Agent Workflow with access to an app's secrets, one row per
+    active grant of an app Connection on the app.
+
+    Visible to whoever may see the app's service accounts.
+    """
+
+    from api.models import App
+    from api.utils.access.permissions import user_can_access_app, user_has_permission
+    from api.utils.agent_app_access import connection_environments, grant_access
+    from api.utils.agent_config import APP_SERVICE_TYPE
+
+    user = info.context.user
+    app = App.objects.filter(id=app_id, is_deleted=False).first()
+    if app is None or not hasattr(user, "userId"):
+        raise GraphQLError("App not found")
+    if not user_has_permission(user, "read", "ServiceAccounts", app.organisation, True):
+        return []
+    if not user_can_access_app(user.userId, app.id):
+        raise GraphQLError("You don't have access to this app")
+    now = timezone.now()
+    grants = (
+        AgentWorkflowGrant.objects.active(now)
+        .filter(
+            organisation=app.organisation,
+            connection__service_type=APP_SERVICE_TYPE,
+            connection__app=app,
+            connection__deleted_at__isnull=True,
+            connection__state=AgentConnection.ACTIVE,
+            workflow__deleted_at__isnull=True,
+            workflow__agent__deleted_at__isnull=True,
+        )
+        .select_related("workflow__agent", "connection")
+        .order_by("workflow__agent__name", "workflow__name", "created_at", "id")
+    )
+    return [
+        {
+            "id": str(grant.id),
+            "agent": {
+                "id": str(grant.workflow.agent_id),
+                "name": grant.workflow.agent.name,
+            },
+            "workflow": {"id": str(grant.workflow_id), "name": grant.workflow.name},
+            "connection": {
+                "id": str(grant.connection_id),
+                "name": grant.connection.name,
+            },
+            "environments": connection_environments(grant.connection),
+            "access": grant_access(grant, now),
+            "expires_at": grant.expires_at,
+        }
+        for grant in grants
+    ]

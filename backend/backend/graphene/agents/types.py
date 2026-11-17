@@ -24,12 +24,15 @@ from api.utils.access.permissions import (
 from api.utils.agent_access import (
     MAX_DURATION_SECONDS,
     MIN_DURATION_SECONDS,
+    applied_access,
     connection_takes_policy,
     expired_connections,
     iso_timestamp,
 )
+from api.utils.agent_app_access import connection_environments, grant_access
 from api.utils.agent_config import (
     ConfigRegistryError,
+    is_app_service,
     is_custom_service,
     upgrade_definition,
 )
@@ -387,8 +390,42 @@ class AgentType(DjangoObjectType):
         ).count()
 
 
+class AgentConnectionAppType(graphene.ObjectType):
+    """The app an app Connection covers."""
+
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+    sse_enabled = graphene.Boolean(required=True)
+
+
+class AgentConnectionEnvironmentType(graphene.ObjectType):
+    """One environment an app Connection covers."""
+
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+    env_type = graphene.String(required=True)
+
+
+def _app_of(connection):
+    app = connection.app if is_app_service(connection.service_type) else None
+    return app
+
+
+def _environments_of(connection):
+    if not is_app_service(connection.service_type) or connection.app_id is None:
+        return []
+    return connection_environments(connection)
+
+
 class AgentConnectionType(DjangoObjectType):
     authentication = graphene.Field(ProviderCredentialsType)
+    # App Connections ("phase_app") only: the app and the environments whose
+    # secrets the Console serves to the Workflows granted this Connection.
+    # ``app`` is null once the app is deleted.
+    app = graphene.Field(AgentConnectionAppType)
+    environments = graphene.List(
+        graphene.NonNull(AgentConnectionEnvironmentType), required=True
+    )
     config = GenericScalar(required=True)
     # Custom Connections only: the definition in its latest version, and what
     # a browser needs to seal a new secret. The secret itself is write-only.
@@ -428,6 +465,12 @@ class AgentConnectionType(DjangoObjectType):
             "updated_at",
         )
 
+    def resolve_app(self, info):
+        return _app_of(self)
+
+    def resolve_environments(self, info):
+        return _environments_of(self)
+
     def resolve_definition(self, info):
         if not is_custom_service(self.service_type):
             return None
@@ -452,7 +495,10 @@ class AgentConnectionType(DjangoObjectType):
         return full_policy(self.policy)
 
     def resolve_managed_policies(self, info):
-        return managed_policies() if connection_takes_policy(self) else []
+        # The secret guard is the proxy's; app secrets never pass through it.
+        if is_app_service(self.service_type) or not connection_takes_policy(self):
+            return []
+        return managed_policies()
 
 
 class AgentWorkflowGrantType(DjangoObjectType):
@@ -461,6 +507,15 @@ class AgentWorkflowGrantType(DjangoObjectType):
     # [{id, class | match | operation, expiresAt, requestId}].
     temporary_allows = GenericScalar(required=True)
     created_by = graphene.Field(OrganisationMemberType)
+    # App Connections only, null otherwise: the app and environments, and
+    # what the Workflow may do at this moment, by class:
+    # {read|create|update|delete: {effect, until?}}; ``until`` is set where a
+    # temporary allow lifts an ``ask``.
+    app = graphene.Field(AgentConnectionAppType)
+    environments = graphene.List(
+        graphene.NonNull(AgentConnectionEnvironmentType), required=True
+    )
+    access = GenericScalar()
 
     class Meta:
         model = AgentWorkflowGrant
@@ -476,6 +531,38 @@ class AgentWorkflowGrantType(DjangoObjectType):
 
     def resolve_temporary_allows(self, info):
         return live_temporary_allows(self.temporary_allows, timezone.now())
+
+    def resolve_app(self, info):
+        return _app_of(self.connection)
+
+    def resolve_environments(self, info):
+        return _environments_of(self.connection)
+
+    def resolve_access(self, info):
+        if not is_app_service(self.connection.service_type):
+            return None
+        return grant_access(self)
+
+
+class AgentResourceRefType(graphene.ObjectType):
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+
+
+class AppAgentAccessType(graphene.ObjectType):
+    """One Agent Workflow's access to an app, through one app Connection."""
+
+    # The grant's id.
+    id = graphene.ID(required=True)
+    agent = graphene.Field(AgentResourceRefType, required=True)
+    workflow = graphene.Field(AgentResourceRefType, required=True)
+    connection = graphene.Field(AgentResourceRefType, required=True)
+    environments = graphene.List(
+        graphene.NonNull(AgentConnectionEnvironmentType), required=True
+    )
+    # {read|create|update|delete: {effect, until?}}, as the grant has it now.
+    access = GenericScalar(required=True)
+    expires_at = graphene.DateTime()
 
 
 class AgentRequestType(DjangoObjectType):
@@ -538,7 +625,7 @@ class AgentRequestType(DjangoObjectType):
         return self.approval or None
 
     def resolve_access(self, info):
-        return (self.applied_action or {}).get("access")
+        return applied_access(self.applied_action)
 
     def resolve_action_review(self, info):
         if not self.action:

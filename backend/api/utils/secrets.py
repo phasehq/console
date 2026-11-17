@@ -291,7 +291,13 @@ def check_environment_access(account, environment, require_resolved_references):
     if not account:
         return True
 
-    if isinstance(account, ServiceAccount):
+    from api.utils.agent_app_access import AgentSecretsReader
+
+    if isinstance(account, AgentSecretsReader):
+        # An Agent reaches only what its Workflow may read right now.
+        has_access = account.can_read_environment(environment.id)
+        error_msg = "This Agent doesn't have permission to read secrets in one or more referenced environments."
+    elif isinstance(account, ServiceAccount):
         has_access = service_account_can_access_environment(account.id, environment.id)
         error_msg = "This service account doesn't have permission to read secrets in one or more referenced environments."
     else:

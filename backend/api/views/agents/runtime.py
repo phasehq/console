@@ -31,8 +31,11 @@ from api.utils.agent_credentials import (
     resolve_agent_credential,
     resolve_custom_connection,
 )
+from api.utils.agent_app_access import APP_CLASSES, app_access_entries
 from api.utils.agent_sessions import create_decoy
 from api.utils.agent_config import (
+    APP_DISPLAY_NAME,
+    APP_SERVICE_TYPE,
     HTTP_DISPLAY_NAME,
     HTTP_SERVICE_TYPE,
     ConfigCompatibilityError,
@@ -296,8 +299,11 @@ def prepare_workflow(workflow, *, service_type=None):
     # whether or not this has run.
     end_lapsed_access(workflow.grants.all())
     prune_temporary_allows(workflow.grants.all())
+    # App Connections never reach the proxy: the Console serves their
+    # secrets itself, so they can never fail or shape a session.
     grants_query = (
-        workflow.grants.select_related(
+        workflow.grants.exclude(connection__service_type=APP_SERVICE_TYPE)
+        .select_related(
             "created_by",
             "workflow__agent",
             "connection__authentication",
@@ -820,6 +826,9 @@ def resolve_workflow_config(
     config = {
         "config_env": config_env,
         "connections": connections,
+        # The apps whose secrets this Workflow can use through the Console,
+        # as GET /v1/agents/app-access/ lists them.
+        "app_connections": app_access_entries(session.workflow),
         # What this Workflow lost to an expiry, so the proxy can tell the
         # Agent what to ask to renew.
         "expired_connections": expired_connections(session.workflow),
@@ -919,10 +928,65 @@ def compose_context(session, *, service_type=None):
             f"### {grant.connection.name}\n\n{authorization_line}\n\n{generated}"
         )
     if service_type is None:
+        apps = app_secrets_section(session.workflow)
+        if apps:
+            generated_sections.append(apps)
         notes = workflow_notes_section(session.workflow)
         if notes:
             generated_sections.append(notes)
     return "\n\n".join(generated_sections)
+
+
+_EFFECT_WORDS = {
+    "allow": "allowed",
+    "ask": "needs a member's approval",
+    "block": "blocked",
+}
+
+
+def _app_access_line(entry):
+    by_effect = {}
+    for name in APP_CLASSES:
+        access = entry["access"][name]
+        label = name
+        if access.get("until"):
+            label = f"{name} (until {access['until']})"
+        by_effect.setdefault(access["effect"], []).append(label)
+    parts = [
+        f"{', '.join(by_effect[effect])}: {words}"
+        for effect, words in _EFFECT_WORDS.items()
+        if by_effect.get(effect)
+    ]
+    environments = ", ".join(
+        environment["name"] for environment in entry["environments"]
+    )
+    until = (
+        f" Access ends {entry['grant_expires_at']}."
+        if entry["grant_expires_at"]
+        else ""
+    )
+    return (
+        f"- {entry['app']['name']} (app id `{entry['app']['id']}`), "
+        f"environments {environments}: {'; '.join(parts)}.{until}"
+    )
+
+
+def app_secrets_section(workflow):
+    """The apps whose secrets this Workflow can use, and what it may do."""
+
+    entries = app_access_entries(workflow)
+    if not entries:
+        return ""
+    lines = "\n".join(_app_access_line(entry) for entry in entries)
+    return (
+        f"### {APP_DISPLAY_NAME}\n\n"
+        "Phase serves these apps' secrets to this Workflow:\n\n"
+        f"{lines}\n\n"
+        "Use the ordinary commands with --app-id (or --app) and --env: "
+        "`phase secrets list|get|create|update|delete|import|export` and "
+        "`phase run`. A call that needs a member's approval is refused with "
+        "the request to send; send it and retry once it is approved."
+    )
 
 
 _NOTES_BEGIN = "<<<BEGIN WORKFLOW NOTES>>>"

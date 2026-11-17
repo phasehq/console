@@ -99,8 +99,10 @@ from .graphene.agents.types import (
     AgentSettingsType,
     AgentType,
     AgentWorkflowType,
+    AppAgentAccessType,
 )
 from .graphene.agents.queries import (
+    resolve_app_agent_access,
     resolve_agent_connection_presets,
     resolve_agent_connections,
     resolve_agent_events,
@@ -118,6 +120,7 @@ from .graphene.agents.mutations import (
     ApproveAgentRequestActionMutation,
     AllowAgentConnectionHostMutation,
     AssignAgentMemberMutation,
+    CreateAgentAppConnectionMutation,
     CreateAgentConnectionMutation,
     CreateAgentMutation,
     CreateAgentWorkflowMutation,
@@ -136,6 +139,7 @@ from .graphene.agents.mutations import (
     RevokeAgentWorkflowGrantMutation,
     SetAgentConnectionPolicyMutation,
     SetAgentWorkflowContextMutation,
+    UpdateAgentAppConnectionMutation,
     UpdateAgentConnectionMutation,
     UpdateAgentMemberWorkflowsMutation,
     UpdateAgentMutation,
@@ -863,6 +867,12 @@ class Query(graphene.ObjectType):
         organisation_id=graphene.ID(required=True),
         required=True,
     )
+    # Agent Workflows with access to an app's secrets, for its access screen.
+    app_agent_access = graphene.List(
+        graphene.NonNull(AppAgentAccessType),
+        app_id=graphene.ID(required=True),
+        required=True,
+    )
 
     # --------------------------------------------------------------------
 
@@ -951,6 +961,7 @@ class Query(graphene.ObjectType):
     resolve_agent_service_templates = resolve_agent_service_templates
     resolve_agent_connection_presets = resolve_agent_connection_presets
     resolve_agent_settings = resolve_agent_settings
+    resolve_app_agent_access = resolve_app_agent_access
 
     def resolve_organisations(root, info):
         memberships = OrganisationMember.objects.filter(
@@ -1547,12 +1558,14 @@ class Query(graphene.ObjectType):
                 base_filter["user_id"] = member_id
             elif member_type == MemberType.SERVICE:
                 base_filter["service_account_id"] = member_id
+            elif member_type == MemberType.AGENT:
+                base_filter["agent_id"] = member_id
 
         if len(env_ids) == 1:
             # Single environment → simple fast path
             logs_qs = (
                 SecretEvent.objects.filter(environment_id=env_ids[0], **base_filter)
-                .select_related("secret")
+                .select_related("secret", "agent", "agent_workflow", "agent_token")
                 .order_by("-timestamp", "-id")
                 .prefetch_related("tags")[:PAGE_SIZE]
             )
@@ -1561,7 +1574,7 @@ class Query(graphene.ObjectType):
             # Multiple environments — always do per-env small scans + merge
             per_env_qs = [
                 SecretEvent.objects.filter(environment_id=env_id, **base_filter)
-                .select_related("secret")
+                .select_related("secret", "agent", "agent_workflow", "agent_token")
                 .order_by("-timestamp", "-id")[:PAGE_SIZE]
                 for env_id in env_ids
             ]
@@ -1822,6 +1835,8 @@ class Mutation(graphene.ObjectType):
     create_agent_connection = CreateAgentConnectionMutation.Field()
     update_agent_connection = UpdateAgentConnectionMutation.Field()
     create_custom_agent_connection = CreateCustomAgentConnectionMutation.Field()
+    create_agent_app_connection = CreateAgentAppConnectionMutation.Field()
+    update_agent_app_connection = UpdateAgentAppConnectionMutation.Field()
     update_custom_agent_connection = UpdateCustomAgentConnectionMutation.Field()
     allow_agent_connection_host = AllowAgentConnectionHostMutation.Field()
     approve_agent_connection_host_rules = (
