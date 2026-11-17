@@ -29,6 +29,7 @@ import { AgentSelect } from '@/components/agents/AgentSelect'
 import { AccessEndsField } from '@/components/agents/AgentAccessControls'
 import { UNTIL_REVOKED, accessEndsValue, type AccessEnds } from '@/utils/agents/accessDuration'
 import { generateAgentName } from '@/utils/agents/names'
+import { isAppConnection } from '@/utils/agents/appAccess'
 import { getHostname } from '@/utils/appConfig'
 import { toastUnhandledError } from '@/utils/errors'
 import {
@@ -69,7 +70,6 @@ const CLI_HARNESS_FLAGS: Record<string, string> = {
   claude_code: 'claude-code',
   codex: 'codex',
   cursor: 'cursor',
-  devin: 'devin',
   opencode: 'opencode',
   copilot: 'copilot',
 }
@@ -902,7 +902,11 @@ export function GrantWorkflowDialog({
         </div>
         <AccessEndsField id="workflow-grant-ends" value={ends} onChange={setEnds} />
         <p className="text-xs text-neutral-500">
-          This Workflow uses the third-party credentials bound to the selected Connection.
+          {isAppConnection(
+            connections.find((connection) => connection.id === connectionId)?.serviceType
+          )
+            ? "This Workflow can use the app's secrets in the Connection's environments, as its access rules allow."
+            : 'This Workflow uses the third-party credentials bound to the selected Connection.'}
         </p>
         {problem && (
           <p role="alert" className="text-xs text-red-600 dark:text-red-400">

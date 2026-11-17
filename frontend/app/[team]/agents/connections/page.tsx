@@ -28,6 +28,7 @@ import {
   ApproveAgentConnectionHostRulesOp,
   DeleteAgentConnectionOp,
 } from '@/graphql/mutations/agents/manageAgentAssets.gql'
+import { Alert } from '@/components/common/Alert'
 import { Button } from '@/components/common/Button'
 import { ConfirmAgentAction } from '@/components/agents/AgentDialogs'
 import { ConnectionPolicyBlocks, PolicySummary } from '@/components/agents/AgentAccessPolicy'
@@ -57,6 +58,8 @@ import {
   CustomConnectionSummary,
   EditCustomConnectionDialog,
 } from '@/components/agents/CustomConnectionDialogs'
+import { EditAppConnectionDialog } from '@/components/agents/AppConnectionDialogs'
+import { appPolicySummary, isAppConnection } from '@/utils/agents/appAccess'
 import {
   describeHttpHost,
   httpPresetLabel,
@@ -77,13 +80,15 @@ const DetailField = ({ label, children }: { label: string; children: React.React
 
 /** The hosts a Connection reaches, as they are shown and searched. */
 const connectionHosts = (connection: any): string[] =>
-  isCustomConnection(connection.serviceType)
-    ? (parseHttpDefinition(connection.definition ?? connection.config)?.hosts ?? []).map(
-        describeHttpHost
-      )
-    : configuredAgentHostRules(connection.config)
-        .map((rule: unknown) => presentAgentHostRule(rule)?.endpoint)
-        .filter((endpoint): endpoint is string => !!endpoint)
+  isAppConnection(connection.serviceType)
+    ? []
+    : isCustomConnection(connection.serviceType)
+      ? (parseHttpDefinition(connection.definition ?? connection.config)?.hosts ?? []).map(
+          describeHttpHost
+        )
+      : configuredAgentHostRules(connection.config)
+          .map((rule: unknown) => presentAgentHostRule(rule)?.endpoint)
+          .filter((endpoint): endpoint is string => !!endpoint)
 
 export default function AgentConnectionsPage() {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -132,6 +137,8 @@ export default function AgentConnectionsPage() {
         connection.serviceType,
         agentServiceMeta(connection.serviceType).label,
         ...connectionHosts(connection),
+        connection.app?.name ?? '',
+        ...(connection.environments ?? []).map((environment: any) => environment.name),
       ].some((text) => String(text).toLowerCase().includes(query))
     )
   }, [connections, search])
@@ -156,7 +163,7 @@ export default function AgentConnectionsPage() {
   const header = (
     <AgentPageHeader
       title="Connections"
-      description="Connect Workflows to third-party integration credentials through the Agent proxy."
+      description="Connect Workflows to third-party services through the Agent proxy, or to an app's secrets."
       action={create.header}
     />
   )
@@ -199,7 +206,7 @@ export default function AgentConnectionsPage() {
             <FaSearch className="text-neutral-500" />
             <input
               aria-label="Search Connections"
-              placeholder="Search Connections, services or hosts"
+              placeholder="Search Connections, services, hosts or apps"
               className="custom w-full bg-transparent placeholder:text-neutral-500"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -219,7 +226,7 @@ export default function AgentConnectionsPage() {
           {filtered.length === 0 ? (
             <AgentEmpty
               title="No matching Connections"
-              subtitle="Try a different Connection, service or host."
+              subtitle="Try a different Connection, service, host or app."
             />
           ) : (
             <div className={clsx(agentCardSurface(), 'overflow-x-auto')}>
@@ -229,7 +236,7 @@ export default function AgentConnectionsPage() {
                     <th className="w-6 py-3"></th>
                     <th className={`px-4 py-3 ${HEAD}`}>Connection</th>
                     <th className={`px-4 py-3 ${HEAD}`}>Service</th>
-                    <th className={`px-4 py-3 ${HEAD}`}>Host or credential</th>
+                    <th className={`px-4 py-3 ${HEAD}`}>Host, credential or app</th>
                     <th className="px-4 py-3">
                       <span className="sr-only">Actions</span>
                     </th>
@@ -238,11 +245,18 @@ export default function AgentConnectionsPage() {
                 {filtered.map((connection: any) => {
                   // A custom Connection carries its own definition and sealed secret.
                   const custom = isCustomConnection(connection.serviceType)
+                  const appSecrets = isAppConnection(connection.serviceType)
+                  // The app was deleted: the Connection reaches nothing and can only be deleted.
+                  const appGone = appSecrets && !connection.app
+                  const environmentNames: string[] = (connection.environments ?? []).map(
+                    (environment: any) => environment.name
+                  )
                   const definition = custom
                     ? parseHttpDefinition(connection.definition ?? connection.config)
                     : null
                   const showHostOverride =
                     !custom &&
+                    !appSecrets &&
                     agentHostRulesRequireIndependentReview(
                       hostRulesModeFor(connection.serviceType),
                       connection.config
@@ -315,14 +329,39 @@ export default function AgentConnectionsPage() {
                               </AgentBadge>
                             )}
                             {reviewPending && <AgentBadge tone="amber">Needs review</AgentBadge>}
-                            {connection.takesPolicy && <PolicySummary policy={connection.policy} />}
+                            {appSecrets
+                              ? !appGone && (
+                                  <span className="whitespace-nowrap text-2xs font-medium text-neutral-500">
+                                    {appPolicySummary(connection.policy)}
+                                  </span>
+                                )
+                              : connection.takesPolicy && (
+                                  <PolicySummary policy={connection.policy} />
+                                )}
                           </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-2 text-neutral-500">
                           {agentServiceMeta(connection.serviceType).label}
                         </td>
                         <td className="px-4 py-2">
-                          {custom ? (
+                          {appSecrets ? (
+                            appGone ? (
+                              <span className="text-amber-700 dark:text-amber-400">
+                                App deleted
+                              </span>
+                            ) : (
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="max-w-[16rem] truncate font-medium">
+                                  {connection.app.name}
+                                </span>
+                                <span className="max-w-[10rem] truncate whitespace-nowrap text-2xs text-neutral-500">
+                                  {environmentNames.length === 1
+                                    ? environmentNames[0]
+                                    : `${environmentNames.length} environments`}
+                                </span>
+                              </span>
+                            )
+                          ) : custom ? (
                             hosts.length ? (
                               <span className="flex min-w-0 items-center gap-1.5">
                                 <code className="max-w-[16rem] truncate text-xs font-medium">
@@ -367,7 +406,10 @@ export default function AgentConnectionsPage() {
                                 onOpen={() => refetch()}
                               />
                             )}
-                            {canUpdate && !custom && (
+                            {canUpdate && appSecrets && !appGone && (
+                              <EditAppConnectionDialog connection={connection} />
+                            )}
+                            {canUpdate && !custom && !appSecrets && (
                               <UpdateConnectionDialog
                                 connection={connection}
                                 services={services}
@@ -407,8 +449,39 @@ export default function AgentConnectionsPage() {
                               {custom && definition && (
                                 <CustomConnectionSummary definition={definition} />
                               )}
+                              {appGone && (
+                                <Alert variant="warning" icon size="sm">
+                                  <span className="text-xs">
+                                    The app this Connection covered was deleted, so it gives no
+                                    access. Delete the Connection.
+                                  </span>
+                                </Alert>
+                              )}
                               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                                {custom ? (
+                                {appSecrets ? (
+                                  <>
+                                    <DetailField label="App">
+                                      {appGone ? (
+                                        <span className="text-amber-700 dark:text-amber-400">
+                                          Deleted
+                                        </span>
+                                      ) : (
+                                        <Link
+                                          href={`/${organisation.name}/apps/${connection.app.id}`}
+                                          title={`Open ${connection.app.name}`}
+                                          className="block truncate hover:text-emerald-500"
+                                        >
+                                          {connection.app.name}
+                                        </Link>
+                                      )}
+                                    </DetailField>
+                                    <DetailField label="Environments">
+                                      <span className="break-words">
+                                        {environmentNames.join(', ') || 'None'}
+                                      </span>
+                                    </DetailField>
+                                  </>
+                                ) : custom ? (
                                   <>
                                     <DetailField label="Secret">
                                       Sealed secret · {httpPresetLabel(definition?.preset)}
@@ -502,7 +575,12 @@ export default function AgentConnectionsPage() {
                                   <AgentTime value={connection.updatedAt} />
                                 </DetailField>
                               </div>
-                              <ConnectionPolicyBlocks connection={connection} canEdit={canUpdate} />
+                              {!appGone && (
+                                <ConnectionPolicyBlocks
+                                  connection={connection}
+                                  canEdit={canUpdate}
+                                />
+                              )}
                               {reviewPending && (
                                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-500/10 px-3 py-1.5">
                                   <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">

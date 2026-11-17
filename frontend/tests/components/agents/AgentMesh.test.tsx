@@ -497,14 +497,14 @@ describe('AgentMesh', () => {
               agentInput('codex', 'CODEX'),
               agentInput('second-codex', 'CODEX'),
               agentInput('cursor', 'CURSOR'),
-              agentInput('devin', 'DEVIN'),
+              agentInput('opencode', 'OPENCODE'),
             ],
             workflows: [
               workflow('claude', 'aws', 'aws'),
               workflow('codex', 'orders', 'postgres'),
               workflow('second-codex', 'aws', 'aws'),
               workflow('cursor', 'aws', 'aws'),
-              workflow('devin', 'aws', 'aws'),
+              workflow('opencode', 'aws', 'aws'),
             ],
           })
         )
@@ -516,7 +516,7 @@ describe('AgentMesh', () => {
         // Every label it can show is laid out invisibly, so choosing never resizes the trigger.
         expect(
           Array.from(trigger.querySelectorAll('.invisible')).map((label) => label.textContent)
-        ).toEqual(['Harness', 'Claude Code+3', 'Codex+3', 'Cursor+3', 'Devin+3'])
+        ).toEqual(['Harness', 'Claude Code+3', 'Codex+3', 'Cursor+3', 'OpenCode+3'])
         expect(rows('Harness')).toHaveLength(0)
 
         await act(async () => trigger.click())
@@ -525,7 +525,7 @@ describe('AgentMesh', () => {
           'Claude Code1',
           'Codex2',
           'Cursor1',
-          'Devin1',
+          'OpenCode1',
         ])
         expect(reset()!.disabled).toBe(true)
 

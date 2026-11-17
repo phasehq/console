@@ -21,6 +21,16 @@ query GetAgentAssets(
     }
     config
     definition
+    app {
+      id
+      name
+      sseEnabled
+    }
+    environments {
+      id
+      name
+      envType
+    }
     encryptionPublicKey
     valueRevision
     valueUpdatedAt

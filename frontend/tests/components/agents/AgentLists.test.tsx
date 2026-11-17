@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { useQuery } from '@apollo/client'
 import AgentsPage from '@/app/[team]/agents/all/page'
 import AccessAgentsPage from '@/app/[team]/access/agents/page'
-import { SiClaude, SiCursor, SiDevin, SiOpenCode } from '@/components/agents/AgentBrandIcons'
+import { SiClaude, SiCursor, SiOpenCode } from '@/components/agents/AgentBrandIcons'
 import { AgentTime } from '@/components/agents/AgentUI'
 
 jest.mock('@/graphql/queries/agents/getAgents.gql', () => ({
@@ -79,7 +79,7 @@ describe('Agent lists', () => {
         agents: [
           agent('agent-1', 'release-assistant', 'CLAUDE_CODE'),
           agent('agent-2', 'triage-bot', 'OPENCODE'),
-          agent('agent-3', 'nightly-audit', 'DEVIN', 'DISABLED'),
+          agent('agent-3', 'nightly-audit', 'CODEX', 'DISABLED'),
         ],
       },
       loading: false,
@@ -123,7 +123,7 @@ describe('Agent lists', () => {
     expect(rowFor('triage-bot').querySelector('td:first-child svg')).not.toBeNull()
     // Only an Agent that is not active gets a status badge, beside its name.
     expect(claude.textContent).not.toContain('Active')
-    expect(identity('nightly-audit')).toBe('nightly-auditDisabledDevin')
+    expect(identity('nightly-audit')).toBe('nightly-auditDisabledCodex')
   })
 
   test("names each Agent's Workflows, Default first, on the Agents tab", async () => {
@@ -182,7 +182,6 @@ describe('Agent lists', () => {
   test.each([
     ['Claude', SiClaude],
     ['Cursor', SiCursor],
-    ['Devin', SiDevin],
     ['OpenCode', SiOpenCode],
   ])('sizes the %s mark at 1em like react-icons marks', async (_, Mark) => {
     await render(<Mark className="text-base" />)

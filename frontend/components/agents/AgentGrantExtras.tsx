@@ -32,6 +32,27 @@ import {
   readTemporaryAllows,
   type TemporaryAllow,
 } from '@/utils/agents/accessPolicy'
+import {
+  WRITE_CLASSES,
+  describeClasses,
+  formatAccessTime,
+  isAppConnection,
+} from '@/utils/agents/appAccess'
+
+/**
+ * What a grant's temporary allows on an app Connection give, in one phrase:
+ * "Write access until 1 Dec 2026, 14:00" when they end together, '' otherwise.
+ */
+export const appAllowsLabel = (allows: TemporaryAllow[]): string => {
+  const ends = new Set(allows.map((allow) => allow.expiresAt))
+  if (allows.length === 0 || ends.size !== 1) return ''
+  const classes = allows.flatMap((allow) => (allow.class ? [allow.class] : []))
+  const write =
+    classes.length === WRITE_CLASSES.length && WRITE_CLASSES.every((name) => classes.includes(name))
+  return `${write ? 'Write' : describeClasses(classes)} access until ${formatAccessTime(
+    allows[0].expiresAt
+  )}`
+}
 
 /** "Ends in 3 hours", with the exact time on hover; nothing for access that does not end. */
 export function GrantExpiryText({ expiresAt }: { expiresAt?: string | null }) {
@@ -139,11 +160,16 @@ export function EditGrantExpiryDialog({
 function TemporaryAllowList({
   allows,
   onRemove,
+  app = false,
 }: {
   allows: TemporaryAllow[]
   onRemove?: (allow: TemporaryAllow) => Promise<void>
+  /** On an app Connection each allow is one kind of secrets call. */
+  app?: boolean
 }) {
   if (allows.length === 0) return null
+  const describe = (allow: TemporaryAllow) =>
+    app && allow.class ? `${describeClasses([allow.class])} secrets` : describeTarget(allow)
   return (
     <section aria-label="Temporary allows" className="space-y-1.5">
       <p className="text-xs text-neutral-500">
@@ -156,7 +182,11 @@ function TemporaryAllowList({
             key={allow.id}
             className="flex items-center justify-between gap-3 px-3 py-1.5 text-xs"
           >
-            <code className="min-w-0 break-all">{describeTarget(allow)}</code>
+            {app ? (
+              <span className="min-w-0 break-all font-medium">{describe(allow)}</span>
+            ) : (
+              <code className="min-w-0 break-all">{describe(allow)}</code>
+            )}
             <time
               dateTime={allow.expiresAt}
               title={new Date(allow.expiresAt).toLocaleString()}
@@ -167,12 +197,12 @@ function TemporaryAllowList({
             {onRemove && (
               <ConfirmAgentAction
                 title="Remove temporary allow"
-                description={`${describeTarget(allow)} will be refused again by the access rules straight away. The Agent can file another Change Request for it.`}
+                description={`${describe(allow)} will be refused again by the access rules straight away. The Agent can file another Change Request for it.`}
                 actionLabel="Remove"
                 triggerVariant="danger"
                 triggerProps={{
                   icon: FaTrashAlt,
-                  'aria-label': `Remove temporary allow for ${describeTarget(allow)}`,
+                  'aria-label': `Remove temporary allow for ${describe(allow)}`,
                   title: 'Remove temporary allow',
                 }}
                 onConfirm={() => onRemove(allow)}
@@ -193,13 +223,19 @@ export function GrantTemporaryAllows({
   grant,
   canRemove,
 }: {
-  grant: { id: string; connection: { name: string }; temporaryAllows?: unknown }
+  grant: {
+    id: string
+    connection: { name: string; serviceType?: string }
+    temporaryAllows?: unknown
+  }
   /** Ending an allow early needs permission to update the Workflow. */
   canRemove: boolean
 }) {
   const [removeAllow] = useMutation(RemoveAgentWorkflowGrantAllowOp)
   const allows = readTemporaryAllows(grant.temporaryAllows)
   if (allows.length === 0) return null
+  const app = isAppConnection(grant.connection.serviceType)
+  const appLabel = app ? appAllowsLabel(allows) : ''
   const endAllow = async (allow: TemporaryAllow) => {
     await removeAllow({
       variables: { grantId: grant.id, allowId: allow.id },
@@ -213,11 +249,11 @@ export function GrantTemporaryAllows({
       title={`Temporary allows for ${grant.connection.name}`}
       size="md"
       buttonVariant="ghost"
-      buttonContent={`Temporary allows (${allows.length})`}
+      buttonContent={appLabel || `Temporary allows (${allows.length})`}
       buttonProps={{ icon: FaHourglassHalf, title: 'Temporary allows approved for this Workflow' }}
     >
       <div className="pt-4">
-        <TemporaryAllowList allows={allows} onRemove={canRemove ? endAllow : undefined} />
+        <TemporaryAllowList allows={allows} onRemove={canRemove ? endAllow : undefined} app={app} />
       </div>
     </GenericDialog>
   )

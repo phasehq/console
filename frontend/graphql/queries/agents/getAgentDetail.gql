@@ -57,6 +57,16 @@ query GetAgentDetail(
         avatarUrl
       }
       temporaryAllows
+      access
+      app {
+        id
+        name
+      }
+      environments {
+        id
+        name
+        envType
+      }
       connection {
         id
         name

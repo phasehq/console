@@ -18,13 +18,19 @@ import {
   SecretFieldInputs,
   useCustomConnectionEditor,
 } from '@/components/agents/CustomConnectionForm'
-import { GrantDurationField, MethodToggles } from '@/components/agents/AgentAccessControls'
+import {
+  ChoiceGroup,
+  GrantDurationField,
+  MethodToggles,
+} from '@/components/agents/AgentAccessControls'
 import {
   AccessRecordLine,
   AllowDetails,
+  AppAccessDetails,
   ContextDetails,
   RenewDetails,
 } from '@/components/agents/AgentRequestActionDetails'
+import { EnvironmentChecklist, environmentsProblem } from '@/components/agents/EnvironmentChecklist'
 import { AgentSelect } from '@/components/agents/AgentSelect'
 import { Input } from '@/components/common/Input'
 import { ApproveAgentRequestActionOp } from '@/graphql/mutations/agents/manageAgentAssets.gql'
@@ -43,6 +49,12 @@ import {
   POLICY_LIMITS,
   describeTarget,
 } from '@/utils/agents/accessPolicy'
+import {
+  ACCESS_LEVEL_LABEL,
+  describeClasses,
+  formatAccessTime,
+  type AppAccessLevel,
+} from '@/utils/agents/appAccess'
 import {
   customConnectionFormFromDefinition,
   emptyCustomConnectionForm,
@@ -69,12 +81,15 @@ import {
   allowFromDraft,
   approvalLabel,
   editedAllowAction,
+  editedAppAccessAction,
   editedContextAction,
   editedRequestAction,
   readAccessRecord,
   readAllowTarget,
   readActionReview,
   readActionSnapshot,
+  readAppClasses,
+  readWriteAccess,
   requestActionType,
   type ActionReview,
   type AllowDraft,
@@ -109,7 +124,14 @@ const CHANGE_STYLE: Record<DiffEntry['change'], { mark: string; text: string; wo
 /** What an applied allow added, from the action as stored. */
 function AppliedAllow({ action }: { action: unknown }) {
   const target = (action as { allow?: unknown } | null)?.allow
-  const text = target ? describeTarget(readAllowTarget(target)) : ''
+  // An app Connection's allow names classes of secrets calls.
+  const classes = readAppClasses(target)
+  const text =
+    classes.length && (target as { classes?: unknown }).classes
+      ? `${describeClasses(classes).toLowerCase()} secrets`
+      : target
+        ? describeTarget(readAllowTarget(target))
+        : ''
   return (
     <p className="text-xs text-neutral-500">
       {text ? `Allowed ${text} for a limited time.` : 'Asked to allow a call for a limited time.'}
@@ -224,6 +246,22 @@ const actionSentence = (review: ActionReview, workflowName?: string | null) => {
   }
 }
 
+/** What a resolved app access request gave: the level, and until when it may write. */
+function AppliedAppAccess({ request }: { request: AgentActionRequest }) {
+  const action = (request.appliedAction ?? request.action) as { access?: unknown } | null
+  const level: AppAccessLevel = action?.access === 'read_write' ? 'read_write' : 'read'
+  const write = readWriteAccess(request.appliedAction)
+  return (
+    <p className="text-xs text-neutral-500">
+      {request.appliedAction
+        ? `${ACCESS_LEVEL_LABEL[level]} access to the app's secrets was granted${
+            write?.expiresAt ? `, with write access until ${formatAccessTime(write.expiresAt)}` : ''
+          }.`
+        : `Asked for ${ACCESS_LEVEL_LABEL[level].toLowerCase()} access to the app's secrets.`}
+    </p>
+  )
+}
+
 /** What an action request asks for, or once resolved, what was applied and how. */
 export function AgentActionReview({ request }: { request: AgentActionRequest }) {
   const review = readActionReview(request.actionReview)
@@ -283,6 +321,7 @@ export function AgentActionReview({ request }: { request: AgentActionRequest }) 
               : "Asked to replace the Workflow's context."}
           </p>
         )}
+        {type === REQUEST_ACTION_TYPES.appAccess && <AppliedAppAccess request={request} />}
         <AgentAccessSummary request={request} />
         {assurance && <p className="text-xs text-neutral-500">Approved with {assurance}.</p>}
       </section>
@@ -309,6 +348,8 @@ export function AgentActionReview({ request }: { request: AgentActionRequest }) 
         <RenewDetails review={review.renew} />
       ) : review.context ? (
         <ContextDetails review={review.context} />
+      ) : review.appAccess ? (
+        <AppAccessDetails review={review.appAccess} />
       ) : (
         <>
           <p className="text-xs">{actionSentence(review, request.workflow?.name)}</p>
@@ -334,6 +375,7 @@ const APPROVE_LABEL: Record<string, string> = {
   [REQUEST_ACTION_TYPES.allow]: 'Approve and allow',
   [REQUEST_ACTION_TYPES.renew]: 'Approve renewal',
   [REQUEST_ACTION_TYPES.contextUpdate]: 'Approve context change',
+  [REQUEST_ACTION_TYPES.appAccess]: 'Approve access',
 }
 
 const REFETCH_AFTER_APPROVAL = [
@@ -374,6 +416,9 @@ export function AgentActionApproveDialog({
   const isAllow = type === REQUEST_ACTION_TYPES.allow
   const isRenew = type === REQUEST_ACTION_TYPES.renew
   const isContext = type === REQUEST_ACTION_TYPES.contextUpdate
+  const isAppAccess = type === REQUEST_ACTION_TYPES.appAccess
+  // An allow on an app Connection names classes of secrets calls; it is approved as asked.
+  const isAppAllow = isAllow && !!review?.allow?.app
   const takesDuration = actionTakesDuration(type)
   const allowUntilRevoked = actionAllowsUntilRevoked(type)
   const requestedSeconds =
@@ -403,9 +448,9 @@ export function AgentActionApproveDialog({
     variables: { organisationId },
     skip: !takesDuration || !organisationId,
   })
-  const maximumSeconds: number | null = isAllow
-    ? settingsData?.agentSettings?.maxRequestDurationSeconds ?? null
-    : null
+  const organisationMaximum: number | null =
+    settingsData?.agentSettings?.maxRequestDurationSeconds ?? null
+  const maximumSeconds: number | null = isAllow ? organisationMaximum : null
   const defaultSeconds: number | null =
     settingsData?.agentSettings?.defaultRequestDurationSeconds ?? null
   const [duration, setDuration] = useState<GrantDuration>(() =>
@@ -416,6 +461,28 @@ export function AgentActionApproveDialog({
     allowDraftFromTarget(review?.allow?.allow ?? {}, review?.allow?.blockedCall ?? null)
   )
   const [contextText, setContextText] = useState(review?.context?.requested ?? '')
+  // App access: the reviewer may untick environments and change the level.
+  const requestedEnvironmentIds = useMemo(
+    () => (review?.appAccess?.environments ?? []).map((environment) => environment.id),
+    [review?.appAccess?.environments]
+  )
+  const [environmentIds, setEnvironmentIds] = useState<string[]>(requestedEnvironmentIds)
+  const [accessLevel, setAccessLevel] = useState<AppAccessLevel>(
+    review?.appAccess?.access ?? 'read'
+  )
+  // Write access always ends; it starts at what was asked for, within the organisation maximum.
+  const writeStart = (maximum: number | null) =>
+    initialGrantDuration(
+      typeof requestedSeconds === 'number' && maximum
+        ? Math.min(requestedSeconds, maximum)
+        : requestedSeconds,
+      false,
+      maximum && defaultSeconds ? Math.min(defaultSeconds, maximum) : defaultSeconds
+    )
+  const [writeDuration, setWriteDuration] = useState<GrantDuration>(() =>
+    writeStart(organisationMaximum)
+  )
+  const [writeTouched, setWriteTouched] = useState(false)
 
   useEffect(() => {
     if (autoOpen && !opened.current) {
@@ -434,8 +501,9 @@ export function AgentActionApproveDialog({
   useEffect(() => {
     if (!durationTouched)
       setDuration(initialGrantDuration(requestedSeconds, allowUntilRevoked, defaultSeconds))
+    if (!writeTouched) setWriteDuration(writeStart(organisationMaximum))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defaultSeconds])
+  }, [defaultSeconds, organisationMaximum])
 
   const loadRequested = () => {
     const form =
@@ -459,6 +527,10 @@ export function AgentActionApproveDialog({
       allowDraftFromTarget(review?.allow?.allow ?? {}, review?.allow?.blockedCall ?? null)
     )
     setContextText(review?.context?.requested ?? '')
+    setEnvironmentIds(requestedEnvironmentIds)
+    setAccessLevel(review?.appAccess?.access ?? 'read')
+    setWriteDuration(writeStart(organisationMaximum))
+    setWriteTouched(false)
     loadRequested()
   }
   const end = () => {
@@ -508,13 +580,25 @@ export function AgentActionApproveDialog({
     ? 'Reading the organisation default duration.'
     : durationResult.problem
   const editedAllow = isAllow ? allowFromDraft(allowDraft) : null
-  const allowChanged = isAllow && !!review?.allow && allowEdited(review.allow.allow, editedAllow)
+  const allowChanged =
+    isAllow && !isAppAllow && !!review?.allow && allowEdited(review.allow.allow, editedAllow)
   const contextChanged = isContext && !!review?.context && contextText !== review.context.requested
+  const writes = isAppAccess && accessLevel === 'read_write'
+  const writeResult = grantDurationResult(writeDuration, requestedSeconds, {
+    allowUntilRevoked: false,
+    maximumSeconds: organisationMaximum,
+  })
+  const appAccessChanged =
+    isAppAccess &&
+    !!review?.appAccess &&
+    (accessLevel !== review.appAccess.access ||
+      environmentIds.length !== requestedEnvironmentIds.length)
   const missingTarget =
     !review ||
     ((isUpdate || isSecretUpdate) && !current) ||
     (isAllow && !review.allow?.policy) ||
-    (isRenew && !review.renew)
+    (isRenew && !review.renew) ||
+    (isAppAccess && !review.appAccess?.app)
   const formProblem =
     (isCreate || isUpdate) && !definition
       ? editor.built.issues.find((issue) => !issue.missing)?.message || 'Fill in the form.'
@@ -525,7 +609,9 @@ export function AgentActionApproveDialog({
     ? 'This action can no longer be applied.'
     : (unreadable ? UNREADABLE_DEFINITION : '') ||
       (takesDuration ? durationProblem : '') ||
-      (isAllow ? allowDraftProblem(allowDraft) : '') ||
+      (isAllow && !isAppAllow ? allowDraftProblem(allowDraft) : '') ||
+      (isAppAccess ? environmentsProblem(environmentIds) : '') ||
+      (writes ? (waitingForDefault ? durationProblem : writeResult.problem) : '') ||
       (isContext && contextText.length > CONTEXT_MAX_LENGTH
         ? `Use at most ${CONTEXT_MAX_LENGTH.toLocaleString()} characters.`
         : '') ||
@@ -538,7 +624,7 @@ export function AgentActionApproveDialog({
       if (requestChanged || reviewedRevision.current !== request.revision)
         throw new Error('This request changed while you were reviewing it. Close and reopen it.')
       if (problem) throw new Error(problem)
-      let inputs: Record<string, string> | undefined
+      let inputs: Record<string, unknown> | undefined
       if (isCreate && definition)
         inputs = await newCustomConnectionMaterial(definition, fieldSecrets, serverPublicKey)
       else if (needSecrets && definition)
@@ -556,7 +642,12 @@ export function AgentActionApproveDialog({
             ? editedAllowAction(request.action, editedAllow)
             : contextChanged
               ? editedContextAction(request.action, contextText)
-              : undefined
+              : appAccessChanged
+                ? editedAppAccessAction(request.action, environmentIds, accessLevel)
+                : undefined
+      // Write access ends on its own clock, which the reviewer set.
+      if (writes && writeResult.seconds)
+        inputs = { ...inputs, writeDurationSeconds: writeResult.seconds }
       const result = await approve({
         variables: {
           requestId: request.id,
@@ -628,7 +719,7 @@ export function AgentActionApproveDialog({
             <AgentActionDiff current={review.current} requested={liveRequested} />
           </section>
         )}
-        {review && !isCreate && !isUpdate && !isAllow && !isRenew && !isContext && (
+        {review && !isCreate && !isUpdate && !isAllow && !isRenew && !isContext && !isAppAccess && (
           <p className="text-sm">{actionSentence(review, request.workflow?.name)}</p>
         )}
         {review?.allow && (
@@ -665,7 +756,52 @@ export function AgentActionApproveDialog({
           </section>
         )}
 
-        {(isAllow || isContext) && !missingTarget && (
+        {review?.appAccess && !missingTarget && (
+          <section
+            aria-label="Requested change"
+            className="space-y-4 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <h4 className="text-xs font-semibold">
+                {appAccessChanged ? 'Your edits' : 'Requested by the Agent'}
+              </h4>
+              {appAccessChanged && <AgentBadge tone="amber">Edited</AgentBadge>}
+            </div>
+            <p className="min-w-0 truncate text-xs">
+              <span className="text-neutral-500">App</span>{' '}
+              <span className="font-medium">{review.appAccess.app?.name}</span>
+            </p>
+            <EnvironmentChecklist
+              id={`${id}-environments`}
+              label="Environments"
+              environments={review.appAccess.environments}
+              selected={environmentIds}
+              onChange={setEnvironmentIds}
+              keepOne
+            />
+            <div className="space-y-2">
+              <span className="block text-xs text-neutral-500">Access</span>
+              <ChoiceGroup<AppAccessLevel>
+                label="Access"
+                value={accessLevel}
+                options={[
+                  { value: 'read', label: ACCESS_LEVEL_LABEL.read },
+                  { value: 'read_write', label: ACCESS_LEVEL_LABEL.read_write },
+                ]}
+                onChange={setAccessLevel}
+              />
+            </div>
+            <p className="text-xs text-neutral-500">
+              {review.appAccess.reuses && !appAccessChanged
+                ? `Approving reuses the Connection ${review.appAccess.reuses.name}, whose access rules apply.`
+                : review.appAccess.reuses
+                  ? 'Approving reuses a Connection that covers exactly these environments, or creates one.'
+                  : 'Approving creates a Connection for these environments: reads allowed, writes ask.'}
+            </p>
+          </section>
+        )}
+
+        {(isAllow || isContext) && !isAppAllow && !missingTarget && (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -827,6 +963,26 @@ export function AgentActionApproveDialog({
             allowUntilRevoked={allowUntilRevoked}
             problem={durationProblem}
           />
+        )}
+        {writes && !missingTarget && (
+          <GrantDurationField
+            id={`${id}-write-duration`}
+            label="Write access ends after"
+            value={writeDuration}
+            onChange={(next) => {
+              setWriteDuration(next)
+              setWriteTouched(true)
+            }}
+            requestedSeconds={requestedSeconds}
+            allowUntilRevoked={false}
+            problem={writeResult.problem}
+          />
+        )}
+        {writes && organisationMaximum && (
+          <p className="-mt-2 text-xs text-neutral-500">
+            Your organisation allows at most {describeDuration(organisationMaximum)} for write
+            access. It never outlasts the access above.
+          </p>
         )}
         {isAllow && maximumSeconds && (
           <p className="-mt-2 text-xs text-neutral-500">

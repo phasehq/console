@@ -17,6 +17,15 @@ import {
   type PolicyMatch,
   type TemporaryAllow,
 } from '@/utils/agents/accessPolicy'
+import {
+  APP_CLASSES,
+  readAppRef,
+  readEnvironmentRefs,
+  type AppAccessLevel,
+  type AppClass,
+  type AppRef,
+  type EnvironmentRef,
+} from '@/utils/agents/appAccess'
 
 export const REQUEST_ACTION_VERSION = 1
 
@@ -28,6 +37,7 @@ export const REQUEST_ACTION_TYPES = {
   allow: 'agent_grant.allow',
   renew: 'agent_grant.renew',
   contextUpdate: 'agent_workflow.context_update',
+  appAccess: 'agent_connection.app_access',
 } as const
 
 export type RequestActionType = (typeof REQUEST_ACTION_TYPES)[keyof typeof REQUEST_ACTION_TYPES]
@@ -60,6 +70,20 @@ export type AllowReview = {
   allow: AllowTarget
   blockedCall: BlockedCall | null
   durationSeconds: number | null
+  /** On an app Connection: the app, its environments and the classes asked for. */
+  app: AppRef | null
+  environments: EnvironmentRef[]
+  appClasses: AppClass[]
+}
+
+/** Access to an app's secrets, as asked for. */
+export type AppAccessReview = {
+  app: AppRef | null
+  environments: EnvironmentRef[]
+  access: AppAccessLevel
+  durationSeconds: number | null
+  /** The Connection approval would reuse, whose rules then apply; null when one is created. */
+  reuses: { connectionId: string; name: string } | null
 }
 
 export type RenewReview = {
@@ -80,6 +104,7 @@ export type ActionReview = {
   allow?: AllowReview
   renew?: RenewReview
   context?: ContextReview
+  appAccess?: AppAccessReview
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -143,10 +168,21 @@ export const readBlockedCall = (value: unknown): BlockedCall | null => {
   }
 }
 
+/** The classes an allow on an app Connection names: `{classes}` or `{class}`. */
+export const readAppClasses = (allow: unknown): AppClass[] => {
+  if (!isRecord(allow)) return []
+  const names = Array.isArray(allow.classes) ? allow.classes : [allow.class]
+  return APP_CLASSES.filter((name) => names.includes(name))
+}
+
 const readAllowReview = (value: Record<string, unknown>): AllowReview => {
   const current = isRecord(value.current) ? value.current : null
   const requested = isRecord(value.requested) ? value.requested : {}
+  const app = current ? readAppRef(current.app) : null
   return {
+    app,
+    environments: current ? readEnvironmentRefs(current.environments) : [],
+    appClasses: app ? readAppClasses(requested.allow) : [],
     connectionName: current && typeof current.name === 'string' ? current.name : '',
     policy: current ? readPolicy(current.policy) : null,
     temporaryAllows: current ? readTemporaryAllows(current.temporaryAllows) : [],
@@ -169,6 +205,21 @@ const readRenewReview = (value: Record<string, unknown>): RenewReview => {
       : 'none',
     expiresAt: current && typeof current.expiresAt === 'string' ? current.expiresAt : null,
     durationSeconds: seconds(requested.durationSeconds),
+  }
+}
+
+const readAppAccessReview = (value: Record<string, unknown>): AppAccessReview => {
+  const current = isRecord(value.current) ? value.current : null
+  const requested = isRecord(value.requested) ? value.requested : {}
+  return {
+    app: readAppRef(requested.app),
+    environments: readEnvironmentRefs(requested.environments),
+    access: requested.access === 'read_write' ? 'read_write' : 'read',
+    durationSeconds: seconds(requested.durationSeconds),
+    reuses:
+      current && typeof current.connectionId === 'string' && typeof current.name === 'string'
+        ? { connectionId: current.connectionId, name: current.name }
+        : null,
   }
 }
 
@@ -208,6 +259,7 @@ export const readActionReview = (value: unknown): ActionReview | null => {
     ...(type === REQUEST_ACTION_TYPES.allow ? { allow: readAllowReview(value) } : {}),
     ...(type === REQUEST_ACTION_TYPES.renew ? { renew: readRenewReview(value) } : {}),
     ...(type === REQUEST_ACTION_TYPES.contextUpdate ? { context: readContextReview(value) } : {}),
+    ...(type === REQUEST_ACTION_TYPES.appAccess ? { appAccess: readAppAccessReview(value) } : {}),
   }
 }
 
@@ -229,6 +281,8 @@ export const requestActionPermission = (
       return null
     case REQUEST_ACTION_TYPES.allow:
     case REQUEST_ACTION_TYPES.renew:
+    // Approval creates a Connection only when none covers exactly these environments.
+    case REQUEST_ACTION_TYPES.appAccess:
       return 'read'
     default:
       return 'update'
@@ -243,7 +297,8 @@ export const actionAllowsUntilRevoked = (type: RequestActionType | null | undefi
 export const actionTakesDuration = (type: RequestActionType | null | undefined): boolean =>
   type === REQUEST_ACTION_TYPES.create ||
   type === REQUEST_ACTION_TYPES.allow ||
-  type === REQUEST_ACTION_TYPES.renew
+  type === REQUEST_ACTION_TYPES.renew ||
+  type === REQUEST_ACTION_TYPES.appAccess
 
 /**
  * The allow a reviewer approves after narrowing it. It keeps the Connection
@@ -262,6 +317,37 @@ export const editedAllowAction = (
     ...(original.blockedCall !== undefined && original.blockedCall !== null
       ? { blockedCall: original.blockedCall }
       : {}),
+  }
+}
+
+/**
+ * App access as a reviewer approves it: the same app, the environments left
+ * ticked, and the access level chosen.
+ */
+export const editedAppAccessAction = (
+  original: unknown,
+  environmentIds: string[],
+  access: AppAccessLevel
+): Record<string, unknown> | null =>
+  requestActionType(original) === REQUEST_ACTION_TYPES.appAccess && isRecord(original)
+    ? {
+        type: REQUEST_ACTION_TYPES.appAccess,
+        version: REQUEST_ACTION_VERSION,
+        appId: original.appId,
+        environmentIds,
+        access,
+      }
+    : null
+
+/** What an applied app access request gave for writing, once approved. */
+export const readWriteAccess = (
+  applied: unknown
+): { grantedSeconds: number | null; expiresAt: string | null } | null => {
+  if (!isRecord(applied) || !isRecord(applied.writeAccess)) return null
+  return {
+    grantedSeconds: seconds(applied.writeAccess.grantedDurationSeconds),
+    expiresAt:
+      typeof applied.writeAccess.expiresAt === 'string' ? applied.writeAccess.expiresAt : null,
   }
 }
 
