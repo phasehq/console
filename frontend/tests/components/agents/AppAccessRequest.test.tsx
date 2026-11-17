@@ -381,3 +381,12 @@ describe('reviewing a request for app secrets', () => {
     })
   })
 })
+
+describe('who gains access', () => {
+  it('has one sentence saying token holders can read the secrets', () => {
+    const { TOKEN_HOLDERS_LINE } = require('@/utils/agents/appAccess')
+    expect(TOKEN_HOLDERS_LINE).toBe(
+      'Anyone who can create a token for this Agent can read these secrets with it.'
+    )
+  })
+})

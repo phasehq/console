@@ -23,6 +23,7 @@ import {
   defaultAppConnectionName,
   type AppRef,
   type EnvironmentRef,
+  TOKEN_HOLDERS_LINE,
 } from '@/utils/agents/appAccess'
 
 const REFETCH = ['GetAgentAssets', 'GetAgentDetail', 'GetAgentMesh']
@@ -165,7 +166,7 @@ export function CreateAppConnectionForm({
       />
       <p className="text-xs text-neutral-500">
         Workflows granted this Connection can read these environments&apos; secrets. Writes ask for
-        a Change Request until you change the access rules.
+        a Change Request until you change the access rules. {TOKEN_HOLDERS_LINE}
       </p>
       {app && environmentsTouched && environmentsProblem(environmentIds) && (
         <p role="alert" className="text-xs text-red-600 dark:text-red-400">

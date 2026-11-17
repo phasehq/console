@@ -54,6 +54,7 @@ import {
   describeClasses,
   formatAccessTime,
   type AppAccessLevel,
+  TOKEN_HOLDERS_LINE,
 } from '@/utils/agents/appAccess'
 import {
   customConnectionFormFromDefinition,
@@ -979,6 +980,9 @@ export function AgentActionApproveDialog({
             allowUntilRevoked={allowUntilRevoked}
             problem={durationProblem}
           />
+        )}
+        {isAppAccess && !missingTarget && (
+          <p className="text-xs text-neutral-500">{TOKEN_HOLDERS_LINE}</p>
         )}
         {writes && !missingTarget && (
           <GrantDurationField

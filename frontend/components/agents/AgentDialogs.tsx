@@ -29,7 +29,7 @@ import { AgentSelect } from '@/components/agents/AgentSelect'
 import { AccessEndsField } from '@/components/agents/AgentAccessControls'
 import { UNTIL_REVOKED, accessEndsValue, type AccessEnds } from '@/utils/agents/accessDuration'
 import { generateAgentName } from '@/utils/agents/names'
-import { isAppConnection } from '@/utils/agents/appAccess'
+import { isAppConnection, TOKEN_HOLDERS_LINE } from '@/utils/agents/appAccess'
 import { getHostname } from '@/utils/appConfig'
 import { toastUnhandledError } from '@/utils/errors'
 import {
@@ -905,7 +905,7 @@ export function GrantWorkflowDialog({
           {isAppConnection(
             connections.find((connection) => connection.id === connectionId)?.serviceType
           )
-            ? "This Workflow can use the app's secrets in the Connection's environments, as its access rules allow."
+            ? `This Workflow can use the app's secrets in the Connection's environments, as its access rules allow. ${TOKEN_HOLDERS_LINE}`
             : 'This Workflow uses the third-party credentials bound to the selected Connection.'}
         </p>
         {problem && (
