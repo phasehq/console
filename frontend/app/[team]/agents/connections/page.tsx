@@ -66,6 +66,7 @@ import {
   isCustomConnection,
   parseHttpDefinition,
 } from '@/utils/agents/httpDefinition'
+import { AppEnvironments, WithheldApp } from '@/components/agents/WithheldAsset'
 
 const HEAD = 'text-left text-xs font-medium uppercase tracking-wider text-gray-500'
 const COLUMN_COUNT = 5
@@ -246,11 +247,15 @@ export default function AgentConnectionsPage() {
                   // A custom Connection carries its own definition and sealed secret.
                   const custom = isCustomConnection(connection.serviceType)
                   const appSecrets = isAppConnection(connection.serviceType)
+                  // The viewer cannot access the app: it stays listed without its names.
+                  const appRestricted = appSecrets && !!connection.appRestricted
+                  const hiddenEnvironments: number = connection.hiddenEnvironmentCount ?? 0
                   // The app was deleted: the Connection reaches nothing and can only be deleted.
-                  const appGone = appSecrets && !connection.app
+                  const appGone = appSecrets && !connection.app && !appRestricted
                   const environmentNames: string[] = (connection.environments ?? []).map(
                     (environment: any) => environment.name
                   )
+                  const environmentCount = environmentNames.length + hiddenEnvironments
                   const definition = custom
                     ? parseHttpDefinition(connection.definition ?? connection.config)
                     : null
@@ -349,15 +354,17 @@ export default function AgentConnectionsPage() {
                               <span className="text-amber-700 dark:text-amber-400">
                                 App deleted
                               </span>
+                            ) : appRestricted ? (
+                              <WithheldApp className="max-w-[16rem]" />
                             ) : (
                               <span className="flex min-w-0 items-center gap-1.5">
                                 <span className="max-w-[16rem] truncate font-medium">
                                   {connection.app.name}
                                 </span>
                                 <span className="max-w-[10rem] truncate whitespace-nowrap text-2xs text-neutral-500">
-                                  {environmentNames.length === 1
+                                  {environmentCount === 1 && environmentNames.length === 1
                                     ? environmentNames[0]
-                                    : `${environmentNames.length} environments`}
+                                    : `${environmentCount} environments`}
                                 </span>
                               </span>
                             )
@@ -406,9 +413,14 @@ export default function AgentConnectionsPage() {
                                 onOpen={() => refetch()}
                               />
                             )}
-                            {canUpdate && appSecrets && !appGone && (
-                              <EditAppConnectionDialog connection={connection} />
-                            )}
+                            {/* Saving its environments would drop the ones the viewer cannot see. */}
+                            {canUpdate &&
+                              appSecrets &&
+                              !appGone &&
+                              !appRestricted &&
+                              !hiddenEnvironments && (
+                                <EditAppConnectionDialog connection={connection} />
+                              )}
                             {canUpdate && !custom && !appSecrets && (
                               <UpdateConnectionDialog
                                 connection={connection}
@@ -465,6 +477,8 @@ export default function AgentConnectionsPage() {
                                         <span className="text-amber-700 dark:text-amber-400">
                                           Deleted
                                         </span>
+                                      ) : appRestricted ? (
+                                        <WithheldApp />
                                       ) : (
                                         <Link
                                           href={`/${organisation.name}/apps/${connection.app.id}`}
@@ -477,7 +491,10 @@ export default function AgentConnectionsPage() {
                                     </DetailField>
                                     <DetailField label="Environments">
                                       <span className="break-words">
-                                        {environmentNames.join(', ') || 'None'}
+                                        <AppEnvironments
+                                          environments={connection.environments ?? []}
+                                          hiddenEnvironmentCount={hiddenEnvironments}
+                                        />
                                       </span>
                                     </DetailField>
                                   </>
@@ -578,7 +595,7 @@ export default function AgentConnectionsPage() {
                               {!appGone && (
                                 <ConnectionPolicyBlocks
                                   connection={connection}
-                                  canEdit={canUpdate}
+                                  canEdit={canUpdate && !appRestricted}
                                 />
                               )}
                               {reviewPending && (

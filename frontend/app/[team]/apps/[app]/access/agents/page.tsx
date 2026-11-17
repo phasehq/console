@@ -18,6 +18,7 @@ import {
   readAppAccess,
   type EnvironmentRef,
 } from '@/utils/agents/appAccess'
+import { AppEnvironments } from '@/components/agents/WithheldAsset'
 
 type AgentAccessRow = {
   id: string
@@ -25,6 +26,8 @@ type AgentAccessRow = {
   workflow: { id: string; name: string }
   connection: { id: string; name: string }
   environments: EnvironmentRef[]
+  /** Environments of the app the viewer cannot access, not named. */
+  hiddenEnvironmentCount?: number | null
   access: unknown
   expiresAt?: string | null
 }
@@ -150,7 +153,10 @@ export default function AppAgents(props: { params: Promise<{ team: string; app: 
                         title={environments.join(', ')}
                         className="line-clamp-2 max-w-[16rem] break-words text-xs"
                       >
-                        {environments.join(', ')}
+                        <AppEnvironments
+                          environments={row.environments}
+                          hiddenEnvironmentCount={row.hiddenEnvironmentCount}
+                        />
                       </span>
                     </td>
                     <td className="px-6 py-2 text-xs">

@@ -30,7 +30,6 @@ from api.utils.agent_app_access import (
     allow_request,
     app_access_entries,
     app_access_request,
-    asking_classes,
     decide,
     expired_app_access,
     renew_request,
@@ -233,9 +232,8 @@ def authorize_agent_secrets_call(request):
             f"'{connection.name}' needs a member's approval before this Workflow "
             f"can {access_class} secrets in {label}. Send the request below to "
             "ask for it.",
-            request=allow_request(
-                decision.grant, asking_classes(decision.grant, access_class)
-            ),
+            # Only the refused class: other writes ask when they are tried.
+            request=allow_request(decision.grant, [access_class]),
         )
     if decision.effect == "block":
         raise AgentSecretsRefusal(

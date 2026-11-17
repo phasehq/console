@@ -30,6 +30,7 @@ from api.utils.agent_access import (
     iso_timestamp,
 )
 from api.utils.agent_app_access import connection_environments, grant_access
+from api.utils.asset_visibility import asset_visibility
 from api.utils.agent_config import (
     ConfigRegistryError,
     is_app_service,
@@ -49,27 +50,65 @@ from backend.graphene.types import (
 
 
 def _member_for(info, organisation):
+    return _member_in(info, organisation.id)
+
+
+def _member_in(info, organisation_id):
+    """The viewer's membership of an organisation, looked up once a request."""
+
     if info is None or getattr(info, "context", None) is None:
         return None
     cached = getattr(info.context, "_org_member", None)
     if (
         cached is not None
-        and str(cached.organisation_id) == str(organisation.id)
+        and str(cached.organisation_id) == str(organisation_id)
         and cached.deleted_at is None
     ):
         return cached
     user = getattr(info.context, "user", None)
     if getattr(user, "pk", None) is None:
         return None
-    return (
-        OrganisationMember.objects.select_related("role")
-        .filter(
-            organisation=organisation,
-            user=user,
-            deleted_at__isnull=True,
+    members = getattr(info.context, "_agent_viewers", None)
+    if not isinstance(members, dict):
+        members = {}
+        try:
+            info.context._agent_viewers = members
+        except AttributeError:
+            pass
+    key = str(organisation_id)
+    if key not in members:
+        members[key] = (
+            OrganisationMember.objects.select_related("role")
+            .filter(
+                organisation_id=organisation_id,
+                user=user,
+                deleted_at__isnull=True,
+            )
+            .first()
         )
-        .first()
-    )
+    return members[key]
+
+
+def _viewer_visibility(info, organisation_id):
+    return asset_visibility(_member_in(info, organisation_id))
+
+
+def _connection_view(connection, info):
+    """The app Connection's app and environments as the viewer may see them;
+    None for any other Connection."""
+
+    if not is_app_service(connection.service_type):
+        return None
+    cached = getattr(connection, "_viewer_app_view", None)
+    if cached is None:
+        environments = (
+            connection_environments(connection) if connection.app_id else []
+        )
+        cached = _viewer_visibility(info, connection.organisation_id).app_view(
+            connection.app, environments
+        )
+        connection._viewer_app_view = cached
+    return cached
 
 
 def _iso_datetime(value):
@@ -181,14 +220,34 @@ class AgentWorkflowType(DjangoObjectType):
     def resolve_expired_connections(self, info):
         if not _may_read_grants(self, info):
             return []
+        items = expired_connections(self)
+        app_connections = {
+            str(connection.id): connection
+            for connection in AgentConnection.objects.select_related("app").filter(
+                id__in=[
+                    item["connection_id"]
+                    for item in items
+                    if is_app_service(item["service_type"])
+                ]
+            )
+        }
+
+        def shown_name(item):
+            connection = app_connections.get(item["connection_id"])
+            if connection is None:
+                return item["connection_name"]
+            return _connection_view(connection, info).connection_name(
+                item["connection_name"]
+            )
+
         return [
             {
                 "connectionId": item["connection_id"],
-                "connectionName": item["connection_name"],
+                "connectionName": shown_name(item),
                 "serviceType": item["service_type"],
                 "expiredAt": iso_timestamp(item["expired_at"]),
             }
-            for item in expired_connections(self)
+            for item in items
         ]
 
     def resolve_grants(self, info):
@@ -406,26 +465,40 @@ class AgentConnectionEnvironmentType(graphene.ObjectType):
     env_type = graphene.String(required=True)
 
 
-def _app_of(connection):
-    app = connection.app if is_app_service(connection.service_type) else None
-    return app
+class AppVisibilityFields:
+    """``app`` and ``environments`` as the viewer may see them. A member who
+    cannot access the app gets ``app: null`` with ``appRestricted``; the
+    environments they cannot access are left out and counted."""
 
-
-def _environments_of(connection):
-    if not is_app_service(connection.service_type) or connection.app_id is None:
-        return []
-    return connection_environments(connection)
-
-
-class AgentConnectionType(DjangoObjectType):
-    authentication = graphene.Field(ProviderCredentialsType)
-    # App Connections ("phase_app") only: the app and the environments whose
-    # secrets the Console serves to the Workflows granted this Connection.
-    # ``app`` is null once the app is deleted.
     app = graphene.Field(AgentConnectionAppType)
     environments = graphene.List(
         graphene.NonNull(AgentConnectionEnvironmentType), required=True
     )
+    app_restricted = graphene.Boolean(required=True)
+    hidden_environment_count = graphene.Int(required=True)
+
+
+def _view_app(view):
+    return view.app if view else None
+
+
+def _view_environments(view):
+    return list(view.environments) if view else []
+
+
+def _view_app_restricted(view):
+    return bool(view and view.app_restricted)
+
+
+def _view_hidden_count(view):
+    return view.hidden_environment_count if view else 0
+
+
+class AgentConnectionType(AppVisibilityFields, DjangoObjectType):
+    authentication = graphene.Field(ProviderCredentialsType)
+    # App Connections ("phase_app") only: the app and the environments whose
+    # secrets the Console serves to the Workflows granted this Connection, as
+    # the viewer may see them. ``app`` is also null once the app is deleted.
     config = GenericScalar(required=True)
     # Custom Connections only: the definition in its latest version, and what
     # a browser needs to seal a new secret. The secret itself is write-only.
@@ -465,11 +538,21 @@ class AgentConnectionType(DjangoObjectType):
             "updated_at",
         )
 
+    def resolve_name(self, info):
+        view = _connection_view(self, info)
+        return view.connection_name(self.name) if view else self.name
+
     def resolve_app(self, info):
-        return _app_of(self)
+        return _view_app(_connection_view(self, info))
 
     def resolve_environments(self, info):
-        return _environments_of(self)
+        return _view_environments(_connection_view(self, info))
+
+    def resolve_app_restricted(self, info):
+        return _view_app_restricted(_connection_view(self, info))
+
+    def resolve_hidden_environment_count(self, info):
+        return _view_hidden_count(_connection_view(self, info))
 
     def resolve_definition(self, info):
         if not is_custom_service(self.service_type):
@@ -501,20 +584,16 @@ class AgentConnectionType(DjangoObjectType):
         return managed_policies()
 
 
-class AgentWorkflowGrantType(DjangoObjectType):
+class AgentWorkflowGrantType(AppVisibilityFields, DjangoObjectType):
     # Approved exceptions, for this Workflow only, to ``ask`` rules of the
     # Connection's access policy, that have not expired:
     # [{id, class | match | operation, expiresAt, requestId}].
     temporary_allows = GenericScalar(required=True)
     created_by = graphene.Field(OrganisationMemberType)
-    # App Connections only, null otherwise: the app and environments, and
-    # what the Workflow may do at this moment, by class:
-    # {read|create|update|delete: {effect, until?}}; ``until`` is set where a
-    # temporary allow lifts an ``ask``.
-    app = graphene.Field(AgentConnectionAppType)
-    environments = graphene.List(
-        graphene.NonNull(AgentConnectionEnvironmentType), required=True
-    )
+    # App Connections only, null otherwise: the app and environments as the
+    # viewer may see them, and what the Workflow may do at this moment, by
+    # class: {read|create|update|delete: {effect, until?}}; ``until`` is set
+    # where a temporary allow lifts an ``ask``.
     access = GenericScalar()
 
     class Meta:
@@ -533,10 +612,16 @@ class AgentWorkflowGrantType(DjangoObjectType):
         return live_temporary_allows(self.temporary_allows, timezone.now())
 
     def resolve_app(self, info):
-        return _app_of(self.connection)
+        return _view_app(_connection_view(self.connection, info))
 
     def resolve_environments(self, info):
-        return _environments_of(self.connection)
+        return _view_environments(_connection_view(self.connection, info))
+
+    def resolve_app_restricted(self, info):
+        return _view_app_restricted(_connection_view(self.connection, info))
+
+    def resolve_hidden_environment_count(self, info):
+        return _view_hidden_count(_connection_view(self.connection, info))
 
     def resolve_access(self, info):
         if not is_app_service(self.connection.service_type):
@@ -557,16 +642,66 @@ class AppAgentAccessType(graphene.ObjectType):
     agent = graphene.Field(AgentResourceRefType, required=True)
     workflow = graphene.Field(AgentResourceRefType, required=True)
     connection = graphene.Field(AgentResourceRefType, required=True)
+    # The environments the viewer can access; the others are counted.
     environments = graphene.List(
         graphene.NonNull(AgentConnectionEnvironmentType), required=True
     )
+    hidden_environment_count = graphene.Int(required=True)
     # {read|create|update|delete: {effect, until?}}, as the grant has it now.
     access = GenericScalar(required=True)
     expires_at = graphene.DateTime()
 
 
+# Shown in place of a member's or an Agent's free text that names an app or
+# environment the viewer cannot access.
+WITHHELD_TEXT = "Not shown: this names an app or environment you can't access."
+
+
+def _request_view(agent_request, info):
+    """The app and environments a request is about, as the viewer may see
+    them; None for a request about no app."""
+
+    if not hasattr(agent_request, "_viewer_app_view"):
+        view = None
+        if agent_request.action:
+            try:
+                asset = action_handler(agent_request.action).asset(
+                    agent_request, agent_request.action
+                )
+            except ActionError:
+                asset = None
+            if asset is not None and asset[0] is not None:
+                view = _viewer_visibility(
+                    info, agent_request.organisation_id
+                ).app_view(*asset)
+        agent_request._viewer_app_view = view
+    return agent_request._viewer_app_view
+
+
+def _request_review(agent_request, info):
+    if not hasattr(agent_request, "_viewer_review"):
+        review = None
+        if agent_request.action:
+            try:
+                review = action_handler(agent_request.action).describe(
+                    agent_request,
+                    agent_request.action,
+                    _member_in(info, agent_request.organisation_id),
+                    view=_request_view(agent_request, info),
+                )
+            except ActionError:
+                review = None
+        agent_request._viewer_review = review
+    return agent_request._viewer_review
+
+
 class AgentRequestType(DjangoObjectType):
     agent = graphene.Field(lambda: AgentType, required=True)
+    # A request about an app: whether the viewer cannot access the app, and
+    # how many of its environments they cannot access. Names they cannot see
+    # are left out of every field, titles included.
+    app_restricted = graphene.Boolean(required=True)
+    hidden_environment_count = graphene.Int(required=True)
     # The member who approved or denied the request, if they are still a member.
     resolved_by = graphene.Field(OrganisationMemberType)
     progress = GenericScalar(required=True)
@@ -628,14 +763,36 @@ class AgentRequestType(DjangoObjectType):
         return applied_access(self.applied_action)
 
     def resolve_action_review(self, info):
-        if not self.action:
-            return None
-        try:
-            return action_handler(self.action).describe(
-                self, self.action, _member_for(info, self.workflow.organisation)
-            )
-        except ActionError:
-            return None
+        return _request_review(self, info)
+
+    def resolve_app_restricted(self, info):
+        return _view_app_restricted(_request_view(self, info))
+
+    def resolve_hidden_environment_count(self, info):
+        return _view_hidden_count(_request_view(self, info))
+
+    def resolve_title(self, info):
+        view = _request_view(self, info)
+        if view is None or not view.mentions_withheld(self.title):
+            return self.title
+        review = _request_review(self, info)
+        return review["title"] if review else WITHHELD_TEXT
+
+    def resolve_credential_name(self, info):
+        view = _request_view(self, info)
+        if view is None:
+            return self.credential_name
+        return view.connection_name(self.credential_name)
+
+    def resolve_markdown(self, info):
+        view = _request_view(self, info)
+        return view.scrub(self.markdown, WITHHELD_TEXT) if view else self.markdown
+
+    def resolve_resolution_note(self, info):
+        view = _request_view(self, info)
+        if view is None or not self.resolution_note:
+            return self.resolution_note
+        return view.scrub(self.resolution_note, WITHHELD_TEXT)
 
 
 class AgentRequestQueueType(graphene.ObjectType):
@@ -649,6 +806,21 @@ class AgentEventType(DjangoObjectType):
     class Meta:
         model = AgentEvent
         fields = "__all__"
+
+    def resolve_detail(self, info):
+        # An app secrets call names its app and environment; leave out what
+        # the viewer cannot access.
+        detail = dict(self.detail or {})
+        if not detail.get("app_id"):
+            return detail
+        visibility = _viewer_visibility(info, self.organisation_id)
+        if not visibility.can_see_app(detail["app_id"]):
+            detail.update(app_name=None, app_restricted=True)
+        if detail.get("environment_id") and not visibility.can_see_environment(
+            detail["app_id"], detail["environment_id"]
+        ):
+            detail.update(environment_name=None, environment_restricted=True)
+        return detail
 
 
 class AgentEventPageType(graphene.ObjectType):

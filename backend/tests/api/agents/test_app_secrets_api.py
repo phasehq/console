@@ -100,12 +100,12 @@ def test_default_policy_asks_for_writes(lab, method, access_class):
     body = refusal(response, 403, "agent_access_ask")
     assert body["request"] == {
         "kind": "access_change",
-        "title": "Allow create, update and delete secrets on " + connection.name,
+        "title": f"Allow {access_class} secrets on {connection.name}",
         "action": {
             "type": "agent_grant.allow",
             "version": 1,
             "connectionId": str(connection.id),
-            "allow": {"classes": ["create", "update", "delete"]},
+            "allow": {"classes": [access_class]},
         },
     }
     assert not Secret.objects.filter(environment=lab.dev).exists()

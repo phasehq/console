@@ -300,9 +300,12 @@ def test_graphql_surface_binds_connections_to_provider_credentials():
         "createdBy",
         "expiresAt",
         "temporaryAllows",
-        # App Connections: the app, its environments and the access by class.
+        # App Connections: the app, its environments and the access by class,
+        # with what the viewer may not see withheld.
         "app",
         "environments",
+        "appRestricted",
+        "hiddenEnvironmentCount",
         "access",
     }
     assert {"policy", "managedPolicies", "takesPolicy"} <= set(connection_fields)

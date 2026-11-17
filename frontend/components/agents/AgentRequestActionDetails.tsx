@@ -8,6 +8,7 @@ import { describeDuration } from '@/utils/agents/accessDuration'
 import { describeTarget, policySummary } from '@/utils/agents/accessPolicy'
 import { diffLines, diffStats } from '@/utils/agents/textDiff'
 import { ACCESS_LEVEL_LABEL, describeClasses } from '@/utils/agents/appAccess'
+import { AppEnvironments, WithheldApp } from '@/components/agents/WithheldAsset'
 import type {
   AccessRecord,
   AllowReview,
@@ -66,7 +67,7 @@ export function AllowDetails({
 }) {
   const shown = target ?? review.allow
   const summary = review.policy ? policySummary(review.policy) : ''
-  if (review.app)
+  if (review.app || review.visibility.appRestricted)
     return (
       <div className="space-y-3">
         <p className="text-xs">
@@ -78,9 +79,12 @@ export function AllowDetails({
           answer with Ask.
         </p>
         <dl className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
-          <Field label="App">{review.app.name}</Field>
+          <Field label="App">{review.app ? review.app.name : <WithheldApp />}</Field>
           <Field label="Environments">
-            {review.environments.map((environment) => environment.name).join(', ') || 'None'}
+            <AppEnvironments
+              environments={review.environments}
+              hiddenEnvironmentCount={review.visibility.hiddenEnvironmentCount}
+            />
           </Field>
         </dl>
         <p className="text-xs text-neutral-500">
@@ -172,9 +176,14 @@ export function AppAccessDetails({ review }: { review: AppAccessReview }) {
   return (
     <div className="space-y-3">
       <dl className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-3">
-        <Field label="App">{review.app?.name || 'Unknown app'}</Field>
+        <Field label="App">
+          {review.app?.name || (review.visibility.appRestricted ? <WithheldApp /> : 'Unknown app')}
+        </Field>
         <Field label="Environments">
-          {review.environments.map((environment) => environment.name).join(', ') || 'None'}
+          <AppEnvironments
+            environments={review.environments}
+            hiddenEnvironmentCount={review.visibility.hiddenEnvironmentCount}
+          />
         </Field>
         <Field label="Access">{ACCESS_LEVEL_LABEL[review.access]}</Field>
       </dl>

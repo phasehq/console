@@ -719,7 +719,7 @@ def test_adding_an_environment_needs_access_to_it(lab):
     grant = grant_app(lab, connection)
     limited = member(lab, "limited", app=lab.app, environments=[lab.dev, lab.staging])
 
-    with pytest.raises(GraphQLError, match="Production"):
+    with pytest.raises(GraphQLError, match="every environment"):
         UpdateAgentAppConnectionMutation.mutate(
             None, info(limited), connection_id=connection.id,
             environment_ids=[lab.dev.id, lab.prod.id],
@@ -809,7 +809,7 @@ def test_approving_an_allow_or_a_renewal_needs_the_member_to_reach_the_app(lab):
     no_env = member(lab, "no-env-2", app=lab.app)
 
     for agent_request in (allow, renew):
-        with pytest.raises(GraphQLError, match="access to the environment"):
+        with pytest.raises(GraphQLError, match="access to every environment"):
             approve(lab, agent_request, info(no_env))
     with pytest.raises(GraphQLError, match="create secrets"):
         approve(lab, allow, info(no_write))

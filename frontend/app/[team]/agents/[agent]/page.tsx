@@ -96,6 +96,7 @@ import {
   isActiveSession,
   agentRowActions,
 } from '@/components/agents/AgentUI'
+import { AppEnvironments, WithheldApp } from '@/components/agents/WithheldAsset'
 
 type Workflow = {
   id: string
@@ -109,9 +110,12 @@ type Workflow = {
     id: string
     expiresAt?: string | null
     temporaryAllows?: unknown
-    /** App Connections only: the app (null once deleted) and the environments covered. */
+    /** App Connections only: the app (null once deleted, or when the viewer cannot access
+     * it) and the environments covered that the viewer can access. */
     app?: { id: string; name: string } | null
     environments?: Array<{ id: string; name: string }> | null
+    appRestricted?: boolean | null
+    hiddenEnvironmentCount?: number | null
     connection: {
       id: string
       name: string
@@ -305,7 +309,8 @@ export default function AgentDetailPage(props: {
     connections.filter(
       (connection: { id: string; state: string; serviceType: string; app?: unknown }) =>
         normalizeAgentEnum(connection.state) === 'ACTIVE' &&
-        // An app Connection whose app was deleted reaches nothing.
+        // An app Connection whose app was deleted reaches nothing; one whose app the viewer
+        // cannot access is not theirs to grant.
         !(isAppConnection(connection.serviceType) && !connection.app) &&
         !grants.some((grant) => grant.connection.id === connection.id)
     )
@@ -701,14 +706,22 @@ export default function AgentDetailPage(props: {
                                 const credential = grant.connection.authentication
                                 const appSecrets = isAppConnection(grant.connection.serviceType)
                                 // Where other grants name the credential, an app grant names
-                                // the app and its environments.
-                                const appTarget = appSecrets
-                                  ? grant.app
-                                    ? `${grant.app.name} · ${(grant.environments ?? [])
-                                        .map((environment) => environment.name)
-                                        .join(', ')}`
-                                    : 'App deleted'
-                                  : ''
+                                // the app and its environments, as far as the viewer may see them.
+                                const appTarget = appSecrets ? (
+                                  grant.appRestricted ? (
+                                    <WithheldApp />
+                                  ) : grant.app ? (
+                                    <>
+                                      {grant.app.name} ·{' '}
+                                      <AppEnvironments
+                                        environments={grant.environments ?? []}
+                                        hiddenEnvironmentCount={grant.hiddenEnvironmentCount}
+                                      />
+                                    </>
+                                  ) : (
+                                    'App deleted'
+                                  )
+                                ) : null
                                 return (
                                   <li
                                     key={grant.id}
@@ -726,10 +739,7 @@ export default function AgentDetailPage(props: {
                                       <span className="truncate">{grant.connection.name}</span>
                                     </Link>
                                     {appSecrets ? (
-                                      <span
-                                        className="flex min-w-0 items-center gap-1.5 text-neutral-500"
-                                        title={appTarget}
-                                      >
+                                      <span className="flex min-w-0 items-center gap-1.5 text-neutral-500">
                                         <FaLayerGroup aria-hidden="true" className="shrink-0" />
                                         <span className="truncate">{appTarget}</span>
                                       </span>

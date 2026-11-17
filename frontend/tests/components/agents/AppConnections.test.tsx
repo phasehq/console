@@ -235,6 +235,53 @@ describe('app Connections on the Connections page', () => {
     expect(row('orders secrets').querySelector('[aria-label="Access rules"]')).toBeNull()
   })
 
+  test('a Connection to an app the viewer cannot access stays listed without its names', async () => {
+    await render([
+      appConnection({
+        name: 'App secrets',
+        app: null,
+        appRestricted: true,
+        environments: [],
+        hiddenEnvironmentCount: 2,
+      }),
+    ])
+    const body = row('App secrets')
+
+    expect(body.querySelector('tr')!.children[3].textContent).toBe("An app you can't access")
+    expect(body.querySelector('[data-withheld] svg')).not.toBeNull()
+    expect(body.textContent).not.toContain('App deleted')
+    expect(buttonNamed(body, 'Edit')).toBeUndefined()
+    expect(buttonNamed(body, 'Delete')).toBeDefined()
+    await expand('App secrets')
+    const details = row('App secrets').querySelectorAll('tr')[1]
+    expect(details.querySelector('a[href^="/acme/apps/"]')).toBeNull()
+    expect(details.textContent).toContain("An app you can't access")
+    expect(details.textContent).toContain("2 environments you can't access")
+    expect(details.textContent).not.toContain('was deleted')
+    // The rules show, read-only.
+    expect(details.querySelector('[aria-label="Access rules in force"]')).not.toBeNull()
+    expect(buttonNamed(row('App secrets'), 'Edit')).toBeUndefined()
+  })
+
+  test('with some environments, the viewer sees those and a count of the rest', async () => {
+    await render([
+      appConnection({
+        name: 'orders secrets',
+        environments: [{ id: 'env-dev', name: 'Development', envType: 'dev' }],
+        hiddenEnvironmentCount: 2,
+      }),
+    ])
+    const body = row('orders secrets')
+
+    expect(body.querySelector('tr')!.children[3].textContent).toBe('orders3 environments')
+    // Saving its environments would drop the hidden ones, so it cannot be edited here.
+    expect(buttonNamed(body, 'Edit')).toBeUndefined()
+    await expand('orders secrets')
+    const details = row('orders secrets').querySelectorAll('tr')[1]
+    expect(details.querySelector('a[href="/acme/apps/app-1"]')).not.toBeNull()
+    expect(details.textContent).toContain("Development+2 more you can't access")
+  })
+
   test('search finds an app Connection by its app and environment', async () => {
     await render([
       appConnection(),

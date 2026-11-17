@@ -23,11 +23,10 @@ from api.models import (
 from api.utils.access.permissions import (
     role_has_global_access,
     role_has_permission,
-    user_can_access_app,
-    user_can_access_environment,
     user_has_permission,
 )
 from api.utils.agent_access import RENEWAL_WINDOW, iso_timestamp
+from api.utils.asset_visibility import asset_visibility
 from api.utils.agent_config import APP_SERVICE_TYPE
 from api.utils.agent_config.access_policy import (
     PolicyError,
@@ -312,15 +311,6 @@ def decide(workflow, environment, access_class, now=None):
     raise AssertionError("unreachable")
 
 
-def asking_classes(grant, access_class, now=None):
-    """What an Agent stopped by ``ask`` should ask a member to allow."""
-
-    if access_class == "read":
-        return ["read"]
-    access = grant_access(grant, now)
-    return [name for name in WRITE_CLASSES if access[name]["effect"] == "ask"]
-
-
 def readable_environment_ids(workflow, now=None):
     """Environments whose secrets this Workflow may read right now."""
 
@@ -536,15 +526,18 @@ def require_member_can_release(member, app, environments, classes):
             return role_has_permission(member.role, name, "Secrets", True)
 
     else:
-        if not user_can_access_app(member.user_id, app.id):
+        # The same check decides which names the member sees, so these
+        # messages name nothing they could not see.
+        visibility = asset_visibility(member)
+        if not visibility.can_see_app(app.id):
             raise AppAccessError(
-                f"You don't have access to the app '{app.name}'.", code="forbidden"
+                "You don't have access to this app.", code="forbidden"
             )
         for environment in environments:
-            if not user_can_access_environment(member.user_id, environment.id):
+            if not visibility.can_see_environment(app.id, environment.id):
                 raise AppAccessError(
-                    f"You don't have access to the environment '{environment.name}' "
-                    f"of '{app.name}'.",
+                    "You don't have access to every environment this covers "
+                    f"in '{app.name}'.",
                     code="forbidden",
                 )
 

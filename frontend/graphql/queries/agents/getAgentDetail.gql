@@ -67,6 +67,8 @@ query GetAgentDetail(
         name
         envType
       }
+      appRestricted
+      hiddenEnvironmentCount
       connection {
         id
         name

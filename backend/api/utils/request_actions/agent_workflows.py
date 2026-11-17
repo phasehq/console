@@ -88,7 +88,7 @@ class UpdateWorkflowContext(ActionHandler):
             }
         return checked
 
-    def describe(self, request, action, member):
+    def describe(self, request, action, member, view=None):
         return {
             "type": self.type,
             "title": fit_title(f"Update the context of {request.workflow.name}"),
