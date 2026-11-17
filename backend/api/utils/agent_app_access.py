@@ -596,22 +596,40 @@ def set_connection_environments(connection, environments):
     )
 
 
-def matching_connection(organisation_id, app, environments):
-    """Lock and return an active app Connection of the organisation with the
-    same app and exactly these environments, if there is one."""
+def _rule_key(rule):
+    return sorted((str(name), str(value)) for name, value in rule.items())
 
+
+def has_default_policy(stored_policy):
+    """Whether a Connection's rules are exactly those a new app Connection
+    starts with, in any order."""
+
+    policy = full_policy(stored_policy)
+    default = full_policy(DEFAULT_POLICY)
+    return policy["default"] == default["default"] and sorted(
+        map(_rule_key, policy["rules"])
+    ) == sorted(map(_rule_key, default["rules"]))
+
+
+def reusable_connection(organisation_id, app, environments, *, lock=False):
+    """An active app Connection of the organisation with the same app,
+    exactly these environments and the default rules, if there is one; locked
+    with ``lock``. Approving app access reuses only such a Connection, so the
+    Agent gets the access the reviewer saw."""
+
+    connections = AgentConnection.objects.filter(
+        organisation_id=organisation_id,
+        service_type=APP_SERVICE_TYPE,
+        app=app,
+        deleted_at__isnull=True,
+        state=AgentConnection.ACTIVE,
+    ).order_by("created_at", "id")
+    if lock:
+        connections = connections.select_for_update(of=("self",))
     wanted = {str(environment.id) for environment in environments}
-    for connection in (
-        AgentConnection.objects.select_for_update(of=("self",))
-        .filter(
-            organisation_id=organisation_id,
-            service_type=APP_SERVICE_TYPE,
-            app=app,
-            deleted_at__isnull=True,
-            state=AgentConnection.ACTIVE,
-        )
-        .order_by("created_at", "id")
-    ):
+    for connection in connections:
+        if not has_default_policy(connection.policy):
+            continue
         have = {
             str(value)
             for value in connection.app_environments.values_list(
@@ -623,7 +641,28 @@ def matching_connection(organisation_id, app, environments):
     return None
 
 
+_NAME_LENGTH = 255
+
+
 def connection_name(app, environments):
+    """A name for a new app Connection, unique among the organisation's
+    Connections: a number follows the name when it is taken."""
+
     names = ", ".join(environment.name for environment in environments)
-    name = f"{app.name} secrets ({names})"
-    return name if len(name) <= 255 else f"{name[:254]}…"
+    base = f"{app.name} secrets ({names})"
+    taken = {
+        name.lower()
+        for name in AgentConnection.objects.filter(
+            organisation_id=app.organisation_id,
+            deleted_at__isnull=True,
+            name__istartswith=base[: _NAME_LENGTH - 16],
+        ).values_list("name", flat=True)
+    }
+    number = 1
+    while True:
+        suffix = "" if number == 1 else f" {number}"
+        limit = _NAME_LENGTH - len(suffix)
+        name = (base if len(base) <= limit else f"{base[: limit - 1]}…") + suffix
+        if name.lower() not in taken:
+            return name
+        number += 1

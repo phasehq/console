@@ -26,6 +26,7 @@ from api.utils.access.middleware import IsIPAllowed
 from api.utils.agent_app_access import (
     METHOD_CLASSES,
     SSE_REQUIRED_MESSAGE,
+    AgentSecretsReader,
     allow_request,
     app_access_entries,
     app_access_request,
@@ -36,6 +37,7 @@ from api.utils.agent_app_access import (
 )
 from api.utils.agent_config import APP_SERVICE_TYPE
 from api.utils.rest import get_token_type
+from api.utils.secrets import reference_target_environments
 
 
 logger = logging.getLogger(__name__)
@@ -111,16 +113,37 @@ def _environment_label(environment):
     return f"{environment.app.name} ({environment.name})"
 
 
-def _body_has_override(request):
+def _body_secrets(request):
     try:
         body = json.loads(request.body or b"{}")
     except (ValueError, RecursionError):
         # The view answers a malformed body itself.
-        return False
+        return []
     secrets = body.get("secrets") if isinstance(body, dict) else None
-    return isinstance(secrets, list) and any(
-        isinstance(secret, dict) and "override" in secret for secret in secrets
-    )
+    if not isinstance(secrets, list):
+        return []
+    return [secret for secret in secrets if isinstance(secret, dict)]
+
+
+def _body_has_override(request):
+    return any("override" in secret for secret in _body_secrets(request))
+
+
+def _refers_outside_readable(request, workflow, environment):
+    """Whether a submitted value refers to a secret in an environment the
+    Workflow cannot read. Other readers of this environment, such as a sync,
+    resolve references without an account check, so such a reference would
+    carry that secret where the Agent might see it."""
+
+    reader = AgentSecretsReader(workflow)
+    for secret in _body_secrets(request):
+        value = secret.get("value")
+        if not isinstance(value, str):
+            continue
+        for target in reference_target_environments(value, environment):
+            if target is None or not reader.can_read_environment(target.id):
+                return True
+    return False
 
 
 def authorize_agent_secrets_call(request):
@@ -229,6 +252,15 @@ def authorize_agent_secrets_call(request):
             "agent_override_unsupported",
             "Personal overrides belong to members; an Agent cannot set one.",
         )
+    if access_class in ("create", "update") and _refers_outside_readable(
+        request, auth["workflow"], environment
+    ):
+        call["refused"] = True
+        raise AgentSecretsRefusal(
+            status.HTTP_403_FORBIDDEN,
+            "agent_reference_not_readable",
+            "A value refers to a secret in an environment this Agent cannot read.",
+        )
     auth["environment"] = environment
     auth["app"] = environment.app
 
@@ -254,7 +286,10 @@ def record_agent_secrets_call(request, response):
         decision = call.get("decision")
         environment = call.get("environment")
         code = response.data.get("code", "") if isinstance(response.data, dict) else ""
-        if decision is not None:
+        if call.get("refused"):
+            # Allowed by the grant, refused for what the call carries.
+            proxy_decision = AgentEvent.BLOCK
+        elif decision is not None:
             proxy_decision = _DECISIONS[decision.effect]
         else:
             proxy_decision = AgentEvent.BLOCK if code else AgentEvent.ERROR

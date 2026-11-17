@@ -230,6 +230,20 @@ def test_a_secret_guard_path_rule_takes_every_documented_member(tmp_path):
     [
         (lambda d: d.update({"secret_guard": {}}), "operations, paths, or both"),
         (lambda d: d.update({"secret_guard": {"paths": []}}), "operations, paths"),
+        (
+            lambda d: d.update({"secret_guard": {"operations": {}, "paths": []}}),
+            "operations, paths, or both",
+        ),
+        (
+            lambda d: d.update({"secret_guard": {"operations": None, "paths": None}}),
+            "operations, paths, or both",
+        ),
+        (
+            lambda d: d.update(
+                {"secret_guard": {"paths": [{"pattern": "/x", "operation": ""}]}}
+            ),
+            "non-empty string",
+        ),
         (lambda d: d.update({"secret_guard": []}), "expected an object"),
         (lambda d: d.update({"secret_guard": {"rules": []}}), "unknown field"),
         (_github_guard(methods=["POST"]), "unknown field"),
@@ -279,6 +293,24 @@ def _aws_operations(operations):
         (_aws_operations({"sts": ["Assume Role"]}), "invalid value"),
         (_aws_operations({"sts": ["AssumeRole", "AssumeRole"]}), "duplicate"),
         (_aws_operations({"sts": "AssumeRole"}), "expected a list"),
+        (_aws_operations({"sts": [""]}), "non-empty string"),
+        (_aws_operations({"sts": ["AssumeRole", " "]}), "non-empty string"),
+        (_aws_operations({"": ["AssumeRole"]}), "invalid service"),
+        (
+            lambda d: d["secret_guard"]["paths"][0].update({"services": [""]}),
+            "non-empty string",
+        ),
+        (
+            lambda d: d["secret_guard"]["paths"][0].update({"services": []}),
+            "must not be empty",
+        ),
+        # A service signed for AWS needs guarded operations, not paths only.
+        (lambda d: d["secret_guard"].pop("operations"), "needs operations"),
+        (
+            lambda d: d.update({"secret_guard": {"operations": {}, "paths": []}}),
+            "operations, paths, or both",
+        ),
+        (lambda d: d.update({"secret_guard": {}}), "operations, paths, or both"),
         (
             lambda d: d["secret_guard"]["paths"][0].update({"services": ["Code Artifact"]}),
             "invalid value",
@@ -308,6 +340,17 @@ def _classes(**changes):
         (_classes(extra=[]), "unknown field"),
         (lambda d: d["action_classes"].pop("mixed_services"), "missing required"),
         (_classes(read_verbs=["Get", "Get"]), "duplicate"),
+        (_classes(read_verbs=[]), "must not be empty"),
+        (_classes(create_verbs=[]), "must not be empty"),
+        (_classes(delete_verbs=[]), "must not be empty"),
+        (_classes(query_protocol_services=[]), "must not be empty"),
+        (_classes(json_target_services=[]), "must not be empty"),
+        (_classes(read_verbs=["Get", ""]), "non-empty string"),
+        (_classes(admin_services=[""]), "non-empty string"),
+        (_classes(admin_suffixes=[""]), "non-empty string"),
+        (_classes(dual_protocol_services=[""]), "non-empty string"),
+        (_classes(mixed_services=[""]), "non-empty string"),
+        (_classes(json_target_services=["lambda", ""]), "non-empty string"),
         (_classes(read_verbs=["Get*"]), "invalid value"),
         (_classes(admin_services=["IAM"]), "invalid value"),
         (_classes(exact={"kms:CreateGrant": "mint"}), "expected one of"),
@@ -339,6 +382,14 @@ def _classes(**changes):
 )
 def test_aws_call_classes_reject_bad_shapes(tmp_path, mutate, message):
     _refused(tmp_path, "aws.json", mutate, message)
+
+
+@pytest.mark.parametrize(
+    "key", ["admin_services", "admin_suffixes", "dual_protocol_services", "mixed_services"]
+)
+def test_the_other_call_class_lists_may_be_empty(tmp_path, key):
+    registry = _load_with(tmp_path, "aws.json", _classes(**{key: []}))
+    assert registry.get_service("aws")["action_classes"][key] == []
 
 
 def test_call_classes_are_refused_on_a_service_not_signed_for_aws(tmp_path):

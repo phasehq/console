@@ -159,6 +159,17 @@ _ACTION_CLASS_LISTS = (
     "json_target_services",
     "mixed_services",
 )
+# The lists an AWS call cannot be classed without: an empty one would let
+# every call fall through to the default class.
+_REQUIRED_ACTION_CLASS_LISTS = frozenset(
+    {
+        "read_verbs",
+        "create_verbs",
+        "delete_verbs",
+        "query_protocol_services",
+        "json_target_services",
+    }
+)
 # The injection the CLI treats as an AWS call. Its secret guard and call
 # classes must always reach the client, or the Connection is unusable.
 _AWS_INJECTION = "aws_sigv4"
@@ -1213,7 +1224,10 @@ def _validate_action_classes(value: Any, location: str) -> dict[str, Any]:
     for key in _ACTION_CLASS_LISTS:
         pattern = _AWS_SERVICE if key.endswith("_services") else _AWS_ACTION
         checked[key] = _patterned_list(
-            classes[key], pattern, f"{location}.{key}", allow_empty=True
+            classes[key],
+            pattern,
+            f"{location}.{key}",
+            allow_empty=key not in _REQUIRED_ACTION_CLASS_LISTS,
         )
     checked["exact"] = _class_table(classes["exact"], None, f"{location}.exact")
     for key in checked["exact"]:
@@ -1488,6 +1502,11 @@ def _validate_service(document: Mapping[str, Any], path: Path) -> dict[str, Any]
         raise ConfigRegistryError(
             f"{location}: a service signed with {_AWS_INJECTION} needs "
             "secret_guard and action_classes"
+        )
+    if aws and not secret_guard.get("operations"):
+        raise ConfigRegistryError(
+            f"{location}.secret_guard: a service signed with {_AWS_INJECTION} "
+            "needs operations"
         )
     credential_fields = None
     if "credential_fields" in document:
