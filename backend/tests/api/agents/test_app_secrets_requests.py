@@ -309,23 +309,158 @@ def test_an_identical_connection_is_reused(lab):
     assert AgentConnection.objects.filter(service_type=APP_SERVICE_TYPE).count() == 2
 
 
-@pytest.mark.django_db
-def test_read_write_is_refused_when_the_reused_connection_blocks_a_write(lab):
-    app_connection(
+def _review(lab, agent_request):
+    review = graphql(
         lab,
-        [lab.dev, lab.staging],
-        name="Orders",
-        policy={
-            "version": 1,
-            "default": "allow",
-            "rules": [{"class": "delete", "effect": "block"}],
-        },
+        """query($org: ID!, $id: ID!) {
+            agentRequests(organisationId: $org, requestId: $id) { actionReview }
+        }""",
+        member=lab.approver,
+        org=str(lab.organisation.id),
+        id=str(agent_request.id),
     )
-    agent_request = filed(_app_access(lab, access="read_write"))
+    assert review.errors is None, review.errors
+    return review.data["agentRequests"][0]["actionReview"]
 
-    with pytest.raises(GraphQLError, match="block delete calls"):
-        approve(lab, agent_request, lab.approver_info)
-    assert not AgentWorkflowGrant.objects.filter(workflow=lab.workflow).exists()
+
+@pytest.mark.django_db
+def test_the_review_names_the_connection_approval_reuses(lab):
+    existing = app_connection(lab, [lab.staging, lab.dev], name="Orders dev and staging")
+    agent_request = filed(_app_access(lab))
+
+    current = _review(lab, agent_request)["current"]
+
+    assert current["connectionId"] == str(existing.id)
+    assert current["name"] == "Orders dev and staging"
+    assert current["policy"] == DEFAULT_POLICY
+
+
+@pytest.mark.django_db
+def test_default_rules_in_another_order_are_reused(lab):
+    reordered = {**DEFAULT_POLICY, "rules": list(reversed(DEFAULT_POLICY["rules"]))}
+    existing = app_connection(lab, [lab.dev, lab.staging], policy=reordered)
+    agent_request = filed(_app_access(lab))
+
+    assert _review(lab, agent_request)["current"]["connectionId"] == str(existing.id)
+    approve(lab, agent_request, lab.approver_info)
+
+    agent_request.refresh_from_db()
+    assert str(agent_request.connection_id) == str(existing.id)
+
+
+NON_DEFAULT_POLICIES = {
+    "allows_writes": {"version": 1, "default": "allow", "rules": []},
+    "asks_on_read": {
+        "version": 1,
+        "default": "ask",
+        "rules": [],
+    },
+    "blocks_a_class": {
+        "version": 1,
+        "default": "allow",
+        "rules": [
+            {"class": "create", "effect": "ask"},
+            {"class": "update", "effect": "ask"},
+            {"class": "delete", "effect": "block"},
+        ],
+    },
+    "blocks_reads": {
+        "version": 1,
+        "default": "allow",
+        "rules": [
+            {"class": "read", "effect": "block"},
+            {"class": "create", "effect": "ask"},
+            {"class": "update", "effect": "ask"},
+            {"class": "delete", "effect": "ask"},
+        ],
+    },
+}
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("access", ["read", "read_write"])
+@pytest.mark.parametrize("label", sorted(NON_DEFAULT_POLICIES))
+def test_a_connection_with_other_rules_is_not_reused(lab, label, access):
+    existing = app_connection(
+        lab, [lab.dev, lab.staging], name="Orders", policy=NON_DEFAULT_POLICIES[label]
+    )
+    put_secret(lab.dev, "K", "v")
+    agent_request = filed(_app_access(lab, access=access))
+
+    assert _review(lab, agent_request)["current"] is None
+    approve(lab, agent_request, lab.approver_info)
+
+    agent_request.refresh_from_db()
+    connection = agent_request.connection
+    assert str(connection.id) != str(existing.id)
+    assert connection.policy == DEFAULT_POLICY
+    assert connection.name == "orders-service secrets (Development, Staging)"
+    assert _ids(connection_environments(connection)) == _ids([lab.dev, lab.staging])
+    existing.refresh_from_db()
+    assert existing.policy == NON_DEFAULT_POLICIES[label]
+    assert not AgentWorkflowGrant.objects.filter(connection=existing).exists()
+    # The Agent gets exactly the level asked for.
+    allows = agent_request.grant.temporary_allows
+    if access == "read":
+        assert allows == []
+    else:
+        assert sorted(allow["class"] for allow in allows) == ["create", "delete", "update"]
+    client = token_client(lab)
+    assert client.get(secrets_url(lab.app, "Development")).status_code == 200
+    created = client.post(
+        secrets_url(lab.app, "Development"),
+        {"secrets": [{"key": "NEW", "value": "v"}]},
+        format="json",
+    )
+    assert created.status_code == (200 if access == "read_write" else 403), created.content
+
+
+@pytest.mark.django_db
+def test_new_connection_names_stay_unique(lab):
+    base = "orders-service secrets (Development, Staging)"
+    allows_writes = NON_DEFAULT_POLICIES["allows_writes"]
+    app_connection(lab, [lab.dev, lab.staging], name=base, policy=allows_writes)
+    app_connection(lab, [lab.dev, lab.staging], name=f"{base} 2", policy=allows_writes)
+    # A name in another case is taken too.
+    app_connection(lab, [lab.dev], name=f"{base.upper()} 3")
+
+    agent_request = filed(_app_access(lab))
+    approve(lab, agent_request, lab.approver_info)
+    agent_request.refresh_from_db()
+    assert agent_request.connection.name == f"{base} 4"
+
+    # Once its rules change, the next approval creates another.
+    AgentConnection.objects.filter(pk=agent_request.connection_id).update(
+        policy=allows_writes
+    )
+    second = filed(_app_access(lab))
+    approve(lab, second, lab.approver_info)
+    second.refresh_from_db()
+    assert second.connection.name == f"{base} 5"
+    names = list(
+        AgentConnection.objects.filter(organisation=lab.organisation).values_list(
+            "name", flat=True
+        )
+    )
+    assert len({name.lower() for name in names}) == len(names)
+
+
+@pytest.mark.django_db
+def test_a_long_connection_name_stays_within_the_limit_with_a_number(lab):
+    from api.utils.agent_app_access import connection_name
+
+    long_app, environments = sse_app(
+        lab, name="a" * 64, environments=[f"environment-{index}-" + "e" * 50 for index in range(3)]
+    )
+    first = connection_name(long_app, environments)
+    assert len(first) == 255 and first.endswith("…")
+    app_connection(lab, environments, app=long_app, name=first)
+
+    second = connection_name(long_app, environments)
+
+    assert len(second) == 255
+    assert second.endswith("… 2")
+    assert second[:200] == first[:200]
 
 
 @pytest.mark.django_db

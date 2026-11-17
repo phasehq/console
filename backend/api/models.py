@@ -1340,18 +1340,20 @@ class SecretEvent(models.Model):
         ServiceAccountToken, on_delete=models.SET_NULL, blank=True, null=True
     )
     # Set when an Agent token made the call, through an app Connection of
-    # this Workflow.
+    # this Workflow. Not indexed: building an index on this large table would
+    # block writes to the secret log, and every query on these fields is also
+    # narrowed by an indexed column.
     agent = models.ForeignKey(
         "Agent", on_delete=models.SET_NULL, blank=True, null=True,
-        related_name="secret_events",
+        related_name="secret_events", db_index=False,
     )
     agent_token = models.ForeignKey(
         "AgentToken", on_delete=models.SET_NULL, blank=True, null=True,
-        related_name="secret_events",
+        related_name="secret_events", db_index=False,
     )
     agent_workflow = models.ForeignKey(
         "AgentWorkflow", on_delete=models.SET_NULL, blank=True, null=True,
-        related_name="secret_events",
+        related_name="secret_events", db_index=False,
     )
     key = models.TextField()
     key_digest = models.TextField()

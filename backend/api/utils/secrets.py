@@ -562,6 +562,54 @@ def decrypt_secret_value(
     return value
 
 
+def reference_target_environments(value, environment):
+    """
+    The environment each reference in a plaintext value points at, found the
+    way decrypt_secret_value finds it for a secret stored in `environment`:
+    cross-app, cross-env (same app) and local references.
+
+    A reference whose app or environment cannot be told apart (no match, or
+    more than one) yields None.
+
+    Returns:
+        list[Environment | None]: One entry per cross-app or cross-env
+        reference, and `environment` once if the value has a local reference.
+    """
+    Environment = apps.get_model("api", "Environment")
+    App = apps.get_model("api", "App")
+
+    targets = []
+
+    for ref_app, ref_env, _ in CROSS_APP_ENV_PATTERN.findall(value):
+        try:
+            referenced_app = App.objects.get(
+                name__iexact=ref_app, organisation=environment.app.organisation
+            )
+            targets.append(
+                Environment.objects.get(name__iexact=ref_env, app=referenced_app)
+            )
+        except (
+            App.DoesNotExist,
+            App.MultipleObjectsReturned,
+            Environment.DoesNotExist,
+            Environment.MultipleObjectsReturned,
+        ):
+            targets.append(None)
+
+    for ref_env, _ in CROSS_ENV_PATTERN.findall(value):
+        try:
+            targets.append(
+                Environment.objects.get(name__iexact=ref_env, app=environment.app)
+            )
+        except (Environment.DoesNotExist, Environment.MultipleObjectsReturned):
+            targets.append(None)
+
+    if LOCAL_REF_PATTERN.search(value):
+        targets.append(environment)
+
+    return targets
+
+
 def get_referenced_environment_ids(source_env_id, name_ctx):
     """
     Returns the set of environment IDs that the secrets in source_env directly

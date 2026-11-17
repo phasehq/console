@@ -567,6 +567,228 @@ def test_overrides_are_refused_on_write_and_absent_on_read(lab):
     assert PersonalSecret.objects.count() == 1
 
 
+# --- Writing references -------------------------------------------------------
+#
+# Other readers of an environment (a sync, a member's run) resolve references
+# without checking the Agent's access, so an Agent may write a reference only
+# to an environment its Workflow can read.
+
+
+@pytest.fixture
+def writer(lab):
+    """The Workflow may write in Development and read Development and
+    Staging; Production and the billing app are out of its reach."""
+
+    lab.billing, [lab.billing_prod] = sse_app(lab, name="billing", environments=["Production"])
+    put_secret(lab.dev, "LOCAL", "local-value")
+    put_secret(lab.staging, "SHARED", "staging-value")
+    put_secret(lab.prod, "SHARED", "prod-value")
+    put_secret(lab.billing_prod, "TOKEN", "billing-value")
+    grant_app(lab, app_connection(lab, [lab.dev], policy=ALLOW_ALL))
+    grant_app(lab, app_connection(lab, [lab.staging]))
+    lab.client = token_client(lab)
+    lab.url = secrets_url(lab.app, "Development")
+    lab.existing = put_secret(lab.dev, "EXISTING", "before")
+    return lab
+
+
+def _write(lab, method, values):
+    if method == "post":
+        body = [{"key": f"NEW_{index}", "value": value} for index, value in enumerate(values)]
+    else:
+        existing = [lab.existing] + [
+            put_secret(lab.dev, f"OTHER_{index}", "before") for index in range(len(values) - 1)
+        ]
+        body = [
+            {"id": str(secret.id), "value": value}
+            for secret, value in zip(existing, values)
+        ]
+    return getattr(lab.client, method)(lab.url, {"secrets": body}, format="json")
+
+
+def _stored_values(environment):
+    """Values as stored, references left as written."""
+
+    from api.utils.crypto import decrypt_asymmetric
+    from api.utils.secrets import get_environment_keys
+
+    public_key, private_key = get_environment_keys(environment.id)
+    return sorted(
+        decrypt_asymmetric(secret.value, private_key, public_key)
+        for secret in Secret.objects.filter(environment=environment, deleted_at__isnull=True)
+    )
+
+
+ALLOWED_REFERENCES = [
+    "${LOCAL}",
+    "${/LOCAL}",
+    "prefix-${LOCAL}-suffix",
+    "${Development.LOCAL}",
+    "${Staging.SHARED}",
+    "${staging.SHARED}",
+    "${Staging./folder/SHARED}",
+    "${orders-service::Staging.SHARED}",
+    "${ORDERS-SERVICE::development.LOCAL}",
+    "${LOCAL} and ${Staging.SHARED}",
+]
+REFUSED_REFERENCES = [
+    "${Production.SHARED}",
+    "${production.SHARED}",
+    "${Production./folder/SHARED}",
+    "${orders-service::Production.SHARED}",
+    "${billing::Production.TOKEN}",
+    "${Staging.SHARED}-${Production.SHARED}",
+    "${LOCAL}${billing::Production.TOKEN}",
+    # Targets that do not exist are refused the same way.
+    "${Nowhere.SHARED}",
+    "${ghost-app::Production.SHARED}",
+    "${billing::Nowhere.TOKEN}",
+]
+# Text that is not a reference to the resolver stays plain text.
+PLAIN_TEXT = [
+    "${{ RAILWAY_VALUE }}",
+    "${{Production.SHARED}}",
+    "cost: ${",
+    "${}",
+    "$Production.SHARED",
+    "{Production.SHARED}",
+    "${Production{.SHARED}",
+]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("method", ["post", "put"])
+@pytest.mark.parametrize("value", ALLOWED_REFERENCES + PLAIN_TEXT)
+def test_an_agent_may_write_references_it_can_read_and_plain_text(writer, method, value):
+    response = _write(writer, method, [value])
+
+    assert response.status_code == 200, response.content
+    assert value in _stored_values(writer.dev)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("method", ["post", "put"])
+@pytest.mark.parametrize("value", REFUSED_REFERENCES)
+def test_an_agent_may_not_write_a_reference_it_cannot_read(writer, method, value):
+    before = _stored_values(writer.dev)
+
+    response = _write(writer, method, [value])
+
+    body = refusal(response, 403, "agent_reference_not_readable")
+    assert set(body) == {"error", "code"}
+    assert body["error"] == (
+        "A value refers to a secret in an environment this Agent cannot read."
+    )
+    assert _stored_values(writer.dev) == before
+    [event] = [e for e in _events(writer) if e.reason == "agent_reference_not_readable"]
+    assert event.proxy_decision == AgentEvent.BLOCK
+    assert event.outcome == "denied"
+    assert event.detail["class"] == ("create" if method == "post" else "update")
+    recorded = json.dumps([event.detail, event.path, event.reason])
+    assert "SHARED" not in recorded and "TOKEN" not in recorded
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("method", ["post", "put"])
+def test_one_unreadable_reference_refuses_the_whole_write(writer, method):
+    count = Secret.objects.filter(environment=writer.dev).count()
+    values = ["plain", "${Staging.SHARED}", "${Production.SHARED}", "${LOCAL}"]
+
+    response = _write(writer, method, values)
+
+    refusal(response, 403, "agent_reference_not_readable")
+    stored = _stored_values(writer.dev)
+    assert not set(values) & set(stored)
+    if method == "post":
+        assert len(stored) == count
+    else:
+        assert stored.count("before") == len(values)
+    assert not SecretEvent.objects.filter(environment=writer.dev).exists()
+
+
+@pytest.mark.django_db
+def test_a_reference_becomes_writable_once_the_workflow_can_read_its_target(writer):
+    refusal(_write(writer, "post", ["${billing::Production.TOKEN}"]), 403, "agent_reference_not_readable")
+
+    grant_app(writer, app_connection(writer, [writer.billing_prod], app=writer.billing))
+
+    assert _write(writer, "post", ["${billing::Production.TOKEN}"]).status_code == 200
+
+
+@pytest.mark.django_db
+def test_a_reference_to_an_environment_whose_reads_ask_is_refused(writer):
+    asks_reads = {
+        "version": 1,
+        "default": "allow",
+        "rules": [{"class": "read", "effect": "ask"}],
+    }
+    grant_app(writer, app_connection(writer, [writer.prod], policy=asks_reads))
+
+    refusal(_write(writer, "post", ["${Production.SHARED}"]), 403, "agent_reference_not_readable")
+
+
+@pytest.mark.django_db
+def test_a_local_reference_needs_read_access_to_the_environment_itself(lab):
+    write_only = {
+        "version": 1,
+        "default": "allow",
+        "rules": [{"class": "read", "effect": "block"}],
+    }
+    put_secret(lab.dev, "LOCAL", "local-value")
+    grant_app(lab, app_connection(lab, [lab.dev], policy=write_only))
+    url = secrets_url(lab.app, "Development")
+    client = token_client(lab)
+
+    refusal(
+        client.post(url, {"secrets": [{"key": "K", "value": "${LOCAL}"}]}, format="json"),
+        403,
+        "agent_reference_not_readable",
+    )
+    assert client.post(url, {"secrets": [{"key": "K", "value": "plain"}]}, format="json").status_code == 200
+
+
+@pytest.mark.django_db
+def test_an_update_without_a_value_is_not_checked_for_references(writer):
+    response = writer.client.put(
+        writer.url,
+        {"secrets": [{"id": str(writer.existing.id), "comment": "${Production.SHARED}"}]},
+        format="json",
+    )
+
+    assert response.status_code == 200, response.content
+
+
+@pytest.mark.django_db
+def test_members_still_write_any_reference(lab):
+    from rest_framework.test import APIClient
+
+    client = APIClient()
+    client.force_authenticate(
+        user=lab.approver.user,
+        token={
+            "auth_type": "User",
+            "org_member": lab.approver,
+            "service_account": None,
+            "service_account_token": None,
+            "agent": None,
+            "agent_token": None,
+            "workflow": None,
+            "organisation": lab.organisation,
+            "environment": lab.dev,
+            "app": lab.app,
+        },
+    )
+
+    response = client.post(
+        secrets_url(lab.app, "Development"),
+        {"secrets": [{"key": "K", "value": "${Production.SHARED}"}]},
+        format="json",
+    )
+
+    assert response.status_code == 200, response.content
+    assert _stored_values(lab.dev) == ["${Production.SHARED}"]
+
+
 @pytest.mark.django_db
 def test_a_write_never_reads_back_what_the_workflow_may_not_read(lab):
     policy = {

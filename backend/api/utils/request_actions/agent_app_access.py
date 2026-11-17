@@ -3,8 +3,9 @@
 The Agent names an app and some of its environments and asks to read, or to
 read and write. A member approving it may narrow the environments, change the
 access level and set how long it lasts. Approval grants the Workflow an app
-Connection covering exactly those environments, reusing one the organisation
-already has.
+Connection covering exactly those environments with the default rules,
+reusing one the organisation already has only when its rules are still the
+default, so the Agent gets what the reviewer saw.
 """
 
 from datetime import timedelta
@@ -24,16 +25,13 @@ from api.utils.agent_app_access import (
     DEFAULT_POLICY,
     WRITE_CLASSES,
     AppAccessError,
-    blocked_classes,
     connection_name,
-    connection_environments,
-    describe_classes,
-    matching_connection,
     released_classes,
     require_member_can_release,
     require_sse,
     resolve_app,
     resolve_environments,
+    reusable_connection,
     set_connection_environments,
 )
 from api.utils.agent_config import APP_SERVICE_TYPE
@@ -169,22 +167,11 @@ class AppAccess(ActionHandler):
         app, environments = self._target(request, action)
         app_name = app.name if app else "an app"
         names = ", ".join(environment.name for environment in environments)
-        existing = None
-        if app is not None and environments:
-            wanted = {str(environment.id) for environment in environments}
-            for connection in AgentConnection.objects.filter(
-                organisation_id=request.organisation_id,
-                service_type=APP_SERVICE_TYPE,
-                app=app,
-                deleted_at__isnull=True,
-                state=AgentConnection.ACTIVE,
-            ).order_by("created_at", "id"):
-                if {
-                    str(environment.id)
-                    for environment in connection_environments(connection)
-                } == wanted:
-                    existing = connection
-                    break
+        existing = (
+            reusable_connection(request.organisation_id, app, environments)
+            if app is not None and environments
+            else None
+        )
         return {
             "type": self.type,
             "title": fit_title(
@@ -265,21 +252,13 @@ class AppAccess(ActionHandler):
         app, environments = self._target(request, action)
         if app is None or len(environments) != len(action["environmentIds"]):
             raise ActionError("The app or its environments changed; start a new request")
-        connection = matching_connection(request.organisation_id, app, environments)
-        policy = connection.policy if connection else DEFAULT_POLICY
-        wanted = ACCESS_LEVELS[action["access"]]
-        blocked = blocked_classes(policy, wanted)
-        if blocked:
-            raise ActionError(
-                f"The access rules of '{connection.name}' block "
-                f"{describe_classes(blocked)} calls, and approving a request never "
-                "changes a block. A member has to change those rules first.",
-                code="access_policy_blocks_allow",
-            )
+        connection = reusable_connection(
+            request.organisation_id, app, environments, lock=True
+        )
         temporary = WRITE_CLASSES if writes else ()
         try:
             require_member_can_release(
-                member, app, environments, released_classes(policy, temporary)
+                member, app, environments, released_classes(DEFAULT_POLICY, temporary)
             )
         except AppAccessError as exc:
             raise _app_error(exc) from exc
