@@ -75,16 +75,18 @@ export default function AppLayout(props: {
         <div className="px-3 sm:px-4 lg:px-6 dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
       )}
       {app && (
-        <div className="flex shrink-0 items-baseline justify-between pb-3 sm:pb-4 px-3 sm:px-4 lg:px-6">
+        <div className="flex shrink-0 items-baseline justify-between gap-4 pb-3 sm:pb-4 px-3 sm:px-4 lg:px-6">
           <div className="flex min-w-0 items-baseline gap-3 group">
-            <h1 className="text-lg sm:text-xl font-bold">{app.name}</h1>
-            <div className="hidden opacity-0 group-hover:opacity-100 transition ease md:block">
+            <h1 className="max-w-full shrink-0 break-words text-lg sm:text-xl font-bold">
+              {app.name}
+            </h1>
+            <div className="hidden min-w-0 overflow-hidden opacity-0 group-hover:opacity-100 transition ease md:block">
               <CopyButton value={app.id} buttonVariant="ghost">
                 <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
               </CopyButton>
             </div>
           </div>
-          <div>
+          <div className="shrink-0">
             <ProgrammaticAccessMenu />
           </div>
         </div>

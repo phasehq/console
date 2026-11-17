@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from urllib.parse import quote as urlquote
 import logging.config
+from django.core.exceptions import ImproperlyConfigured
 from backend.utils.secrets import get_secret
 from ee.licensing.verifier import check_license
 
@@ -59,13 +60,28 @@ DEBUG = True if os.getenv("DEBUG") == "True" else False
 
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", []).split(",")
 
-SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+# Sessions are stored server-side so that logging out ends them: the cookie
+# only holds the session key, and logout deletes the session record.
+SESSION_ENGINE = "django.contrib.sessions.backends.db"
 
 SESSION_COOKIE_SECURE = True
 
 SESSION_COOKIE_DOMAIN = os.getenv("SESSION_COOKIE_DOMAIN")
 
-SESSION_COOKIE_AGE = 604800  # 1 week, in seconds
+
+def session_lifetime_seconds(hours):
+    """How long a session lasts after sign-in, in seconds: 24 hours, unless
+    SESSION_LIFETIME_HOURS is set to another whole number of hours."""
+    hours = (hours or "").strip() or "24"
+    if not hours.isdecimal() or int(hours) < 1:
+        raise ImproperlyConfigured(
+            f"SESSION_LIFETIME_HOURS={hours!r} is not valid. "
+            "Use a whole number of hours, 1 or more."
+        )
+    return int(hours) * 60 * 60
+
+
+SESSION_COOKIE_AGE = session_lifetime_seconds(os.getenv("SESSION_LIFETIME_HOURS"))
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -286,6 +302,7 @@ REST_FRAMEWORK = {
 GRAPHENE = {
     "SCHEMA": "backend.schema.schema",
     "MIDDLEWARE": [
+        "backend.graphene.middleware.OrgDeletionLockMiddleware",
         "backend.graphene.middleware.OrgSSOEnforcementMiddleware",
         "backend.graphene.middleware.IPWhitelistMiddleware",
     ],
@@ -379,6 +396,10 @@ RQ_SSL_OPTIONS = (
     else None
 )
 
+# default: short jobs triggered by users (syncs, emails).
+# scheduled-jobs: jobs with deadlines (lease expiry, rotations, sweeps).
+# log-streams: log shipping.
+# maintenance: slow or database-heavy work nothing waits on (org purges).
 RQ_QUEUES = {
     "default": {
         "HOST": REDIS_HOST,
@@ -399,6 +420,15 @@ RQ_QUEUES = {
         "DB": 0,
     },
     "log-streams": {
+        "HOST": REDIS_HOST,
+        "PORT": REDIS_PORT,
+        "USERNAME": REDIS_USER,
+        "PASSWORD": REDIS_PASSWORD,
+        "SSL": REDIS_SSL,
+        "SSL_OPTIONS": RQ_SSL_OPTIONS,
+        "DB": 0,
+    },
+    "maintenance": {
         "HOST": REDIS_HOST,
         "PORT": REDIS_PORT,
         "USERNAME": REDIS_USER,

@@ -1,5 +1,6 @@
 from api.models import Organisation
 from api.utils.access.permissions import user_has_permission
+from api.utils.organisation_deletion import has_pending_invoices
 import graphene
 from graphene import ObjectType, String, Boolean, List, Int, Float
 import stripe
@@ -82,6 +83,14 @@ def resolve_stripe_checkout_details(self, info, stripe_session_id, organisation_
         raise GraphQLError("Organisation not found.")
     except stripe.error.StripeError as e:
         return None
+
+
+def resolve_organisation_has_pending_invoices(self, info, organisation_id):
+    """Whether unpaid invoices block deleting the organisation (Phase Cloud)."""
+    org = Organisation.objects.get(id=organisation_id)
+    if not user_has_permission(info.context.user, "read", "Billing", org):
+        raise GraphQLError("You don't have permission to view billing for this organisation")
+    return has_pending_invoices(org)
 
 
 def resolve_stripe_subscription_details(self, info, organisation_id):

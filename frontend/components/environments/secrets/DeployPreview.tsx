@@ -207,7 +207,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
         {(removedTags?.length > 0 || addedTags?.length > 0) && (
           <div className="flex flex-row space-x-1 items-center text-sm">
             <p className="text-zinc-500 mr-1 font-mono">TAGS:</p>
-            <div className="inline-flex gap-2">
+            <div className="inline-flex flex-wrap gap-2">
               {removedTags?.map((tag: SecretTagType) => (
                 <div
                   key={tag.id}
@@ -247,7 +247,9 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
           </Alert>
         }
       >
-        <div className="flex flex-col space-y-2 max-h-[85vh] overflow-auto ph-no-capture">
+        {/* overflow-wrap:anywhere lets long unbroken keys and comments wrap inside the
+            flex rows (break-words alone doesn't let flex items shrink) */}
+        <div className="flex flex-col space-y-2 max-h-[85vh] overflow-auto ph-no-capture [overflow-wrap:anywhere]">
           <h1 className="text-zinc-500 mb-5">The following changes are pending deployment</h1>
           {Object.entries(getChanges()).map(([id, change]) => (
             <div key={id} className="flex flex-row items-center">

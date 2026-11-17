@@ -9,6 +9,7 @@ import {
   userHasGlobalAccess,
   userIsAdmin,
   arePoliciesEqual,
+  describeAccessBeyondCaller,
   togglePolicyResourcePermission,
   PermissionPolicy,
 } from '@/utils/access/permissions'
@@ -292,3 +293,32 @@ describe('arePoliciesEqual', () => {
     expect(arePoliciesEqual(p1, p2)).toBe(true)
   })
 })
+
+describe('describeAccessBeyondCaller', () => {
+  test('names permissions alone', () => {
+    expect(describeAccessBeyondCaller(['permissions'])).toBe('permissions')
+  })
+
+  test('names environment access alone', () => {
+    expect(describeAccessBeyondCaller(['environments'])).toBe('environment access')
+  })
+
+  test('names both', () => {
+    expect(describeAccessBeyondCaller(['permissions', 'environments'])).toBe(
+      'permissions and environment access'
+    )
+  })
+
+  test('is empty when nothing is beyond the user', () => {
+    expect(describeAccessBeyondCaller([])).toBe('')
+    expect(describeAccessBeyondCaller(null)).toBe('')
+    expect(describeAccessBeyondCaller(undefined)).toBe('')
+  })
+
+  test('ignores values it does not know', () => {
+    expect(describeAccessBeyondCaller(['something-new', 'environments'])).toBe(
+      'environment access'
+    )
+  })
+})
+

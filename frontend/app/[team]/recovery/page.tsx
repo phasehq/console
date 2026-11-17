@@ -142,7 +142,7 @@ export default function Recovery(props: { params: Promise<{ team: string }> }) {
       })
     }
 
-    setKeyring(accountKeyRing)
+    setKeyring(accountKeyRing, org!.id)
 
     // Persist the deviceKey only when we just derived it. The cached-key
     // path reused an existing entry, so there's nothing new to store.

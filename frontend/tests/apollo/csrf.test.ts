@@ -160,6 +160,23 @@ describe('CSRF request handling', () => {
     expect(window.location.href).toBe('/login')
   })
 
+  test('logout can land on a specific login URL', async () => {
+    await clientModule.handleSignout('/login?notice=account_deleted')
+    expect(axiosMock.post).toHaveBeenCalledTimes(1)
+    expect(window.location.href).toBe('/login?notice=account_deleted')
+  })
+
+  test.each(['specific first', 'default first'])(
+    'a concurrent default logout keeps the specific redirect (%s)',
+    async (order) => {
+      const specific = () => clientModule.handleSignout('/login?notice=account_deleted')
+      const fallback = () => clientModule.handleSignout()
+      const calls = order === 'specific first' ? [specific, fallback] : [fallback, specific]
+      await Promise.all(calls.map((call) => call()))
+      expect(window.location.href).toBe('/login?notice=account_deleted')
+    }
+  )
+
   test.each([
     { status: 403, data: { code: 'forbidden' } },
     { status: 400, data: csrfError },

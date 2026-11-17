@@ -44,6 +44,7 @@ class SCIMTokenAuthentication(authentication.BaseAuthentication):
             scim_token = SCIMToken.objects.select_related("organisation").get(
                 token_hash=token_hash,
                 deleted_at__isnull=True,
+                organisation__deleted_at__isnull=True,
             )
         except SCIMToken.DoesNotExist:
             raise exceptions.AuthenticationFailed("Invalid SCIM token")

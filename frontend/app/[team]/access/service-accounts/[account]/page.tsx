@@ -5,6 +5,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { GetServiceAccountDetail } from '@/graphql/queries/service-accounts/getServiceAccountDetail.gql'
 import { UpdateServiceAccountOp } from '@/graphql/mutations/service-accounts/updateServiceAccount.gql'
 import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
+import { GetApps } from '@/graphql/queries/getApps.gql'
 import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissions'
 import { useMutation, useQuery } from '@apollo/client'
 import Link from 'next/link'
@@ -22,7 +23,7 @@ import {
 import { FaServer, FaArrowDownUpLock } from 'react-icons/fa6'
 import { DeleteServiceAccountDialog } from '../_components/DeleteServiceAccountDialog'
 import { AddAppButton } from './_components/AddAppsToServiceAccountsButton'
-import { ServiceAccountType, TeamType } from '@/apollo/graphql'
+import { AppType, ServiceAccountType, TeamType } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ServiceAccountRoleSelector } from '../_components/RoleSelector'
@@ -69,6 +70,27 @@ export default function ServiceAccount(props: {
     variables: { organisationId: organisation?.id },
     skip: !organisation || !userCanReadTeams,
   })
+
+  // The account can have access to Apps that the user does not. For those,
+  // the list shows the name and Environments only: no App ID, and "Manage"
+  // (a link to the App's own access page) is disabled.
+  const userCanReadApps = organisation
+    ? userHasPermission(organisation.role!.permissions, 'Apps', 'read')
+    : false
+
+  const { data: appsData } = useQuery(GetApps, {
+    variables: { organisationId: organisation?.id },
+    skip: !organisation || !userCanReadApps,
+  })
+
+  // null until the user's Apps are known
+  const userAppIds = useMemo<Set<string> | null>(() => {
+    if (!userCanReadApps) return new Set()
+    if (!appsData?.apps) return null
+    return new Set(appsData.apps.map((app: AppType) => app.id))
+  }, [appsData, userCanReadApps])
+
+  const userHasAppAccess = (appId: string) => userAppIds === null || userAppIds.has(appId)
 
   const [updateAccount] = useMutation(UpdateServiceAccountOp)
 
@@ -178,10 +200,10 @@ export default function ServiceAccount(props: {
         </Link>
       </div>
       <div className="w-full space-y-6 py-4 text-zinc-900 dark:text-zinc-100 divide-y divide-neutral-500/40">
-        <div className="flex items-end justify-between">
-          <div className="text-base font-medium flex items-center gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="text-base font-medium flex min-w-0 items-center gap-2">
             <Avatar serviceAccount={account} size="xl" />
-            <div>
+            <div className="min-w-0">
               <h3 className="relative group w-full max-w-md">
                 <input
                   className="custom bg-transparent hover:bg-neutral-500/10 rounded-lg transition ease w-full text-base font-medium"
@@ -374,21 +396,28 @@ export default function ServiceAccount(props: {
                     className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center py-1.5 px-2 group"
                   >
                     {/* App Name and ID */}
-                    <div className="space-y-0.5">
+                    <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-2">
-                        <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                        <div
+                          title={appMembership?.name}
+                          className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate"
+                        >
                           {appMembership?.name}
                         </div>
                         <SseLabel sseEnabled={Boolean(appMembership?.sseEnabled)} />
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-neutral-500 group/id">
-                        <span className="text-neutral-500 text-2xs flex items-center">App ID:</span>
-                        <CopyButton value={appMembership.id} buttonVariant="ghost">
-                          <span className="text-neutral-500 text-2xs font-mono">
-                            {appMembership.id}
+                      {userHasAppAccess(appMembership.id) && (
+                        <div className="flex items-center gap-2 text-sm text-neutral-500 group/id">
+                          <span className="text-neutral-500 text-2xs flex items-center">
+                            App ID:
                           </span>
-                        </CopyButton>
-                      </div>
+                          <CopyButton value={appMembership.id} buttonVariant="ghost">
+                            <span className="text-neutral-500 text-2xs font-mono">
+                              {appMembership.id}
+                            </span>
+                          </CopyButton>
+                        </div>
+                      )}
                     </div>
 
                     {/* Environments */}
@@ -404,14 +433,25 @@ export default function ServiceAccount(props: {
                     {/* Manage Button */}
                     {!isTeamOwned && (
                       <div className="flex justify-end">
-                        <Link
-                          className="opacity-0 group-hover:opacity-100 transition ease"
-                          href={`/${params.team}/apps/${appMembership?.id}/access/service-accounts?manageAccount=${account.id}`}
-                        >
-                          <Button variant="secondary" icon={FaCog}>
-                            Manage
-                          </Button>
-                        </Link>
+                        {userHasAppAccess(appMembership.id) ? (
+                          <Link
+                            className="opacity-0 group-hover:opacity-100 transition ease"
+                            href={`/${params.team}/apps/${appMembership?.id}/access/service-accounts?manageAccount=${account.id}`}
+                          >
+                            <Button variant="secondary" icon={FaCog}>
+                              Manage
+                            </Button>
+                          </Link>
+                        ) : (
+                          <div
+                            className="opacity-0 group-hover:opacity-100 transition ease cursor-not-allowed"
+                            title="You don't have access to this App"
+                          >
+                            <Button variant="secondary" icon={FaCog} disabled>
+                              Manage
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -435,7 +475,7 @@ export default function ServiceAccount(props: {
                       <AddAppButton
                         serviceAccountId={params.account}
                         appMemberships={account.appMemberships ?? []}
-                        align={'right'}
+                        align="center"
                       />
                     )}
                   </EmptyState>

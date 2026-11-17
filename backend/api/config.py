@@ -9,10 +9,17 @@ class APIConfig(AppConfig):
 
     def ready(self):
         import api.signals  # noqa: F401
+        import certifi
+        import stripe
+
+        # stripe-python ships its own CA bundle; use certifi so CA removals apply.
+        stripe.ca_bundle_path = certifi.where()
 
         # Connect the post_migrate signal to a custom handler
         post_migrate.connect(self.validate_licenses_post_migrate, sender=self)
         post_migrate.connect(self.init_log_streams_post_migrate, sender=self)
+        post_migrate.connect(self.init_org_deletion_post_migrate, sender=self)
+        post_migrate.connect(self.init_session_purge_post_migrate, sender=self)
 
     def validate_licenses_post_migrate(self, **kwargs):
 
@@ -37,3 +44,21 @@ class APIConfig(AppConfig):
             init_log_stream_sweeper()
         except Exception:
             logging.exception("Failed to initialise log stream sweeper")
+
+    def init_org_deletion_post_migrate(self, **kwargs):
+        try:
+            from api.tasks.organisation_deletion import (
+                init_organisation_deletion_sweeper,
+            )
+
+            init_organisation_deletion_sweeper()
+        except Exception:
+            logging.exception("Failed to initialise organisation deletion sweeper")
+
+    def init_session_purge_post_migrate(self, **kwargs):
+        try:
+            from api.tasks.sessions import init_expired_session_purge
+
+            init_expired_session_purge()
+        except Exception:
+            logging.exception("Failed to initialise expired session purge")

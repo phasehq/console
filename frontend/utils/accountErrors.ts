@@ -39,6 +39,17 @@ export const accountErrorMessage = (code: string): string =>
 // (they are curated human-readable messages from the backend, not codes).
 export const knownErrorMessage = (code: string): string | null => ERROR_MESSAGES[code] ?? null
 
+// Notices for `/login?notice=...` redirects. Only known codes are shown, so a
+// crafted link can't put arbitrary text on the login page.
+const LOGIN_NOTICES: Record<string, string> = {
+  account_deleted: 'Your account has been permanently deleted.',
+}
+
+export const loginNotice = (code: string): string | null => LOGIN_NOTICES[code] ?? null
+
+// A toast wouldn't survive the full-page sign-out, so the login page says it.
+export const ACCOUNT_DELETED_LOGIN_URL = '/login?notice=account_deleted'
+
 // The account page bounces stale sessions to /login to re-authenticate
 // before a sensitive action; the Apollo errorLink owns the redirect on
 // REAUTH_REQUIRED. The callbackUrl carries the interrupted flow's state as

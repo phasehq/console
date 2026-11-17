@@ -164,6 +164,35 @@ class TestAwsIamAuth(unittest.TestCase):
     @patch("api.views.identities.aws.iam.resolve_service_account")
     @patch("django.utils.timezone.now")
     @patch("requests.request")
+    def test_sts_redirect_is_not_followed(self, mock_requests, mock_now, mock_resolve):
+        """A redirect from the configured endpoint is a failed validation, so the
+        signed request can't be steered to an address the endpoint check refused."""
+        mock_identity = MagicMock()
+        mock_identity.config = {
+            "signatureTtlSeconds": 300,
+            "stsEndpoint": "https://sts.ap-south-1.amazonaws.com",
+        }
+
+        mock_sa = MagicMock()
+        mock_sa.server_wrapped_keyring = "keyring"
+        mock_sa.identities.filter.return_value = [mock_identity]
+        mock_resolve.return_value = mock_sa
+
+        mock_now.return_value = datetime(2025, 8, 27, 8, 7, 30, tzinfo=timezone.utc)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 302
+        mock_requests.return_value = mock_resp
+
+        response = aws_iam_auth(self.make_request(self.valid_payload))
+
+        self.assertIs(mock_requests.call_args.kwargs["allow_redirects"], False)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(json.loads(response.content)["status"], 302)
+
+    @patch("api.views.identities.aws.iam.resolve_service_account")
+    @patch("django.utils.timezone.now")
+    @patch("requests.request")
     @patch("api.views.identities.aws.iam.mint_service_account_token")
     def test_valid_authentication_success(
         self, mock_mint, mock_requests, mock_now, mock_resolve

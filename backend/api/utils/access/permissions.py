@@ -266,6 +266,22 @@ def user_has_global_access(user, organisation):
     return role_has_global_access(member.role)
 
 
+def check_caller_can_grant_environments(user, organisation, environments):
+    """Granting a principal an environment provisions an EnvironmentKey that
+    then passes every per-environment access check, so a non-global caller may
+    only grant environments they hold themselves. Mirrors the REST member and
+    service-account access endpoints. Raises GraphQLError on denial."""
+    from graphql import GraphQLError
+
+    if user_has_global_access(user, organisation):
+        return
+    for environment in environments:
+        if not user_can_access_environment(user.userId, environment.id):
+            raise GraphQLError(
+                "You don't have access to one or more of the selected environments"
+            )
+
+
 def get_role_effective_policy(role):
     """Resolve a role's effective policy as (org permissions, app permissions,
     global access). Default roles resolve from the managed template — their DB
@@ -496,3 +512,124 @@ def _check_sa_permission(user, service_account, action, resource):
         raise GraphQLError(
             f"You don't have the permissions required to {action} {resource}"
         )
+
+
+BEYOND_PERMISSIONS = "permissions"
+BEYOND_ENVIRONMENTS = "environments"
+
+
+def service_account_access_beyond(
+    service_account, actor, actor_is_service_account=False
+):
+    """What `service_account` holds that `actor` does not, as a list drawn
+    from BEYOND_PERMISSIONS (a role the account acts with is outside the
+    actor's grant ceiling) and BEYOND_ENVIRONMENTS (the account can access an
+    environment the actor cannot). An empty list means the actor already holds
+    everything the account does.
+
+    A token carries the account's role and environment access, so this decides
+    who may create one, or attach an identity that can obtain one. It is the
+    role grant ceiling extended to environments. `actor` is an
+    OrganisationMember, or a ServiceAccount for token-authenticated callers.
+    Access to the account itself (permission, team scope) is checked
+    separately by the caller.
+    """
+    EnvironmentKey = apps.get_model("api", "EnvironmentKey")
+    Team = apps.get_model("api", "Team")
+
+    if role_has_global_access(actor.role):
+        return []
+    if actor_is_service_account and str(actor.id) == str(service_account.id):
+        return []
+
+    beyond = []
+
+    # Roles: the actor's own role plus, for a team-owned account, that team's
+    # override, as for role assignment.
+    actor_roles = [actor.role]
+    team = service_account.team
+    if team is not None:
+        override = (
+            team.service_account_role if actor_is_service_account else team.member_role
+        )
+        if override is not None:
+            actor_roles.append(override)
+
+    account_roles = [service_account.role] + [
+        team.service_account_role
+        for team in Team.objects.filter(
+            memberships__service_account=service_account,
+            deleted_at__isnull=True,
+            service_account_role__isnull=False,
+        ).distinct()
+    ]
+    if any(role_assignment_error(actor_roles, role) for role in account_roles):
+        beyond.append(BEYOND_PERMISSIONS)
+
+    account_env_ids = set(
+        EnvironmentKey.objects.filter(
+            service_account=service_account, deleted_at__isnull=True
+        ).values_list("environment_id", flat=True)
+    )
+    if account_env_ids:
+        holder = (
+            {"service_account": actor} if actor_is_service_account else {"user": actor}
+        )
+        actor_env_ids = set(
+            EnvironmentKey.objects.filter(
+                environment_id__in=account_env_ids, deleted_at__isnull=True, **holder
+            ).values_list("environment_id", flat=True)
+        )
+        if not account_env_ids <= actor_env_ids:
+            beyond.append(BEYOND_ENVIRONMENTS)
+
+    return beyond
+
+
+def sa_ceiling_message(beyond, action):
+    """Say what the account holds beyond the caller, e.g. "This Service
+    Account has permissions and environment access beyond your own, so you
+    can't create tokens for it"."""
+    labels = {
+        BEYOND_PERMISSIONS: "permissions",
+        BEYOND_ENVIRONMENTS: "environment access",
+    }
+    what = " and ".join(labels[item] for item in beyond)
+    return f"This Service Account has {what} beyond your own, so you can't {action}"
+
+
+def _check_sa_token_ceiling(user, service_account, action="create tokens for it"):
+    """Raise unless the caller already holds everything the service account
+    does (see `service_account_access_beyond`). Used wherever a token for the
+    account can be obtained."""
+    from graphql import GraphQLError
+
+    OrganisationMember = apps.get_model("api", "OrganisationMember")
+
+    try:
+        org_member = OrganisationMember.objects.get(
+            user=user, organisation=service_account.organisation, deleted_at=None
+        )
+    except OrganisationMember.DoesNotExist:
+        raise GraphQLError("You don't have access to this Service Account")
+
+    beyond = service_account_access_beyond(service_account, org_member)
+    if beyond:
+        raise GraphQLError(sa_ceiling_message(beyond, action))
+
+
+def _check_identity_change(user, identity):
+    """An identity's settings decide who can obtain tokens for the service
+    accounts it is attached to, so changing it needs what attaching it to each
+    of those accounts needs."""
+    from graphql import GraphQLError
+
+    for service_account in identity.service_accounts.filter(deleted_at=None):
+        try:
+            _check_sa_permission(user, service_account, "update", "ServiceAccounts")
+            _check_sa_token_ceiling(user, service_account)
+        except GraphQLError:
+            raise GraphQLError(
+                "You can't change this identity: it is attached to a Service "
+                "Account you can't create tokens for"
+            )

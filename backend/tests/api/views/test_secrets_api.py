@@ -5,8 +5,10 @@ import pytest
 from unittest.mock import Mock, MagicMock, patch
 from rest_framework.test import APIRequestFactory, force_authenticate
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 
 from api.models import Secret
+from api.serializers import PersonalSecretSerializer, SecretSerializer
 from api.views.secrets import E2EESecretsView, PublicSecretsView
 
 
@@ -264,6 +266,96 @@ class TestPublicSecretsPutRecordsOverridelessUpdates:
         self.env.save.assert_called_once()
         # ...and the update was audit-logged in a non-empty batch.
         assert secret_obj in mock_audit.call_args.args[0]
+
+
+class TestPublicSecretsPutRejectsBatchBeforeWriting:
+    """Regression: a bulk PUT must not commit earlier secrets before it
+    discovers a later one it has to reject. E2EESecretsView.put resolves every
+    secret first for exactly this reason; PublicSecretsView.put saved as it
+    iterated, and there is no transaction in this view, so an early return
+    committed rather than rolled back."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, settings):
+        self.view = PublicSecretsView.as_view()
+        self.org = _make_org()
+        self.app = _make_app(org=self.org, sse_enabled=True)
+        self.env = _make_env(app=self.app)
+
+    def _secret(self, sid, rotating=None, stype="secret"):
+        obj = Mock()
+        obj.id = sid
+        obj.rotating_secret_id = rotating
+        obj.type = stype
+        obj.version = 1
+        obj.key = "ph:v1:k"
+        obj.key_digest = "digest"
+        obj.comment = "ph:v1:c"
+        obj.value = "ph:v1:v"
+        obj.save = Mock()
+        return obj
+
+    @patch("api.views.secrets.log_secret_events_bulk")
+    @patch("api.views.secrets.encrypt_asymmetric", return_value="ph:v1:enc")
+    @patch("api.views.secrets.get_environment_keys", return_value=(b"pub", b"priv"))
+    @patch("api.views.secrets.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.secrets.IsIPAllowed.has_permission", return_value=True)
+    def test_rotating_secret_second_in_batch_writes_nothing(
+        self, _ip, _throttle, _keys, _enc, mock_audit
+    ):
+        first = self._secret(str(uuid.uuid4()))
+        rotating = self._secret(str(uuid.uuid4()), rotating=uuid.uuid4())
+
+        with patch(
+            "api.views.secrets.Secret.objects.get",
+            side_effect=[first, rotating],
+        ):
+            request = _build_put_request(
+                self.env,
+                {"secrets": [{"id": first.id, "value": "v2"}, {"id": rotating.id}]},
+            )
+            response = self.view(request)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Rotating secrets" in json.loads(response.content)["error"]
+        first.save.assert_not_called()
+        rotating.save.assert_not_called()
+        self.env.save.assert_not_called()
+        mock_audit.assert_not_called()
+
+    @patch("api.views.secrets.log_secret_events_bulk")
+    @patch("api.views.secrets.encrypt_asymmetric", return_value="ph:v1:enc")
+    @patch("api.views.secrets.get_environment_keys", return_value=(b"pub", b"priv"))
+    @patch("api.views.secrets.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.secrets.IsIPAllowed.has_permission", return_value=True)
+    def test_unseal_attempt_second_in_batch_writes_nothing(
+        self, _ip, _throttle, _keys, _enc, mock_audit
+    ):
+        first = self._secret(str(uuid.uuid4()))
+        sealed = self._secret(str(uuid.uuid4()), stype="sealed")
+
+        with patch(
+            "api.views.secrets.Secret.objects.get",
+            side_effect=[first, sealed],
+        ):
+            request = _build_put_request(
+                self.env,
+                {
+                    "secrets": [
+                        {"id": first.id, "value": "v2"},
+                        {"id": sealed.id, "type": "secret"},
+                    ]
+                },
+            )
+            response = self.view(request)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "cannot be unsealed" in json.loads(response.content)["error"]
+        first.save.assert_not_called()
+        sealed.save.assert_not_called()
+        self.env.save.assert_not_called()
+        mock_audit.assert_not_called()
+
 
 
 # ══════════════════════════════════════════════════════════════
@@ -537,3 +629,115 @@ class TestE2EESecretsDeleteEnvScoping:
         )
         self.env.save.assert_not_called()
         audit.assert_not_called()
+
+
+# ════════════════════════════════════════════════════════════════════
+# PublicSecretsView — responses are serialized as the request principal
+# ════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.parametrize("principal", ["User", "ServiceAccount"])
+class TestPublicSecretsResponseAccount:
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.env = _make_env()
+        self.view = PublicSecretsView.as_view()
+
+    def _run(self, method, principal, body=None):
+        user, auth = _make_legacy_auth(self.env, principal)
+        kwargs = {}
+        if body is not None:
+            kwargs = {"data": json.dumps(body), "content_type": "application/json"}
+        request = getattr(APIRequestFactory(), method)("/public/v1/secrets/", **kwargs)
+        force_authenticate(request, user=user, token=auth)
+
+        with patch(
+            "api.views.secrets.IsIPAllowed.has_permission", return_value=True
+        ), patch(
+            "api.views.secrets.PlanBasedRateThrottle.allow_request", return_value=True
+        ), patch(
+            "api.views.secrets.log_secret_events_bulk"
+        ), patch(
+            "api.views.secrets.get_environment_keys", return_value=(b"pub", b"priv")
+        ), patch(
+            "api.views.secrets.get_environment_crypto_context",
+            return_value=(b"salt", b"pub", b"priv"),
+        ), patch(
+            "api.views.secrets.encrypt_asymmetric", return_value="ph:v1:enc"
+        ), patch(
+            "api.views.secrets.SecretSerializer"
+        ) as serializer:
+            serializer.return_value.data = []
+            response = self.view(request)
+
+        account = (
+            auth["org_member"].user if principal == "User" else auth["service_account"]
+        )
+        return response, serializer, account
+
+    def test_get(self, principal):
+        with patch("api.views.secrets.Secret.objects.filter") as secret_filter:
+            secret_filter.return_value.prefetch_related.return_value = []
+            response, serializer, account = self._run("get", principal)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert serializer.call_args.kwargs["context"]["account"] is account
+
+    def test_post(self, principal):
+        secret_model = MagicMock(SECRET_TYPE_CHOICES=Secret.SECRET_TYPE_CHOICES)
+        with patch("api.views.secrets.Secret", secret_model), patch(
+            "api.views.secrets.compute_key_digest", return_value="digest"
+        ), patch("api.views.secrets.check_for_duplicates_blind", return_value=False):
+            response, serializer, account = self._run(
+                "post", principal, {"secrets": [{"key": "KEY", "value": "value"}]}
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        secret_model.return_value.save.assert_called_once()
+        assert serializer.call_args.kwargs["context"]["account"] is account
+
+    def test_put(self, principal):
+        secret_id = str(uuid.uuid4())
+        secret = _make_secret(secret_id, self.env)
+        with patch("api.views.secrets.Secret.objects.get", return_value=secret):
+            response, serializer, account = self._run(
+                "put", principal, {"secrets": [{"id": secret_id, "value": "value"}]}
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        secret.save.assert_called_once_with(trigger_sync=False)
+        assert serializer.call_args.kwargs["context"]["account"] is account
+
+
+# ════════════════════════════════════════════════════════════════════
+# Secret serializers — SSE values are resolved as the context account
+# ════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.parametrize(
+    "serializer_class", [SecretSerializer, PersonalSecretSerializer]
+)
+class TestSecretSerializerAccount:
+    def test_sse_value_requires_account(self, serializer_class):
+        with patch("api.serializers.decrypt_secret_value") as decrypt:
+            with pytest.raises(PermissionDenied):
+                serializer_class(context={"sse": True}).get_value(MagicMock())
+        decrypt.assert_not_called()
+
+    def test_sse_value_is_resolved_as_account(self, serializer_class):
+        account = Mock()
+        with patch(
+            "api.serializers.decrypt_secret_value", return_value="value"
+        ) as decrypt:
+            value = serializer_class(
+                context={"sse": True, "account": account}
+            ).get_value(MagicMock())
+
+        assert value == "value"
+        assert decrypt.call_args.kwargs["account"] is account
+
+    def test_non_sse_value_is_returned_as_stored(self, serializer_class):
+        obj = MagicMock(value="ph:v1:value")
+        with patch("api.serializers.decrypt_secret_value") as decrypt:
+            assert serializer_class(context={}).get_value(obj) == "ph:v1:value"
+        decrypt.assert_not_called()

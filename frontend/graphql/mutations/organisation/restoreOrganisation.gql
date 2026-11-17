@@ -1,0 +1,9 @@
+mutation RestoreOrganisationOp($organisationId: ID!) {
+  restoreOrganisation(organisationId: $organisationId) {
+    organisation {
+      id
+      deletedAt
+      deletionScheduledFor
+    }
+  }
+}

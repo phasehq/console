@@ -69,7 +69,7 @@ export const AddAppToMemberButton = (props: {
         afterEnter={() => searchInputRef.current?.focus()}
         afterLeave={() => setSearchQuery('')}
       >
-        <Menu.Items className="absolute z-10 right-0 origin-top-right mt-2 flex flex-col w-min divide-y divide-neutral-500/40 p-px rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+        <Menu.Items className="absolute z-10 right-0 origin-top-right mt-2 flex flex-col w-max max-w-[min(36rem,calc(100vw_-_2rem))] divide-y divide-neutral-500/40 p-px rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
           <div>
             <div className="relative flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md px-2 w-full max-w-sm">
               <div className="">
@@ -117,9 +117,12 @@ export const AddAppToMemberButton = (props: {
                       )}
                       title={`Manage ${member.fullName || member.email}'s access for ${app.name}`}
                     >
-                      <div className="text-sm whitespace-nowrap">{app.name}</div>
+                      <div className="text-sm min-w-0 break-words">{app.name}</div>
                       <FaArrowRight
-                        className={clsx(active ? 'text-emerald-500' : 'text-neutral-500')}
+                        className={clsx(
+                          'shrink-0',
+                          active ? 'text-emerald-500' : 'text-neutral-500'
+                        )}
                       />
                     </Link>
                   )}

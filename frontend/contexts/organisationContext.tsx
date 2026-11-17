@@ -56,9 +56,21 @@ export const OrganisationProvider: React.FC<OrganisationProviderProps> = ({ chil
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session])
 
+  // The org list is polled. Drop the active org once it is gone (purged, or the user was
+  // removed) or pending deletion, so nothing keeps showing it.
+  useEffect(() => {
+    if (!organisation || !orgsData) return
+    const current = orgsData.organisations.find(
+      (org: OrganisationType) => org.id === organisation.id
+    )
+    if (!current || current.deletedAt) setOrganisation(null)
+  }, [organisation, orgsData])
+
   useEffect(() => {
     if (organisation === null && orgsData) {
-      if (orgsData.organisations.length === 1) setOrganisation(orgsData.organisations[0])
+      // An org pending deletion is locked, so it is never the active org.
+      const [onlyOrg] = orgsData.organisations
+      if (orgsData.organisations.length === 1 && !onlyOrg.deletedAt) setOrganisation(onlyOrg)
 
       orgsData.organisations.forEach((org: OrganisationType) => {
         // This exists to grandfather legacy accounts that relied exclusively on localstorage for encrypted keyrings to the new spec

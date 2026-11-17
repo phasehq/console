@@ -110,6 +110,91 @@ def _resolve_via_model(model_name: str, id_value) -> str | None:
     return str(org_id) if org_id else None
 
 
+@lru_cache(maxsize=None)
+def _non_null_path_to_organisation(model_name: str):
+    """Like `_path_to_organisation`, through non-null FKs only, so a NULL can't
+    cut it short. `_path_to_organisation` takes the shortest path, which can
+    cross a nullable FK (e.g. a rotating secret's root credentials)."""
+    try:
+        Model = apps.get_model("api", model_name)
+    except LookupError:
+        return None
+    Organisation = apps.get_model("api", "Organisation")
+
+    if Model is Organisation:
+        return "id"
+
+    queue = deque([(Model, [])])
+    visited = {Model}
+    while queue:
+        cls, path = queue.popleft()
+        for field in cls._meta.get_fields():
+            if not (field.is_relation and field.many_to_one and not field.auto_created):
+                continue
+            if field.null or field.related_model is None:
+                continue
+            related = field.related_model
+            new_path = path + [field.name]
+            if related is Organisation:
+                return "__".join(new_path + ["id"])
+            if related not in visited:
+                visited.add(related)
+                queue.append((related, new_path))
+    return None
+
+
+def model_for_kwarg(kwarg_name: str):
+    """The model a `<model>_id` kwarg names, or None."""
+    if not kwarg_name.endswith("_id") or kwarg_name in AMBIGUOUS_KWARGS:
+        return None
+    if kwarg_name in ("org_id", "organisation_id"):
+        return None
+    return KWARG_MODEL_ALIASES.get(kwarg_name) or _snake_to_pascal(kwarg_name[:-3])
+
+
+def _orgs_by_pk(model_name: str, id_values) -> dict:
+    """{str(pk): org ID} for the rows that exist, through non-null FKs where
+    the model has such a path."""
+    path = _non_null_path_to_organisation(model_name)
+    path = path or _path_to_organisation(model_name)
+    if not path:
+        return {}
+
+    Model = apps.get_model("api", model_name)
+    try:
+        rows = Model.objects.filter(pk__in=id_values).values_list("pk", path)
+        return {str(pk): str(org_id) for pk, org_id in rows if org_id}
+    except Exception:
+        pass
+
+    # One malformed ID fails the whole query; look each one up alone.
+    found = {}
+    for id_value in id_values:
+        try:
+            rows = Model.objects.filter(pk=id_value).values_list(path, flat=True)
+            org_id = rows.first()
+        except Exception:
+            continue
+        if org_id:
+            found[str(id_value)] = str(org_id)
+    return found
+
+
+def resolve_org_ids_via_model(model_name: str, id_values, request_cache: dict) -> set:
+    """The orgs of many `model_name` rows, in one query for the IDs not in the
+    request cache yet. Unknown IDs are skipped."""
+    l1_kind = ("__org_of__", model_name)
+    missing = [v for v in id_values if (l1_kind, v) not in request_cache]
+    if missing:
+        found = _orgs_by_pk(model_name, missing)
+        for id_value in missing:
+            request_cache[(l1_kind, id_value)] = found.get(str(id_value))
+
+    org_ids = {request_cache[(l1_kind, id_value)] for id_value in id_values}
+    org_ids.discard(None)
+    return org_ids
+
+
 def resolve_via_model(model_name: str, id_value, request_cache: dict):
     """Like `resolve_org_id` but model is known by the caller (e.g. the
     middleware's bare-`id` dispatch). Same three-tier cache."""
