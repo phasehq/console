@@ -35,6 +35,7 @@ from api.utils.agent_app_access import (
     set_connection_environments,
 )
 from api.utils.agent_config import APP_SERVICE_TYPE
+from api.utils.asset_visibility import WITHHELD_APP, AppView
 from api.utils.agent_config.access_policy import full_policy, live_temporary_allows
 
 from . import ActionError, ActionHandler, AppliedAction, fit_title, register
@@ -163,20 +164,30 @@ class AppAccess(ActionHandler):
         ) if app else []
         return app, environments
 
-    def describe(self, request, action, member):
+    def asset(self, request, action):
+        return self._target(request, action)
+
+    def describe(self, request, action, member, view=None):
         app, environments = self._target(request, action)
-        app_name = app.name if app else "an app"
-        names = ", ".join(environment.name for environment in environments)
         existing = (
             reusable_connection(request.organisation_id, app, environments)
             if app is not None and environments
             else None
         )
+        if view is None:
+            view = AppView(app=app, environments=tuple(environments))
+        if app is not None and view.app is None:
+            # The member cannot access the app: say what is asked, not where.
+            title = f"{_level_title(action['access'])} secrets in {WITHHELD_APP}"
+        else:
+            title = (
+                f"{_level_title(action['access'])} secrets in "
+                f"{view.app_label() if app else 'an app'} "
+                f"({view.environments_label()})"
+            )
         return {
             "type": self.type,
-            "title": fit_title(
-                f"{_level_title(action['access'])} secrets in {app_name} ({names})"
-            ),
+            "title": fit_title(title),
             "requiresSecret": False,
             # The Connection approval would reuse, whose rules then apply.
             "current": (
@@ -184,28 +195,30 @@ class AppAccess(ActionHandler):
                 if existing is None
                 else {
                     "connectionId": str(existing.id),
-                    "name": existing.name,
+                    "name": view.connection_name(existing.name),
                     "policy": full_policy(existing.policy),
                 }
             ),
             "requested": {
                 "app": (
                     None
-                    if app is None
+                    if view.app is None
                     else {
-                        "id": str(app.id),
-                        "name": app.name,
-                        "sseEnabled": app.sse_enabled,
+                        "id": str(view.app.id),
+                        "name": view.app.name,
+                        "sseEnabled": view.app.sse_enabled,
                     }
                 ),
+                "appRestricted": view.app_restricted,
                 "environments": [
                     {
                         "id": str(environment.id),
                         "name": environment.name,
                         "envType": environment.env_type,
                     }
-                    for environment in environments
+                    for environment in view.environments
                 ],
+                "hiddenEnvironmentCount": view.hidden_environment_count,
                 "access": action["access"],
                 "durationSeconds": request.duration_seconds,
             },

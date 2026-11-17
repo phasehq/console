@@ -26,6 +26,7 @@ from api.utils.agent_config import (
     ConfigRegistryError,
     PresetError,
     expand_preset,
+    is_app_service,
     is_custom_service,
     upgrade_definition,
     validate_definition,
@@ -163,6 +164,27 @@ def _point_at(request, grant):
         "baseline_grant_id": str(grant.id),
         "baseline_definition": _digest(connection.config),
     }
+
+
+def _app_asset(request):
+    connection = request.connection
+    if connection is None or not is_app_service(connection.service_type):
+        return None
+    from api.utils.agent_app_access import connection_environments
+
+    return connection.app, connection_environments(connection)
+
+
+def _connection_name(connection, view, *, in_title=False):
+    if connection is None:
+        return "a Connection"
+    if view is None or not view.mentions_withheld(connection.name):
+        return connection.name
+    if in_title and view.app is None:
+        from api.utils.asset_visibility import WITHHELD_APP
+
+        return f"a Connection to {WITHHELD_APP}"
+    return view.connection_name(connection.name)
 
 
 def _current(connection):
@@ -322,7 +344,7 @@ class CreateConnection(ActionHandler):
             request.credential_name = checked["name"][:_MAX_DISPLAY_NAME_LENGTH]
         return checked
 
-    def describe(self, request, action, member):
+    def describe(self, request, action, member, view=None):
         return {
             "type": self.type,
             "title": fit_title(f"Add Connection: {action['name']}"),
@@ -402,7 +424,7 @@ class UpdateConnection(ActionHandler):
             "definition": action.get("definition", current.get("definition")),
         }
 
-    def describe(self, request, action, member):
+    def describe(self, request, action, member, view=None):
         current = _current(request.connection)
         if current is None:
             return {
@@ -485,7 +507,7 @@ class UpdateConnectionSecret(ActionHandler):
             "connectionId": action["connectionId"],
         }
 
-    def describe(self, request, action, member):
+    def describe(self, request, action, member, view=None):
         current = _current(request.connection)
         name = current["name"] if current else "a Connection"
         return {
@@ -522,9 +544,14 @@ class RemoveConnection(ActionHandler):
             "connectionId": action["connectionId"],
         }
 
-    def describe(self, request, action, member):
+    def asset(self, request, action):
+        return _app_asset(request)
+
+    def describe(self, request, action, member, view=None):
         current = _current(request.connection)
-        name = current["name"] if current else "a Connection"
+        if current is not None:
+            current["name"] = _connection_name(request.connection, view)
+        name = _connection_name(request.connection, view, in_title=True)
         return {
             "type": self.type,
             "title": fit_title(f"Remove {name} from {request.workflow.name}"),

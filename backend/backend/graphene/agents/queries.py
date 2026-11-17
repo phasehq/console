@@ -501,7 +501,9 @@ def resolve_app_agent_access(root, info, app_id):
     from api.models import App
     from api.utils.access.permissions import user_can_access_app, user_has_permission
     from api.utils.agent_app_access import connection_environments, grant_access
+    from api.models import OrganisationMember
     from api.utils.agent_config import APP_SERVICE_TYPE
+    from api.utils.asset_visibility import asset_visibility
 
     user = info.context.user
     app = App.objects.filter(id=app_id, is_deleted=False).first()
@@ -526,21 +528,35 @@ def resolve_app_agent_access(root, info, app_id):
         .select_related("workflow__agent", "connection")
         .order_by("workflow__agent__name", "workflow__name", "created_at", "id")
     )
-    return [
-        {
-            "id": str(grant.id),
-            "agent": {
-                "id": str(grant.workflow.agent_id),
-                "name": grant.workflow.agent.name,
-            },
-            "workflow": {"id": str(grant.workflow_id), "name": grant.workflow.name},
-            "connection": {
-                "id": str(grant.connection_id),
-                "name": grant.connection.name,
-            },
-            "environments": connection_environments(grant.connection),
-            "access": grant_access(grant, now),
-            "expires_at": grant.expires_at,
-        }
-        for grant in grants
-    ]
+    # The member reaches the app; environments they cannot reach are counted,
+    # not named.
+    visibility = asset_visibility(
+        OrganisationMember.objects.select_related("role")
+        .filter(organisation=app.organisation, user=user, deleted_at__isnull=True)
+        .first()
+    )
+    rows = []
+    for grant in grants:
+        view = visibility.app_view(app, connection_environments(grant.connection))
+        rows.append(
+            {
+                "id": str(grant.id),
+                "agent": {
+                    "id": str(grant.workflow.agent_id),
+                    "name": grant.workflow.agent.name,
+                },
+                "workflow": {
+                    "id": str(grant.workflow_id),
+                    "name": grant.workflow.name,
+                },
+                "connection": {
+                    "id": str(grant.connection_id),
+                    "name": view.connection_name(grant.connection.name),
+                },
+                "environments": list(view.environments),
+                "hidden_environment_count": view.hidden_environment_count,
+                "access": grant_access(grant, now),
+                "expires_at": grant.expires_at,
+            }
+        )
+    return rows

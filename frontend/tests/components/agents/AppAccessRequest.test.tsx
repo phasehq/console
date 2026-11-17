@@ -380,6 +380,101 @@ describe('reviewing a request for app secrets', () => {
       expect(variables).not.toHaveProperty('action')
     })
   })
+
+  describe('a request about an app the reviewer cannot access', () => {
+    // As the server sends it to such a member: no app, no environment names.
+    const withheld = (): AgentActionRequest => {
+      const request = appRequest()
+      return {
+        ...request,
+        title: "Read and write secrets in an app you can't access",
+        appRestricted: true,
+        hiddenEnvironmentCount: 3,
+        actionReview: {
+          ...(request.actionReview as Record<string, unknown>),
+          title: "Read and write secrets in an app you can't access",
+          requested: {
+            app: null,
+            appRestricted: true,
+            environments: [],
+            hiddenEnvironmentCount: 3,
+            access: 'read_write',
+            durationSeconds: 3600,
+          },
+        },
+      }
+    }
+
+    test('shows the request with the app withheld and Approve disabled, saying why', async () => {
+      await open(withheld())
+
+      const text = container.textContent!
+      expect(text).toContain("An app you can't access")
+      expect(text).toContain("3 environments you can't access")
+      expect(text).toContain('You need access to this app to review this request.')
+      expect(text).not.toContain('This action can no longer be applied')
+      expect(container.querySelectorAll('[role="checkbox"]')).toHaveLength(0)
+      const button = buttonNamed(container, 'Approve access')!
+      expect(button.disabled).toBe(true)
+      await act(async () => button.click())
+      expect(approve).not.toHaveBeenCalled()
+    })
+
+    test('with some environments, names those and counts the rest, and cannot approve', async () => {
+      const request = appRequest()
+      await open({
+        ...request,
+        hiddenEnvironmentCount: 2,
+        actionReview: {
+          ...(request.actionReview as Record<string, unknown>),
+          requested: {
+            app: { id: 'app-1', name: 'orders', sseEnabled: true },
+            appRestricted: false,
+            environments: environments.slice(0, 1),
+            hiddenEnvironmentCount: 2,
+            access: 'read_write',
+            durationSeconds: 3600,
+          },
+        },
+      })
+
+      const text = container.textContent!
+      expect(text).toContain('orders')
+      expect(text).toContain("Development+2 more you can't access")
+      expect(text).toContain('You need access to every environment in this request to approve it.')
+      expect(buttonNamed(container, 'Approve access')!.disabled).toBe(true)
+    })
+
+    test('an allow on such a Connection reads as secrets on an app you cannot access', async () => {
+      const request = appAllowRequest()
+      const review = request.actionReview as Record<string, any>
+      await open({
+        ...request,
+        title: "Allow create secrets on a Connection to an app you can't access",
+        appRestricted: true,
+        hiddenEnvironmentCount: 2,
+        connection: { id: 'connection-1', name: 'App secrets' },
+        actionReview: {
+          ...review,
+          current: {
+            ...review.current,
+            name: 'App secrets',
+            app: null,
+            appRestricted: true,
+            environments: [],
+            hiddenEnvironmentCount: 2,
+          },
+        },
+      })
+
+      const text = container.textContent!
+      expect(text).toContain('Create, update and delete secrets')
+      expect(text).toContain("An app you can't access")
+      expect(text).not.toContain('orders')
+      expect(buttonNamed(container, 'Narrow the rule')).toBeUndefined()
+      expect(buttonNamed(container, 'Approve and allow')!.disabled).toBe(true)
+    })
+  })
 })
 
 describe('who gains access', () => {

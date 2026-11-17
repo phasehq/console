@@ -183,3 +183,39 @@ export const appPolicySummary = (policy: unknown): string => {
 
 /** The name a new app Connection starts with. */
 export const defaultAppConnectionName = (appName: string) => `${appName} secrets`
+
+/**
+ * What the viewer may not see of an app. The backend withholds the name of an
+ * app, or of an environment, the viewer cannot access, and says so here; the
+ * item itself stays listed. `WithheldApp` and `AppEnvironments` show it.
+ */
+export type AppVisibility = { appRestricted: boolean; hiddenEnvironmentCount: number }
+
+export const readAppVisibility = (value: unknown): AppVisibility => {
+  const source = isRecord(value) ? value : {}
+  const hidden = source.hiddenEnvironmentCount
+  return {
+    appRestricted: source.appRestricted === true,
+    hiddenEnvironmentCount:
+      typeof hidden === 'number' && Number.isInteger(hidden) && hidden > 0 ? hidden : 0,
+  }
+}
+
+export const isWithheld = (visibility: AppVisibility) =>
+  visibility.appRestricted || visibility.hiddenEnvironmentCount > 0
+
+export const WITHHELD_APP_LABEL = "An app you can't access"
+
+/** "+2 more you can't access" after names, "2 environments you can't access" alone. */
+export const hiddenEnvironmentsLabel = (count: number, afterNames: boolean) =>
+  afterNames
+    ? `+${count} more you can't access`
+    : `${count} environment${count === 1 ? '' : 's'} you can't access`
+
+/** Why a member cannot approve a request about what they cannot see; '' when they can see it all. */
+export const withheldReviewLine = (visibility: AppVisibility): string =>
+  visibility.appRestricted
+    ? 'You need access to this app to review this request.'
+    : visibility.hiddenEnvironmentCount > 0
+      ? 'You need access to every environment in this request to approve it.'
+      : ''

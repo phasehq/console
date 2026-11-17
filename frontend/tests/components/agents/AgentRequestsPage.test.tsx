@@ -312,6 +312,20 @@ describe('Change request cards', () => {
     expect(button('View all requests')).toBeUndefined()
   })
 
+  test('a request about an app the viewer cannot access stays listed, marked as such', async () => {
+    await renderPage([
+      request('request-4', 'pending', {
+        appRestricted: true,
+        hiddenEnvironmentCount: 2,
+      }),
+      request('request-3', 'pending'),
+    ])
+
+    const [withheld, other] = Array.from(container.querySelectorAll('article'))
+    expect(withheld.querySelector('[data-withheld]')!.textContent).toBe("An app you can't access")
+    expect(other.querySelector('[data-withheld]')).toBeNull()
+  })
+
   test('members who can only read requests see the same list', async () => {
     setPermissions({ AgentRequests: ['read'] })
     await renderPage([request('request-3', 'pending'), request('request-2', 'approved')])

@@ -304,6 +304,49 @@ describe('Agent page', () => {
     expect(button(row, 'Revoke')).toBeDefined()
   })
 
+  test('an app grant withholds the names the viewer cannot access, and counts them', async () => {
+    const grant = (id: string, extra: Record<string, unknown>) => ({
+      id,
+      expiresAt: null,
+      temporaryAllows: [],
+      connection: {
+        id: `connection-${id}`,
+        name: `secrets ${id}`,
+        serviceType: 'phase_app',
+        state: 'active',
+        hostRulesVersion: '1',
+        authentication: null,
+      },
+      ...extra,
+    })
+    mockDetail([
+      {
+        ...workflow('default-workflow', 'Default', '2026-09-01T00:00:00Z', []),
+        grants: [
+          grant('none', {
+            app: null,
+            appRestricted: true,
+            environments: [],
+            hiddenEnvironmentCount: 2,
+          }),
+          grant('some', {
+            app: { id: 'app-1', name: 'orders' },
+            appRestricted: false,
+            environments: [{ id: 'env-dev', name: 'Development' }],
+            hiddenEnvironmentCount: 1,
+          }),
+        ],
+      } as any,
+    ])
+    await render('workflows')
+
+    const [none, some] = Array.from(section('Default').querySelectorAll('li'))
+    expect(none.textContent).toContain("An app you can't access")
+    expect(none.textContent).not.toContain('App deleted')
+    expect(none.querySelector('[data-withheld]')).not.toBeNull()
+    expect(some.textContent).toContain("orders · Development+1 more you can't access")
+  })
+
   test('shows the setup prompt panel once while no Workflow has a Connection', async () => {
     mockDetail([
       workflow('default-workflow', 'Default', '2026-09-01T00:00:00Z', []),

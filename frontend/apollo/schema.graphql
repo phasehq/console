@@ -1779,9 +1779,11 @@ type AgentWorkflowGrantType {
   expiresAt: DateTime
   createdAt: DateTime!
   updatedAt: DateTime!
-  temporaryAllows: GenericScalar!
   app: AgentConnectionAppType
   environments: [AgentConnectionEnvironmentType!]!
+  appRestricted: Boolean!
+  hiddenEnvironmentCount: Int!
+  temporaryAllows: GenericScalar!
   access: GenericScalar
 }
 
@@ -1803,6 +1805,8 @@ type AgentConnectionType {
   updatedAt: DateTime!
   app: AgentConnectionAppType
   environments: [AgentConnectionEnvironmentType!]!
+  appRestricted: Boolean!
+  hiddenEnvironmentCount: Int!
   definition: GenericScalar
   encryptionPublicKey: String
   keyVersion: Int
@@ -1897,6 +1901,8 @@ type AgentRequestType {
   createdAt: DateTime!
   updatedAt: DateTime!
   agent: AgentType!
+  appRestricted: Boolean!
+  hiddenEnvironmentCount: Int!
   progress: GenericScalar!
   resolution: GenericScalar!
   revision: String!
@@ -2015,6 +2021,7 @@ type AppAgentAccessType {
   workflow: AgentResourceRefType!
   connection: AgentResourceRefType!
   environments: [AgentConnectionEnvironmentType!]!
+  hiddenEnvironmentCount: Int!
   access: GenericScalar!
   expiresAt: DateTime
 }

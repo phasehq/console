@@ -73,14 +73,22 @@ class ActionHandler:
 
         raise NotImplementedError
 
-    def describe(self, request, action, member):
+    def describe(self, request, action, member, view=None):
         """Return what a reviewer needs to judge the action.
 
         Always a ``title``. A handler adds the current and requested state of
-        its target where that makes sense.
+        its target where that makes sense. ``view`` is how the member reading
+        it may see the asset ``asset`` names (an ``AppView``); None describes
+        it in full, as a stored title or an audit entry needs.
         """
 
         raise NotImplementedError
+
+    def asset(self, request, action):
+        """The app and environments the action is about, as ``(app,
+        environments)``, or None when it names no such asset."""
+
+        return None
 
     def apply(self, request, action, member, inputs):
         """Carry out an approved action and return an ``AppliedAction``.

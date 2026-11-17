@@ -52,6 +52,7 @@ import {
   agentCardSurface,
   humanizeAgentValue,
 } from '@/components/agents/AgentUI'
+import { WithheldApp } from '@/components/agents/WithheldAsset'
 
 // 15 at a time. The server never returns more than its cap.
 const PAGE_SIZE = 15
@@ -349,6 +350,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                           <AgentBadge tone={requestStatusTone(requestStatus)}>
                             {humanizeAgentValue(requestStatus)}
                           </AgentBadge>
+                          {request.appRestricted && <WithheldApp className="text-xs" />}
                         </div>
                         <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-neutral-500">
                           <Link
@@ -426,8 +428,11 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                                 </dt>
                                 <dd className="mt-1 font-medium">
                                   {request.connection?.name ||
-                                    request.credentialName ||
-                                    'Not created yet'}
+                                    (request.appRestricted ? (
+                                      <WithheldApp />
+                                    ) : (
+                                      request.credentialName || 'Not created yet'
+                                    ))}
                                 </dd>
                               </div>
                             )}

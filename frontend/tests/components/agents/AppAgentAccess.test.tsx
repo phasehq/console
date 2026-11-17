@@ -143,6 +143,17 @@ describe('the Agents tab of an app', () => {
     expect(container.textContent).not.toContain('read_write')
   })
 
+  test('environments the viewer cannot access are counted, not named', async () => {
+    await render([
+      row({
+        connection: { id: 'c-1', name: 'orders secrets' },
+        environments: [{ id: 'env-dev', name: 'Development', envType: 'dev' }],
+        hiddenEnvironmentCount: 2,
+      }),
+    ])
+    expect(cells()[0][3]).toBe("Development+2 more you can't access")
+  })
+
   test('with no access, the standard empty state', async () => {
     await render([])
     expect(container.querySelector('table')).toBeNull()

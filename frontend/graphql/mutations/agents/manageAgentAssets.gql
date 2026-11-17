@@ -337,6 +337,8 @@ mutation CreateAgentAppConnectionOp(
         name
         envType
       }
+      appRestricted
+      hiddenEnvironmentCount
       updatedAt
     }
   }
@@ -356,6 +358,8 @@ mutation UpdateAgentAppConnectionOp($connectionId: ID!, $name: String, $environm
         name
         envType
       }
+      appRestricted
+      hiddenEnvironmentCount
       updatedAt
     }
   }

@@ -20,8 +20,10 @@ import {
 import {
   APP_CLASSES,
   readAppRef,
+  readAppVisibility,
   readEnvironmentRefs,
   type AppAccessLevel,
+  type AppVisibility,
   type AppClass,
   type AppRef,
   type EnvironmentRef,
@@ -74,12 +76,15 @@ export type AllowReview = {
   app: AppRef | null
   environments: EnvironmentRef[]
   appClasses: AppClass[]
+  /** What of the app the viewer may not see; `app` is null when it is restricted. */
+  visibility: AppVisibility
 }
 
 /** Access to an app's secrets, as asked for. */
 export type AppAccessReview = {
   app: AppRef | null
   environments: EnvironmentRef[]
+  visibility: AppVisibility
   access: AppAccessLevel
   durationSeconds: number | null
   /** The Connection approval would reuse, whose rules then apply; null when one is created. */
@@ -179,10 +184,12 @@ const readAllowReview = (value: Record<string, unknown>): AllowReview => {
   const current = isRecord(value.current) ? value.current : null
   const requested = isRecord(value.requested) ? value.requested : {}
   const app = current ? readAppRef(current.app) : null
+  const visibility = readAppVisibility(current)
   return {
     app,
     environments: current ? readEnvironmentRefs(current.environments) : [],
-    appClasses: app ? readAppClasses(requested.allow) : [],
+    visibility,
+    appClasses: app || visibility.appRestricted ? readAppClasses(requested.allow) : [],
     connectionName: current && typeof current.name === 'string' ? current.name : '',
     policy: current ? readPolicy(current.policy) : null,
     temporaryAllows: current ? readTemporaryAllows(current.temporaryAllows) : [],
@@ -214,6 +221,7 @@ const readAppAccessReview = (value: Record<string, unknown>): AppAccessReview =>
   return {
     app: readAppRef(requested.app),
     environments: readEnvironmentRefs(requested.environments),
+    visibility: readAppVisibility(requested),
     access: requested.access === 'read_write' ? 'read_write' : 'read',
     durationSeconds: seconds(requested.durationSeconds),
     reuses:

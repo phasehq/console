@@ -49,6 +49,8 @@ from api.utils.agent_sessions import refresh_workflow_sessions
 from . import ActionError, ActionHandler, AppliedAction, fit_title, register
 from .agent_connections import (
     _ID,
+    _app_asset,
+    _connection_name,
     _connection_errors,
     _granted,
     _granted_access,
@@ -210,20 +212,29 @@ def _describe_allow(allow, connection=None):
     )
 
 
-def _app_summary(connection):
-    from api.utils.agent_app_access import connection_environments
+def _app_summary(connection, view):
+    if view is None:
+        from api.utils.agent_app_access import connection_environments
+        from api.utils.asset_visibility import AppView
 
-    app = connection.app
+        view = AppView(
+            app=connection.app,
+            environments=tuple(connection_environments(connection)),
+        )
     return {
-        "app": None if app is None else {"id": str(app.id), "name": app.name},
+        "app": (
+            None if view.app is None else {"id": str(view.app.id), "name": view.app.name}
+        ),
+        "appRestricted": view.app_restricted,
         "environments": [
             {
                 "id": str(environment.id),
                 "name": environment.name,
                 "envType": environment.env_type,
             }
-            for environment in connection_environments(connection)
+            for environment in view.environments
         ],
+        "hiddenEnvironmentCount": view.hidden_environment_count,
     }
 
 
@@ -275,9 +286,12 @@ class AllowCall(ActionHandler):
         _point_at(request, grant)
         return checked
 
-    def describe(self, request, action, member):
+    def asset(self, request, action):
+        return _app_asset(request)
+
+    def describe(self, request, action, member, view=None):
         connection, grant = request.connection, request.grant
-        name = connection.name if connection else "a Connection"
+        name = _connection_name(connection, view)
         current = None
         if grant is not None and connection is not None:
             current = {
@@ -290,11 +304,12 @@ class AllowCall(ActionHandler):
                 ),
             }
             if is_app_service(connection.service_type):
-                current.update(_app_summary(connection))
+                current.update(_app_summary(connection, view))
         return {
             "type": self.type,
             "title": fit_title(
-                f"Allow {_describe_allow(action['allow'], connection)} on {name}"
+                f"Allow {_describe_allow(action['allow'], connection)} on "
+                f"{_connection_name(connection, view, in_title=True)}"
             ),
             "requiresSecret": False,
             "current": current,
@@ -388,9 +403,12 @@ class RenewAccess(ActionHandler):
             "connectionId": action["connectionId"],
         }
 
-    def describe(self, request, action, member):
+    def asset(self, request, action):
+        return _app_asset(request)
+
+    def describe(self, request, action, member, view=None):
         connection = request.connection
-        name = connection.name if connection else "a Connection"
+        name = _connection_name(connection, view)
         current = None
         if connection is not None:
             grant = renewable_grant(request.workflow_id, connection.id)
@@ -407,7 +425,9 @@ class RenewAccess(ActionHandler):
             }
         return {
             "type": self.type,
-            "title": fit_title(f"Renew access to {name}"),
+            "title": fit_title(
+                f"Renew access to {_connection_name(connection, view, in_title=True)}"
+            ),
             "requiresSecret": False,
             "current": current,
             "requested": {"durationSeconds": request.duration_seconds},

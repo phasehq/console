@@ -18,6 +18,7 @@ query GetAppAgentAccess($appId: ID!) {
       name
       envType
     }
+    hiddenEnvironmentCount
     access
     expiresAt
   }

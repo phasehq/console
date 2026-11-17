@@ -53,8 +53,10 @@ import {
   ACCESS_LEVEL_LABEL,
   describeClasses,
   formatAccessTime,
+  readAppVisibility,
   type AppAccessLevel,
   TOKEN_HOLDERS_LINE,
+  withheldReviewLine,
 } from '@/utils/agents/appAccess'
 import {
   customConnectionFormFromDefinition,
@@ -119,6 +121,9 @@ export type AgentActionRequest = {
   } | null
   workflow?: { name: string } | null
   agent: { name: string }
+  /** A request about an app the viewer cannot fully access; its names are withheld. */
+  appRestricted?: boolean | null
+  hiddenEnvironmentCount?: number | null
 }
 
 const CHANGE_STYLE: Record<DiffEntry['change'], { mark: string; text: string; word: string }> = {
@@ -428,7 +433,9 @@ export function AgentActionApproveDialog({
   const isContext = type === REQUEST_ACTION_TYPES.contextUpdate
   const isAppAccess = type === REQUEST_ACTION_TYPES.appAccess
   // An allow on an app Connection names classes of secrets calls; it is approved as asked.
-  const isAppAllow = isAllow && !!review?.allow?.app
+  const isAppAllow = isAllow && !!(review?.allow?.app || review?.allow?.visibility.appRestricted)
+  // A member who cannot see all the request is about cannot approve it.
+  const withheldLine = withheldReviewLine(readAppVisibility(request))
   const takesDuration = actionTakesDuration(type)
   const allowUntilRevoked = actionAllowsUntilRevoked(type)
   const requestedSeconds =
@@ -622,17 +629,21 @@ export function AgentActionApproveDialog({
       : (needSecrets && definition ? secretsProblem(definition, fieldSecrets) : '') ||
         (isCreate && !serverPublicKey ? 'The server key is not available yet.' : '')
   const unreadable = (isCreate || isUpdate) && requested?.definitionUnreadable === true
-  const problem = missingTarget
-    ? 'This action can no longer be applied.'
-    : (unreadable ? UNREADABLE_DEFINITION : '') ||
-      (takesDuration ? durationProblem : '') ||
-      (isAllow && !isAppAllow ? allowDraftProblem(allowDraft) : '') ||
-      (isAppAccess ? environmentsProblem(environmentIds) : '') ||
-      (writes ? (waitingForDefault ? durationProblem : writeResult.problem) : '') ||
-      (isContext && contextText.length > CONTEXT_MAX_LENGTH
-        ? `Use at most ${CONTEXT_MAX_LENGTH.toLocaleString()} characters.`
-        : '') ||
-      formProblem
+  // Nothing to edit or set while the request cannot be approved here.
+  const inert = missingTarget || !!withheldLine
+  const problem = withheldLine
+    ? withheldLine
+    : missingTarget
+      ? 'This action can no longer be applied.'
+      : (unreadable ? UNREADABLE_DEFINITION : '') ||
+        (takesDuration ? durationProblem : '') ||
+        (isAllow && !isAppAllow ? allowDraftProblem(allowDraft) : '') ||
+        (isAppAccess ? environmentsProblem(environmentIds) : '') ||
+        (writes ? (waitingForDefault ? durationProblem : writeResult.problem) : '') ||
+        (isContext && contextText.length > CONTEXT_MAX_LENGTH
+          ? `Use at most ${CONTEXT_MAX_LENGTH.toLocaleString()} characters.`
+          : '') ||
+        formProblem
 
   const finish = async () => {
     setFailure('')
@@ -739,6 +750,19 @@ export function AgentActionApproveDialog({
         {review && !isCreate && !isUpdate && !isAllow && !isRenew && !isContext && !isAppAccess && (
           <p className="text-sm">{actionSentence(review, request.workflow?.name)}</p>
         )}
+        {withheldLine && (
+          <Alert variant="info" icon size="sm">
+            <span className="text-xs">{withheldLine}</span>
+          </Alert>
+        )}
+        {review?.appAccess && withheldLine && (
+          <section
+            aria-label="Requested change"
+            className="space-y-3 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
+          >
+            <AppAccessDetails review={review.appAccess} />
+          </section>
+        )}
         {review?.allow && (
           <section
             aria-label="Requested change"
@@ -773,7 +797,7 @@ export function AgentActionApproveDialog({
           </section>
         )}
 
-        {review?.appAccess && !missingTarget && (
+        {review?.appAccess && !inert && (
           <section
             aria-label="Requested change"
             className="space-y-4 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
@@ -818,7 +842,7 @@ export function AgentActionApproveDialog({
           </section>
         )}
 
-        {(isAllow || isContext) && !isAppAllow && !missingTarget && (
+        {(isAllow || isContext) && !isAppAllow && !inert && (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -968,7 +992,7 @@ export function AgentActionApproveDialog({
           </div>
         )}
 
-        {takesDuration && !missingTarget && (
+        {takesDuration && !inert && (
           <GrantDurationField
             id={`${id}-duration`}
             value={duration}
@@ -981,10 +1005,8 @@ export function AgentActionApproveDialog({
             problem={durationProblem}
           />
         )}
-        {isAppAccess && !missingTarget && (
-          <p className="text-xs text-neutral-500">{TOKEN_HOLDERS_LINE}</p>
-        )}
-        {writes && !missingTarget && (
+        {isAppAccess && !inert && <p className="text-xs text-neutral-500">{TOKEN_HOLDERS_LINE}</p>}
+        {writes && !inert && (
           <GrantDurationField
             id={`${id}-write-duration`}
             label="Write access ends after"
@@ -1037,7 +1059,7 @@ export function AgentActionApproveDialog({
               )}
             </div>
           ) : (
-            !missingTarget && (
+            !inert && (
               <Alert variant="info" icon size="sm">
                 <span className="text-xs">
                   This request uses a shape the form cannot edit. Approve it as filed, or deny it
