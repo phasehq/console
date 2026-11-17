@@ -1034,17 +1034,7 @@
     tslib "^2.4.0"
     ws "^8.19.0"
 
-"@graphql-tools/utils@^11.0.0":
-  version "11.0.0"
-  resolved "https://registry.npmjs.org/@graphql-tools/utils/-/utils-11.0.0.tgz"
-  integrity sha512-bM1HeZdXA2C3LSIeLOnH/bcqSgbQgKEDrjxODjqi3y58xai2TkNrtYcQSoWzGbt9VMN1dORGjR7Vem8SPnUFQA==
-  dependencies:
-    "@graphql-typed-document-node/core" "^3.1.1"
-    "@whatwg-node/promise-helpers" "^1.0.0"
-    cross-inspect "1.0.1"
-    tslib "^2.4.0"
-
-"@graphql-tools/utils@^12.1.0":
+"@graphql-tools/utils@^11.0.0", "@graphql-tools/utils@^12.1.0":
   version "12.1.0"
   resolved "https://registry.yarnpkg.com/@graphql-tools/utils/-/utils-12.1.0.tgz#49cf4eea2887075d11d4baf6a20f057ea7530130"
   integrity sha512-+mOuIX7u83/BHG0L9JviMzKid1j35cxOWhLoox47TXHAJ6Tnn30RgrmEQPmk1FhmaQbhJEcwYBDVyieUvZopJw==
