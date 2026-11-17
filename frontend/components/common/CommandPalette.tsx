@@ -507,6 +507,7 @@ const CommandPalette: React.FC = () => {
                   aria-hidden="true"
                 />
                 <Combobox.Input
+                  autoFocus
                   className="w-full custom caret-emerald-400 border-0 rounded-xl bg-transparent pl-12 pr-4 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500 focus:ring-0"
                   placeholder="Type a command or search..."
                   onChange={(event) => debouncedSetQuery(event.target.value)}
