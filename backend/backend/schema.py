@@ -157,6 +157,8 @@ from .graphene.queries.syncing import (
     resolve_github_environments,
     resolve_gitlab_projects,
     resolve_gitlab_groups,
+    resolve_gitlab_environments,
+    resolve_gitlab_group_environment_scopes,
     resolve_server_public_key,
     resolve_providers,
     resolve_services,
@@ -235,15 +237,12 @@ from .graphene.mutations.environment import (
     CreateEnvironmentTokenMutation,
     CreatePersonalSecretMutation,
     CreateSecretFolderMutation,
-    CreateSecretMutation,
     CreateSecretTagMutation,
     CreateUserTokenMutation,
     DeleteEnvironmentMutation,
     DeletePersonalSecretMutation,
     DeleteSecretFolderMutation,
-    DeleteSecretMutation,
     DeleteUserTokenMutation,
-    EditSecretMutation,
     ReadSecretMutation,
     RenameEnvironmentMutation,
     UpdateEnvironmentOrderMutation,
@@ -583,6 +582,12 @@ class Query(graphene.ObjectType):
 
     gitlab_projects = graphene.List(GitLabProjectType, credential_id=graphene.ID())
     gitlab_groups = graphene.List(GitLabGroupType, credential_id=graphene.ID())
+    gitlab_environments = graphene.List(
+        graphene.String, credential_id=graphene.ID(), project_id=graphene.ID()
+    )
+    gitlab_group_environment_scopes = graphene.List(
+        graphene.String, credential_id=graphene.ID(), group_path=graphene.String()
+    )
 
     railway_projects = graphene.List(RailwayProjectType, credential_id=graphene.ID())
 
@@ -736,6 +741,8 @@ class Query(graphene.ObjectType):
 
     resolve_gitlab_projects = resolve_gitlab_projects
     resolve_gitlab_groups = resolve_gitlab_groups
+    resolve_gitlab_environments = resolve_gitlab_environments
+    resolve_gitlab_group_environment_scopes = resolve_gitlab_group_environment_scopes
 
     resolve_railway_projects = resolve_railway_projects
 
@@ -1520,9 +1527,6 @@ class Mutation(graphene.ObjectType):
 
     create_secret_tag = CreateSecretTagMutation.Field()
 
-    create_secret = CreateSecretMutation.Field()
-    edit_secret = EditSecretMutation.Field()
-    delete_secret = DeleteSecretMutation.Field()
     read_secret = ReadSecretMutation.Field()
 
     create_secrets = BulkCreateSecretMutation.Field()

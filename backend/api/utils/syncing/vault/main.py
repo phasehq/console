@@ -3,6 +3,7 @@ from hvac import Client as VaultClient, exceptions as hvac_exceptions
 import graphene
 from django.conf import settings
 from api.utils.network import validate_url_is_safe
+from api.utils.safe_requests import SafeSession
 
 
 class VaultMountType(graphene.ObjectType):
@@ -24,7 +25,9 @@ def authenticate_vault_client(credential_id):
     if settings.APP_HOST == "cloud":
         validate_url_is_safe(VAULT_ADDR)
 
-    client = VaultClient(url=VAULT_ADDR, namespace=VAULT_NAMESPACE)
+    client = VaultClient(
+        url=VAULT_ADDR, namespace=VAULT_NAMESPACE, session=SafeSession()
+    )
     client.auth.approle.login(role_id=VAULT_ROLE_ID, secret_id=VAULT_SECRET_ID)
     return client
 
