@@ -1,0 +1,7 @@
+mutation DeleteEnvironmentNowOp($environmentId: ID!) {
+  deleteEnvironmentNow(environmentId: $environmentId) {
+    environment {
+      id
+    }
+  }
+}

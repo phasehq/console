@@ -3,16 +3,17 @@
 import { AppType, MutationDeleteAppArgs } from '@/apollo/graphql'
 import { Transition, Dialog } from '@headlessui/react'
 import { Fragment, useState } from 'react'
-import { FaTrash, FaTimes, FaExclamationTriangle } from 'react-icons/fa'
+import { FaClock, FaTrash, FaTimes, FaExclamationTriangle } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { DeleteApplication } from '@/graphql/mutations/deleteApp.gql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetDeletedApps } from '@/graphql/queries/apps/getDeletedApps.gql'
-import { DELETION_GRACE_PERIOD } from '@/constants'
+import { scheduledDeletionDate } from '@/utils/organisation'
 import { useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
 import { Alert } from '../common/Alert'
+import { Checkbox } from '../common/Checkbox'
 
 export default function DeleteAppDialog(props: {
   organisationId: string
@@ -23,11 +24,14 @@ export default function DeleteAppDialog(props: {
   const { organisationId, appId, appName, teamName } = props
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [typedName, setTypedName] = useState<string>('')
+  const [immediately, setImmediately] = useState<boolean>(false)
+  const [scheduledFor, setScheduledFor] = useState<string>('')
   const [deleteApp, { loading }] = useMutation(DeleteApplication)
   const router = useRouter()
 
   const reset = () => {
     setTypedName('')
+    setImmediately(false)
   }
 
   const closeModal = () => {
@@ -36,6 +40,7 @@ export default function DeleteAppDialog(props: {
   }
 
   const openModal = () => {
+    setScheduledFor(scheduledDeletionDate())
     setIsOpen(true)
   }
 
@@ -46,6 +51,7 @@ export default function DeleteAppDialog(props: {
           await deleteApp({
             variables: {
               id: appId,
+              immediately,
             } as MutationDeleteAppArgs,
             refetchQueries: [
               {
@@ -80,8 +86,8 @@ export default function DeleteAppDialog(props: {
     }
     toast
       .promise(handleDeleteApp, {
-        pending: 'Scheduling your app for deletion',
-        success: 'App scheduled for deletion',
+        pending: immediately ? 'Deleting your app' : 'Scheduling your app for deletion',
+        success: immediately ? 'App is being deleted' : 'App scheduled for deletion',
         error: 'Something went wrong!',
       })
       .then(() => router.push(`/${teamName}/apps`))
@@ -132,21 +138,37 @@ export default function DeleteAppDialog(props: {
 
                   <form onSubmit={handleSubmit}>
                     <div className="mt-2 space-y-6">
-                      <p className="text-sm text-gray-500">Schedule this App for deletion</p>
+                      <p className="text-sm text-gray-500">
+                        {immediately ? 'Delete this App now' : 'Schedule this App for deletion'}
+                      </p>
 
                       <Alert variant="danger" icon={true}>
-                        <div className="space-y-1">
-                          <p className="font-bold">
-                            This App will be deleted in {DELETION_GRACE_PERIOD}
-                          </p>
+                        {immediately ? (
+                          <div className="space-y-1">
+                            <p className="font-bold">This App will be deleted immediately</p>
 
-                          <p>
-                            Its environments and secrets become unavailable straight away, and
-                            are permanently deleted after {DELETION_GRACE_PERIOD}. You can restore
-                            the App until then.
-                          </p>
-                        </div>
+                            <p>
+                              Its environments, secrets and logs are permanently deleted. This
+                              cannot be undone.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <p className="font-bold">This App will be deleted on {scheduledFor}</p>
+
+                            <p>
+                              Its environments and secrets become unavailable straight away. You can
+                              restore the App until then.
+                            </p>
+                          </div>
+                        )}
                       </Alert>
+
+                      <Checkbox
+                        checked={immediately}
+                        onChange={setImmediately}
+                        label="Delete immediately. The App cannot be restored."
+                      />
 
                       <div className="flex flex-col justify-center max-w-md mx-auto">
                         <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
@@ -176,8 +198,13 @@ export default function DeleteAppDialog(props: {
                       >
                         Cancel
                       </Button>
-                      <Button type="submit" variant="danger" isLoading={loading}>
-                        Delete
+                      <Button
+                        type="submit"
+                        variant="danger"
+                        icon={immediately ? FaTrash : FaClock}
+                        isLoading={loading}
+                      >
+                        {immediately ? 'Delete now' : 'Schedule for deletion'}
                       </Button>
                     </div>
                   </form>

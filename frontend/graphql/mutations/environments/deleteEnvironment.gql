@@ -1,5 +1,5 @@
-mutation DeleteEnv($environmentId: ID!) {
-  deleteEnvironment(environmentId: $environmentId) {
+mutation DeleteEnv($environmentId: ID!, $immediately: Boolean) {
+  deleteEnvironment(environmentId: $environmentId, immediately: $immediately) {
     ok
     environment {
       id

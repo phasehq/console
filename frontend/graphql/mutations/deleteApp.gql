@@ -1,5 +1,5 @@
-mutation DeleteApplication($id: ID!) {
-  deleteApp(id: $id) {
+mutation DeleteApplication($id: ID!, $immediately: Boolean) {
+  deleteApp(id: $id, immediately: $immediately) {
     ok
     app {
       id

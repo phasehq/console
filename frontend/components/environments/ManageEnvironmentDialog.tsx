@@ -1,4 +1,4 @@
-import { FaCog, FaEdit, FaTimes, FaTrash, FaUserCog } from 'react-icons/fa'
+import { FaClock, FaCog, FaEdit, FaTimes, FaTrash, FaUserCog } from 'react-icons/fa'
 import GenericDialog from '../common/GenericDialog'
 import {
   ApiOrganisationPlanChoices,
@@ -9,11 +9,13 @@ import { Input } from '../common/Input'
 import { Fragment, useContext, useState } from 'react'
 import { Button } from '../common/Button'
 import { Alert } from '../common/Alert'
+import { Checkbox } from '../common/Checkbox'
 import { RenameEnv } from '@/graphql/mutations/environments/renameEnvironment.gql'
 import { DeleteEnv } from '@/graphql/mutations/environments/deleteEnvironment.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetDeletedEnvironments } from '@/graphql/queries/secrets/getDeletedEnvironments.gql'
 import { DELETION_GRACE_PERIOD } from '@/constants'
+import { scheduledDeletionDate } from '@/utils/organisation'
 import { useMutation } from '@apollo/client'
 import { Dialog, Transition } from '@headlessui/react'
 import { toast } from 'react-toastify'
@@ -99,7 +101,7 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   )
 }
 
-const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
+export const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   const userCanDeleteEnvironments = userHasPermission(
@@ -117,12 +119,18 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [name, setName] = useState('')
+  const [immediately, setImmediately] = useState<boolean>(false)
+  const [scheduledFor, setScheduledFor] = useState<string>('')
 
   const closeModal = () => {
     setIsOpen(false)
+    setImmediately(false)
+    // The typed confirmation must not carry over to the next time it opens.
+    setName('')
   }
 
   const openModal = () => {
+    setScheduledFor(scheduledDeletionDate())
     setIsOpen(true)
   }
 
@@ -134,13 +142,16 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
     await deleteEnvironment({
       variables: {
         environmentId: props.environment?.id,
+        immediately,
       },
       refetchQueries: [
         { query: GetAppEnvironments, variables: { appId: props.environment.app.id } },
         { query: GetDeletedEnvironments, variables: { appId: props.environment.app.id } },
       ],
     })
-    toast.success('Environment scheduled for deletion')
+    toast.success(
+      immediately ? 'Environment is being deleted' : 'Environment scheduled for deletion'
+    )
     closeModal()
   }
 
@@ -166,7 +177,8 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
       <div>
         <h4 className="font-medium text-zinc-900 dark:text-zinc-100">Delete Environment</h4>
         <p className="text-neutral-500 text-sm">
-          Schedule this Environment, and all associated Secrets and Integrations, for deletion.
+          Delete this Environment, and all associated Secrets and Integrations. It is kept for{' '}
+          {DELETION_GRACE_PERIOD} and can be restored, unless you choose to delete it immediately.
         </p>
       </div>
 
@@ -216,10 +228,32 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
                       Are you sure you want to delete this environment?
                     </p>
                     <Alert variant="danger" size="sm">
-                      This Environment becomes unavailable straight away. It is permanently
-                      deleted after {DELETION_GRACE_PERIOD}, along with all Secrets and
-                      Integrations associated with it. You can restore it until then.
+                      {immediately ? (
+                        <div className="space-y-1">
+                          <p className="font-bold">This Environment will be deleted immediately</p>
+                          <p>
+                            All Secrets and Integrations associated with it are permanently deleted.
+                            This cannot be undone.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="font-bold">
+                            This Environment will be deleted on {scheduledFor}
+                          </p>
+                          <p>
+                            It becomes unavailable straight away, along with all Secrets and
+                            Integrations associated with it. You can restore it until then. Its name
+                            cannot be reused until it has been deleted.
+                          </p>
+                        </div>
+                      )}
                     </Alert>
+                    <Checkbox
+                      checked={immediately}
+                      onChange={setImmediately}
+                      label="Delete immediately. The Environment cannot be restored."
+                    />
                     <div>
                       <p className="text-zinc-900 dark:text-zinc-100">
                         Type{' '}
@@ -236,11 +270,12 @@ const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
                       </Button>
                       <Button
                         variant="danger"
+                        icon={immediately ? FaTrash : FaClock}
                         onClick={handleDelete}
                         isLoading={loading}
                         disabled={name !== props.environment?.name}
                       >
-                        <FaTrash /> Delete
+                        {immediately ? 'Delete now' : 'Schedule for deletion'}
                       </Button>
                     </div>
                   </div>

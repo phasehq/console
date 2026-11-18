@@ -1755,9 +1755,16 @@ type Mutation {
 
   """
   Schedule the app for deletion. It is locked straight away and purged by
-  a background job once the grace period ends, unless restored.
+  a background job once the grace period ends, unless restored. With
+  `immediately`, there is no grace period and no restore.
   """
-  deleteApp(id: ID!): DeleteAppMutation
+  deleteApp(id: ID!, immediately: Boolean = false): DeleteAppMutation
+
+  """
+  Delete an app that is scheduled for deletion without waiting for the
+  rest of its grace period. It can no longer be restored.
+  """
+  deleteAppNow(id: ID!): DeleteAppNowMutation
 
   """
   Cancel an app's pending deletion before the grace period ends, or later
@@ -1774,8 +1781,15 @@ type Mutation {
   """
   Schedule the environment for deletion. It is locked straight away and
   purged by a background job once the grace period ends, unless restored.
+  With `immediately`, there is no grace period and no restore.
   """
-  deleteEnvironment(environmentId: ID!): DeleteEnvironmentMutation
+  deleteEnvironment(environmentId: ID!, immediately: Boolean = false): DeleteEnvironmentMutation
+
+  """
+  Delete an environment that is scheduled for deletion without waiting
+  for the rest of its grace period. It can no longer be restored.
+  """
+  deleteEnvironmentNow(environmentId: ID!): DeleteEnvironmentNowMutation
 
   """
   Cancel an environment's pending deletion before the grace period ends,
@@ -2099,10 +2113,19 @@ type CreateAppMutation {
 
 """
 Schedule the app for deletion. It is locked straight away and purged by
-a background job once the grace period ends, unless restored.
+a background job once the grace period ends, unless restored. With
+`immediately`, there is no grace period and no restore.
 """
 type DeleteAppMutation {
   ok: Boolean
+  app: DeletedAppType
+}
+
+"""
+Delete an app that is scheduled for deletion without waiting for the
+rest of its grace period. It can no longer be restored.
+"""
+type DeleteAppNowMutation {
   app: DeletedAppType
 }
 
@@ -2164,9 +2187,18 @@ input EnvironmentInput {
 """
 Schedule the environment for deletion. It is locked straight away and
 purged by a background job once the grace period ends, unless restored.
+With `immediately`, there is no grace period and no restore.
 """
 type DeleteEnvironmentMutation {
   ok: Boolean
+  environment: DeletedEnvironmentType
+}
+
+"""
+Delete an environment that is scheduled for deletion without waiting
+for the rest of its grace period. It can no longer be restored.
+"""
+type DeleteEnvironmentNowMutation {
   environment: DeletedEnvironmentType
 }
 

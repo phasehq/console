@@ -209,8 +209,8 @@ export default function AppSettings(props: { params: Promise<{ team: string; app
             <div>
               <h3 className="text-red-400 font-semibold">Delete App</h3>
               <p className="text-neutral-500">
-                Schedule this App for deletion. It is permanently deleted after{' '}
-                {DELETION_GRACE_PERIOD}.
+                Delete this App. It is kept for {DELETION_GRACE_PERIOD} and can be restored, unless
+                you choose to delete it immediately.
               </p>
             </div>
 
