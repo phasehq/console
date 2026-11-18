@@ -5,6 +5,9 @@ import { EnvironmentType } from '@/apollo/graphql'
 import { DeleteEnvironment } from '@/components/environments/ManageEnvironmentDialog'
 
 const deleteEnvironment = jest.fn(async (_options: { variables: unknown }) => ({}))
+const hasPermission = jest.fn(
+  (_resource: string, _action: string, _isAppResource?: boolean) => true
+)
 
 jest.mock('@/graphql/mutations/environments/renameEnvironment.gql', () => ({ RenameEnv: {} }), {
   virtual: true,
@@ -30,7 +33,9 @@ jest.mock('@/contexts/organisationContext', () => {
     organisationContext: createContext({ activeOrganisation: { id: 'org-1', plan: 'PR' } }),
   }
 })
-jest.mock('@/utils/access/permissions', () => ({ userHasPermission: () => true }))
+jest.mock('@/hooks/useAppPermissions', () => ({
+  useAppPermissions: () => ({ hasPermission, isGlobalAccess: false }),
+}))
 jest.mock('@/components/settings/organisation/UpsellDialog', () => ({ UpsellDialog: () => null }))
 jest.mock('@/components/forms/UpgradeRequestForm', () => ({ UpgradeRequestForm: () => null }))
 jest.mock('@/components/common/Avatar', () => ({ Avatar: () => null }))
@@ -78,6 +83,8 @@ describe('DeleteEnvironment', () => {
 
   beforeEach(() => {
     deleteEnvironment.mockClear()
+    hasPermission.mockReset()
+    hasPermission.mockReturnValue(true)
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -133,6 +140,17 @@ describe('DeleteEnvironment', () => {
     await act(async () => button('Delete now')!.click())
 
     expect(deleteEnvironment).not.toHaveBeenCalled()
+  })
+
+  it('offers nothing without the permission to delete Environments in this App', async () => {
+    hasPermission.mockReturnValue(false)
+
+    await act(async () => {
+      root.render(<DeleteEnvironment environment={environment} />)
+    })
+
+    expect(button('Delete')).toBeUndefined()
+    expect(hasPermission).toHaveBeenCalledWith('Environments', 'delete', true)
   })
 
   it('forgets the choice and the typed name when closed', async () => {

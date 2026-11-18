@@ -29,13 +29,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
   const userCanReadEnvironments = hasPermission('Environments', 'read', true)
   const userCanCreateEnvironments = hasPermission('Environments', 'create', true)
   const userCanUpdateEnvironments = hasPermission('Environments', 'update', true)
-
-  const userCanDeleteEnvironments = userHasPermission(
-    organisation?.role?.permissions,
-    'Environments',
-    'delete',
-    true
-  )
+  const userCanDeleteEnvironments = hasPermission('Environments', 'delete', true)
 
   const { appEnvironments, fetching } = useAppSecrets(
     appId,
