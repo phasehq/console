@@ -562,6 +562,39 @@ def decrypt_secret_value(
     return value
 
 
+# One ${...} with no brace inside. Unlike the three patterns above this one
+# cannot backtrack, so it is safe on a value an Agent supplies.
+_REFERENCE_BODY_PATTERN = re.compile(r"\$\{([^{}]+)\}")
+
+
+def split_references(value):
+    """
+    The references in a plaintext value, as CROSS_APP_ENV_PATTERN,
+    CROSS_ENV_PATTERN and LOCAL_REF_PATTERN find them, in time linear in the
+    length of the value.
+
+    Returns:
+        tuple: ([(app, env)], [env], has_local_reference)
+    """
+    cross_app, cross_env, has_local = [], [], False
+    for body in _REFERENCE_BODY_PATTERN.findall(value):
+        if "." not in body:
+            has_local = True
+            continue
+        separator = body.find("::", 1)
+        if separator != -1:
+            dot = body.find(".", separator + 3)
+            if dot != -1 and dot + 1 < len(body):
+                cross_app.append((body[:separator], body[separator + 2 : dot]))
+            continue
+        if "::" in body:
+            continue
+        dot = body.find(".")
+        if 0 < dot < len(body) - 1:
+            cross_env.append(body[:dot])
+    return cross_app, cross_env, has_local
+
+
 def reference_target_environments(value, environment):
     """
     The environment each reference in a plaintext value points at, found the
@@ -579,8 +612,9 @@ def reference_target_environments(value, environment):
     App = apps.get_model("api", "App")
 
     targets = []
+    cross_app, cross_env, has_local = split_references(value)
 
-    for ref_app, ref_env, _ in CROSS_APP_ENV_PATTERN.findall(value):
+    for ref_app, ref_env in cross_app:
         try:
             referenced_app = App.objects.get(
                 name__iexact=ref_app, organisation=environment.app.organisation
@@ -596,7 +630,7 @@ def reference_target_environments(value, environment):
         ):
             targets.append(None)
 
-    for ref_env, _ in CROSS_ENV_PATTERN.findall(value):
+    for ref_env in cross_env:
         try:
             targets.append(
                 Environment.objects.get(name__iexact=ref_env, app=environment.app)
@@ -604,7 +638,7 @@ def reference_target_environments(value, environment):
         except (Environment.DoesNotExist, Environment.MultipleObjectsReturned):
             targets.append(None)
 
-    if LOCAL_REF_PATTERN.search(value):
+    if has_local:
         targets.append(environment)
 
     return targets
