@@ -6,13 +6,11 @@ import clsx from 'clsx'
 import {
   FaCog,
   FaCubes,
-  FaExchangeAlt,
   FaHome,
   FaPlus,
   FaUsersCog,
   FaProjectDiagram,
   FaBook,
-  FaChevronDown,
   FaChevronRight,
   FaEllipsisH,
   FaExternalLinkAlt,
@@ -31,10 +29,9 @@ import { useQuery } from '@apollo/client'
 import { organisationContext } from '@/contexts/organisationContext'
 import { SidebarContext } from '@/contexts/sidebarContext'
 import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { ApiOrganisationPlanChoices, AppType, OrganisationType } from '@/apollo/graphql'
+import { AppType, OrganisationType } from '@/apollo/graphql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { Menu, Popover, Transition } from '@headlessui/react'
-import { Button } from '../common/Button'
 import { LogoWordMark } from '../common/LogoWordMark'
 import { SidebarToggle } from './SidebarToggle'
 import { ModeToggle } from '../common/ModeToggle'
@@ -370,164 +367,6 @@ const SettingsMenu = ({
   </SidebarFooterMenu>
 )
 
-const planStyle = (plan?: ApiOrganisationPlanChoices) => {
-  if (plan === ApiOrganisationPlanChoices.Fr)
-    return 'ring-neutral-500/40 bg-neutral-500/40 text-zinc-900 dark:bg-zinc-800 dark:text-neutral-500'
-  if (plan === ApiOrganisationPlanChoices.Pr)
-    return 'ring-emerald-400/10 bg-emerald-400 text-zinc-900 dark:bg-emerald-400/10 dark:text-emerald-400'
-  if (plan === ApiOrganisationPlanChoices.En)
-    return 'ring-amber-400/10 bg-amber-400 text-zinc-900 dark:bg-amber-400/10 dark:text-amber-400'
-}
-
-const OrgLabel = ({
-  organisation,
-  collapsed,
-  showChevron,
-  open,
-}: {
-  organisation: OrganisationType | null
-  collapsed: boolean
-  showChevron: boolean
-  open?: boolean
-}) => (
-  <div
-    className={clsx(
-      'text-neutral-500 flex items-center transition-colors ease rounded-lg',
-      collapsed
-        ? `size-8 justify-center ${planStyle(organisation?.plan)}`
-        : 'min-h-9 w-full gap-2 px-3 py-1.5 bg-neutral-500/10 ring-1 ring-inset ring-neutral-400/10'
-    )}
-  >
-    {collapsed ? (
-      <span className="font-bold text-base">{organisation?.name?.[0]?.toUpperCase()}</span>
-    ) : (
-      // The plan wraps onto its own line rather than squeezing a long name
-      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
-        {/* text-left: the span sits inside a <button>, which centers text by default */}
-        <span
-          title={organisation?.name}
-          className="min-w-0 flex-auto truncate text-left text-sm font-semibold tracking-wide text-zinc-700 dark:text-zinc-300"
-        >
-          {organisation?.name}
-        </span>
-        <span className="flex shrink-0">
-          <PlanLabel plan={organisation?.plan!} />
-        </span>
-      </span>
-    )}
-    {showChevron && !collapsed && (
-      <FaChevronDown
-        className={clsx(
-          'size-2.5 shrink-0 text-neutral-500 transition transform ease',
-          open ? 'rotate-180' : 'rotate-0'
-        )}
-      />
-    )}
-  </div>
-)
-
-const OrgSwitcher = ({
-  organisations,
-  activeOrganisation,
-  isOwner,
-  collapsed,
-}: {
-  organisations: OrganisationType[] | null
-  activeOrganisation: OrganisationType | null
-  isOwner: boolean
-  collapsed: boolean
-}) => {
-  const showOrgsMenu = !!organisations && organisations.length > 1
-
-  // Fixed-size cell when collapsed, so the label doesn't slide while the sidebar resizes
-  const cellStyle = clsx(
-    'group/item relative flex items-center justify-center',
-    collapsed ? 'h-9 w-10' : 'min-h-9 w-full'
-  )
-
-  if (!showOrgsMenu)
-    return (
-      <div className={cellStyle}>
-        <OrgLabel organisation={activeOrganisation} collapsed={collapsed} showChevron={false} />
-        {collapsed && <div className={TOOLTIP_STYLE}>{activeOrganisation?.name}</div>}
-      </div>
-    )
-
-  return (
-    <Menu as="div" className={clsx(cellStyle, 'text-left')}>
-      {({ open }) => (
-        <>
-          <Menu.Button className={collapsed ? 'block' : 'w-full flex items-center'}>
-            <OrgLabel
-              organisation={activeOrganisation}
-              collapsed={collapsed}
-              showChevron
-              open={open}
-            />
-          </Menu.Button>
-          {collapsed && !open && <div className={TOOLTIP_STYLE}>{activeOrganisation?.name}</div>}
-          <Transition
-            as={Fragment}
-            enter="transition ease-out duration-100"
-            enterFrom="transform opacity-0 scale-95"
-            enterTo="transform opacity-100 scale-100"
-            leave="transition ease-in duration-75"
-            leaveFrom="transform opacity-100 scale-100"
-            leaveTo="transform opacity-0 scale-95"
-          >
-            <Menu.Items
-              className={clsx(
-                'absolute z-20 shadow-2xl divide-y divide-neutral-500/40 rounded-md bg-neutral-200 dark:bg-neutral-800 ring-1 ring-inset ring-neutral-500/40 focus:outline-none',
-                collapsed
-                  ? 'left-full ml-4 top-0 w-56 origin-top-left'
-                  : 'left-0 top-full mt-1 w-full origin-top-left'
-              )}
-            >
-              <div className="px-1 py-1">
-                {organisations.map((org: OrganisationType) => (
-                  <Menu.Item key={org.id}>
-                    {({ active }) => (
-                      <Link href={`/${org.name}`}>
-                        <div
-                          title={`Switch to ${org.name}`}
-                          className={`${
-                            active
-                              ? 'hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-neutral-100 dark:hover:bg-neutral-700'
-                              : 'text-zinc-700 dark:text-zinc-300 dark:hover:text-emerald-500'
-                          } group flex w-full gap-2 items-center justify-between px-2 py-2 border-b border-neutral-500/20`}
-                        >
-                          <div className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden">
-                            <div>
-                              <PlanLabel plan={org?.plan!} />
-                            </div>
-                            <span className="block w-full truncate text-left font-medium text-sm">
-                              {org.name}
-                            </span>
-                          </div>
-                          <FaExchangeAlt className="flex-shrink-0" />
-                        </div>
-                      </Link>
-                    )}
-                  </Menu.Item>
-                ))}
-              </div>
-              {!isOwner && (
-                <div className="py-3 px-1 flex justify-center">
-                  <Link href="/onboard">
-                    <Button variant="secondary" icon={FaPlus}>
-                      Create New Organisation
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </Menu.Items>
-          </Transition>
-        </>
-      )}
-    </Menu>
-  )
-}
-
 const MobileMoreMenu = ({
   overflowLinks,
   organisations,
@@ -786,32 +625,31 @@ const Sidebar = () => {
       >
         {/* pl-[23px] centres the logo mark on the nav icons in both states */}
         <div className="flex h-12 shrink-0 items-center justify-between overflow-hidden pl-[23px] pr-3">
-          <Link href="/" aria-label="Phase" className="shrink-0">
-            {/* Collapsing clips the wordmark down to its mark */}
-            <div
-              className={clsx(
-                'overflow-hidden transition-all duration-300',
-                collapsed ? 'w-[18px]' : 'w-16'
-              )}
-            >
-              <LogoWordMark className="w-16 max-w-none fill-black dark:fill-white" />
-            </div>
-          </Link>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Link href="/" aria-label="Phase" className="shrink-0">
+              {/* Collapsing clips the wordmark down to its mark */}
+              <div
+                className={clsx(
+                  'overflow-hidden transition-all duration-300',
+                  collapsed ? 'w-[18px]' : 'w-16'
+                )}
+              >
+                <LogoWordMark className="w-16 max-w-none fill-black dark:fill-white" />
+              </div>
+            </Link>
+            {activeOrganisation && (
+              <Fade show={!collapsed}>
+                <span className="flex">
+                  <PlanLabel plan={activeOrganisation.plan} size="sm" />
+                </span>
+              </Fade>
+            )}
+          </div>
           <Fade show={!collapsed}>
             <div>
               <SidebarToggle />
             </div>
           </Fade>
-        </div>
-
-        {/* Pinned, so the list scrolls underneath it */}
-        <div className="shrink-0 px-3 pt-3">
-          <OrgSwitcher
-            organisations={switchableOrganisations}
-            activeOrganisation={activeOrganisation}
-            isOwner={!!isOwner}
-            collapsed={collapsed}
-          />
         </div>
 
         {/* Collapsed: tooltips and flyouts must overflow the rail. Expanded: scrolled items fade at the edges */}

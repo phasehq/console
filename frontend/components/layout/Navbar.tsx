@@ -19,6 +19,7 @@ import { LogoMark } from '../common/LogoMark'
 import CommandPalette from '../common/CommandPalette'
 import UserMenu from '../UserMenu'
 import { SidebarToggle } from './SidebarToggle'
+import { OrgSwitcher } from './OrgSwitcher'
 
 import { useParsedRoute } from '@/utils/route'
 
@@ -63,7 +64,8 @@ export const NavBar = () => {
 
   const breadcrumbs = generateBreadcrumbs(navigationContext)
 
-  const BreadCrumbs = () => {
+  // Called, not mounted: a nested component remounts on every render, which would close the org menu
+  const renderBreadcrumbs = () => {
     return (
       <div className="flex items-center gap-2 min-w-0 overflow-hidden">
         {/* md+ shows the logo in the sidebar instead */}
@@ -97,6 +99,7 @@ export const NavBar = () => {
                 {crumb.label}
               </span>
             )}
+            {index === 0 && <OrgSwitcher />}
           </div>
         ))}
       </div>
@@ -119,7 +122,7 @@ export const NavBar = () => {
     // and takes the free width; md+ keeps the centered 3-column grid
     // md+ blends into the shell, so it drops its own background and border
     <header className="relative z-10 pr-3 sm:pr-4 lg:pr-6 pl-3 md:pl-4 lg:pl-6 w-full h-12 shrink-0 border-b border-neutral-500/20 flex gap-2 md:grid md:grid-cols-3 md:gap-4 items-center justify-between text-neutral-500 font-medium text-xs bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md md:border-b-0 md:bg-transparent md:backdrop-blur-none md:dark:bg-transparent">
-      <BreadCrumbs />
+      {renderBreadcrumbs()}
 
       <div className="flex min-w-0 flex-1 justify-center md:w-full">
         <CommandPalette />
