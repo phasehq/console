@@ -10,7 +10,6 @@ import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { AppType, EnvironmentType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
-import { SidebarContext } from '@/contexts/sidebarContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { generateBreadcrumbs, generatePageTitle, NavigationContext } from '@/utils/navigation'
 
@@ -18,14 +17,12 @@ import { StatusIndicator } from '../common/StatusIndicator'
 import { LogoMark } from '../common/LogoMark'
 import CommandPalette from '../common/CommandPalette'
 import UserMenu from '../UserMenu'
-import { SidebarToggle } from './SidebarToggle'
 import { OrgSwitcher } from './OrgSwitcher'
 
 import { useParsedRoute } from '@/utils/route'
 
 export const NavBar = () => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
-  const { sidebarState, isAutoCollapsed } = useContext(SidebarContext)
   const { team, context, appId, envId, page, subPage } = useParsedRoute()
   const searchParams = useSearchParams()
   const tab = searchParams?.get('tab')
@@ -72,13 +69,6 @@ export const NavBar = () => {
         <Link href="/" className="shrink-0 md:hidden">
           <LogoMark className="size-7 fill-black dark:fill-white" />
         </Link>
-
-        {/* The collapsed sidebar has no room for its toggle */}
-        {sidebarState === 'collapsed' && !isAutoCollapsed && (
-          <div className="-ml-1.5 hidden shrink-0 md:block">
-            <SidebarToggle />
-          </div>
-        )}
 
         {breadcrumbs.map((crumb, index) => (
           <div key={index} className="hidden min-w-0 items-center gap-2 text-xs md:flex">

@@ -27,13 +27,12 @@ import {
 import { IconType } from 'react-icons'
 import { useQuery } from '@apollo/client'
 import { organisationContext } from '@/contexts/organisationContext'
-import { SidebarContext } from '@/contexts/sidebarContext'
 import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AppType, OrganisationType } from '@/apollo/graphql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { Menu, Popover, Transition } from '@headlessui/react'
 import { LogoWordMark } from '../common/LogoWordMark'
-import { SidebarToggle } from './SidebarToggle'
+import { SIDEBAR_WIDTH, SidebarResizeHandle } from './SidebarResizeHandle'
 import { ModeToggle } from '../common/ModeToggle'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
 import { FaCodeMerge, FaListUl } from 'react-icons/fa6'
@@ -470,8 +469,8 @@ const MobileMoreMenu = ({
 }
 
 const Sidebar = () => {
-  const { sidebarState, isAutoCollapsed } = useContext(SidebarContext)
-  const collapsed = isAutoCollapsed || sidebarState === 'collapsed'
+  // Narrow windows get an icon rail; wider ones a sidebar the user can resize
+  const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const [, team, section, page] = pathname?.split('/') ?? []
   const { organisations, activeOrganisation } = useContext(organisationContext)
@@ -480,6 +479,14 @@ const Sidebar = () => {
   const isOwner = organisations?.some((org) => org.role!.name!.toLowerCase() === 'owner')
 
   const navRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const handleResize = () => setCollapsed(window.innerWidth <= 1024)
+
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // null until the stored state has loaded, so it isn't overwritten on mount
   const [openGroups, setOpenGroups] = useState<Record<string, boolean> | null>(null)
@@ -618,38 +625,27 @@ const Sidebar = () => {
   return (
     <>
       <aside
+        style={collapsed ? undefined : { width: SIDEBAR_WIDTH }}
         className={clsx(
-          'hidden h-dvh shrink-0 flex-col text-black transition-all duration-300 dark:text-white md:flex',
-          collapsed ? 'w-16' : 'w-64'
+          'relative hidden h-dvh shrink-0 flex-col text-black dark:text-white md:flex',
+          collapsed && 'w-16'
         )}
       >
         {/* pl-[23px] centres the logo mark on the nav icons in both states */}
-        <div className="flex h-12 shrink-0 items-center justify-between overflow-hidden pl-[23px] pr-3">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Link href="/" aria-label="Phase" className="shrink-0">
-              {/* Collapsing clips the wordmark down to its mark */}
-              <div
-                className={clsx(
-                  'overflow-hidden transition-all duration-300',
-                  collapsed ? 'w-[18px]' : 'w-16'
-                )}
-              >
-                <LogoWordMark className="w-16 max-w-none fill-black dark:fill-white" />
-              </div>
-            </Link>
-            {activeOrganisation && (
-              <Fade show={!collapsed}>
-                <span className="flex">
-                  <PlanLabel plan={activeOrganisation.plan} size="sm" />
-                </span>
-              </Fade>
-            )}
-          </div>
-          <Fade show={!collapsed}>
-            <div>
-              <SidebarToggle />
+        <div className="flex h-12 shrink-0 items-center gap-1.5 overflow-hidden pl-[23px] pr-3">
+          <Link href="/" aria-label="Phase" className="shrink-0">
+            {/* The rail clips the wordmark down to its mark */}
+            <div className={clsx('overflow-hidden', collapsed ? 'w-[18px]' : 'w-16')}>
+              <LogoWordMark className="w-16 max-w-none fill-black dark:fill-white" />
             </div>
-          </Fade>
+          </Link>
+          {activeOrganisation && (
+            <Fade show={!collapsed}>
+              <span className="flex">
+                <PlanLabel plan={activeOrganisation.plan} size="sm" />
+              </span>
+            </Fade>
+          )}
         </div>
 
         {/* Collapsed: tooltips and flyouts must overflow the rail. Expanded: scrolled items fade at the edges */}
@@ -682,6 +678,8 @@ const Sidebar = () => {
           <HelpMenu collapsed={collapsed} />
           <SettingsMenu team={team} active={settingsActive} collapsed={collapsed} />
         </div>
+
+        {!collapsed && <SidebarResizeHandle />}
       </aside>
 
       {/* z-10 keeps Headless UI dialogs (also z-10, portaled later in <body>) painting above the nav */}
