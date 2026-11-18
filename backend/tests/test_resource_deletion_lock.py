@@ -586,7 +586,9 @@ class TestLockedResourcesAreLeftAlone:
             environment_model.objects.filter.return_value = [MagicMock(id="env-1")]
             environment_model.all_objects.filter.return_value.exists.return_value = True
 
-            with pytest.raises(GraphQLError, match="scheduled for deletion"):
+            with pytest.raises(
+                GraphQLError, match="scheduled for deletion.*delete it now"
+            ):
                 mutations.InitEnvSync.mutate(None, _info(), app_id="app-1", env_keys=[])
 
         key_model.objects.filter.assert_not_called()

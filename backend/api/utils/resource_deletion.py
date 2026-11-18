@@ -1,6 +1,6 @@
 """App and environment deletion: a delete request locks the app or environment
 for a grace period, after which a background job purges it unless it was
-restored."""
+restored. A deletion asked for at once skips the grace period."""
 
 from datetime import timedelta
 
@@ -34,14 +34,16 @@ def deletion_scheduled_for(resource):
     deletion is pending."""
     if not is_pending_deletion(resource):
         return None
+    if resource.skip_grace_period:
+        return resource.deleted_at
     return resource.deleted_at + GRACE_PERIOD
 
 
 def purge_due(resource):
-    """Whether the grace period has ended."""
-    return (
-        is_pending_deletion(resource)
-        and resource.deleted_at <= timezone.now() - GRACE_PERIOD
+    """Whether the grace period has ended, or was skipped."""
+    return is_pending_deletion(resource) and (
+        resource.skip_grace_period
+        or resource.deleted_at <= timezone.now() - GRACE_PERIOD
     )
 
 
@@ -54,16 +56,18 @@ def can_restore(resource):
 
 
 def ready_for_purge(queryset):
-    """Narrow an `all_objects` queryset to what the purge job may delete."""
+    """Narrow an `all_objects` queryset to what the purge job may delete. A
+    deletion asked for at once needs no margin: no restore can race it."""
     return pending_deletion(queryset).filter(
-        deleted_at__lte=timezone.now() - GRACE_PERIOD - PURGE_MARGIN
+        Q(skip_grace_period=True)
+        | Q(deleted_at__lte=timezone.now() - GRACE_PERIOD - PURGE_MARGIN)
     )
 
 
 def is_ready_for_purge(resource):
-    return (
-        is_pending_deletion(resource)
-        and resource.deleted_at <= timezone.now() - GRACE_PERIOD - PURGE_MARGIN
+    return is_pending_deletion(resource) and (
+        resource.skip_grace_period
+        or resource.deleted_at <= timezone.now() - GRACE_PERIOD - PURGE_MARGIN
     )
 
 
@@ -105,7 +109,7 @@ def environment_name_conflict_message(conflict, name):
     if conflict == NAME_PENDING_DELETION:
         return (
             f"An environment named '{name}' is scheduled for deletion in this "
-            "app. Restore it, or wait until it has been deleted."
+            "app. Restore it, delete it now, or wait until it has been deleted."
         )
     return f"An environment named '{name}' already exists in this app."
 
@@ -114,21 +118,67 @@ class ResourceDeletionError(Exception):
     """A deletion or restore that can't go ahead. The message is for the user."""
 
 
-def schedule_app_deletion(app):
-    """Lock `app` for the grace period, after which it is purged."""
-    App = apps.get_model("api", "App")
+def _scheduled(now, immediately):
+    """The column values that schedule a deletion made at `now`."""
+    return {
+        "deleted_at": now,
+        "is_deleted": False,
+        "purge_blocked_at": None,
+        "skip_grace_period": immediately,
+        "updated_at": now,
+    }
+
+
+def _skip_grace_period(resource, queryset, kind):
+    """Give up the rest of a pending deletion's grace period. `resource` is
+    locked by the caller."""
+    if not is_pending_deletion(resource):
+        raise ResourceDeletionError(f"This {kind} is not scheduled for deletion.")
+    if purge_due(resource):
+        raise ResourceDeletionError(
+            f"The deletion of this {kind} is already under way."
+        )
 
     now = timezone.now()
+    # deleted_at moves to this request: it is the one the purge acts on.
+    values = {"deleted_at": now, "skip_grace_period": True, "updated_at": now}
+    queryset.filter(id=resource.id).update(**values)
+    for field, value in values.items():
+        setattr(resource, field, value)
+
+
+def schedule_app_deletion(app, immediately=False):
+    """Lock `app`. It is purged after the grace period, or as soon as a worker
+    is free when `immediately`."""
+    App = apps.get_model("api", "App")
+
+    values = _scheduled(timezone.now(), immediately)
     # A conditional update, so two requests can't both schedule it.
     scheduled = App.all_objects.filter(id=app.id, deleted_at__isnull=True).update(
-        deleted_at=now, is_deleted=False, purge_blocked_at=None, updated_at=now
+        **values
     )
     if not scheduled:
         raise ResourceDeletionError("This app is already scheduled for deletion.")
 
-    app.deleted_at = now
-    app.is_deleted = False
-    app.purge_blocked_at = None
+    for field, value in values.items():
+        setattr(app, field, value)
+    return app
+
+
+def delete_app_now(app_id):
+    """Skip the rest of a pending app's grace period: it is purged as soon as
+    a worker is free, and can't be restored. Returns the app."""
+    App = apps.get_model("api", "App")
+
+    with transaction.atomic():
+        # of=self: the organisation row stays unlocked.
+        app = (
+            App.all_objects.select_for_update(of=("self",))
+            .select_related("organisation")
+            .get(id=app_id)
+        )
+        _skip_grace_period(app, App.all_objects, "app")
+
     return app
 
 
@@ -159,7 +209,15 @@ def restore_app(app_id):
 
         app.deleted_at = None
         app.purge_blocked_at = None
-        app.save(update_fields=["deleted_at", "purge_blocked_at", "updated_at"])
+        app.skip_grace_period = False
+        app.save(
+            update_fields=[
+                "deleted_at",
+                "purge_blocked_at",
+                "skip_grace_period",
+                "updated_at",
+            ]
+        )
         # Its environments pending deletion could be neither purged nor
         # restored meanwhile, so they get the whole grace period again.
         _restart_grace_periods(Environment.all_objects.filter(app=app))
@@ -167,23 +225,46 @@ def restore_app(app_id):
     return app
 
 
-def schedule_environment_deletion(environment):
-    """Lock `environment` for the grace period, after which it is purged."""
+def schedule_environment_deletion(environment, immediately=False):
+    """Lock `environment`. It is purged after the grace period, or as soon as
+    a worker is free when `immediately`."""
     Environment = apps.get_model("api", "Environment")
 
-    now = timezone.now()
+    values = _scheduled(timezone.now(), immediately)
     # update(), not save(): Environment.save() triggers the environment's syncs.
     scheduled = Environment.all_objects.filter(
         id=environment.id, deleted_at__isnull=True
-    ).update(deleted_at=now, is_deleted=False, purge_blocked_at=None, updated_at=now)
+    ).update(**values)
     if not scheduled:
         raise ResourceDeletionError(
             "This environment is already scheduled for deletion."
         )
 
-    environment.deleted_at = now
-    environment.is_deleted = False
-    environment.purge_blocked_at = None
+    for field, value in values.items():
+        setattr(environment, field, value)
+    return environment
+
+
+def delete_environment_now(environment_id):
+    """Skip the rest of a pending environment's grace period: it is purged as
+    soon as a worker is free, and can't be restored. Returns the environment."""
+    Environment = apps.get_model("api", "Environment")
+
+    with transaction.atomic():
+        # of=self: the app row stays unlocked.
+        environment = (
+            Environment.all_objects.select_for_update(of=("self",))
+            .select_related("app__organisation")
+            .get(id=environment_id)
+        )
+        if environment.app.deleted_at is not None:
+            # Its purge waits for the app's, so there is nothing to bring forward.
+            raise ResourceDeletionError(
+                "This environment's app is scheduled for deletion. It is "
+                "deleted with the app."
+            )
+        _skip_grace_period(environment, Environment.all_objects, "environment")
+
     return environment
 
 
@@ -240,10 +321,15 @@ def restore_environment(environment_id):
         # update(), not save(): Environment.save() triggers the environment's
         # syncs, which the restore job re-runs once this has committed.
         Environment.all_objects.filter(id=environment.id).update(
-            deleted_at=None, purge_blocked_at=None, index=index, updated_at=now
+            deleted_at=None,
+            purge_blocked_at=None,
+            skip_grace_period=False,
+            index=index,
+            updated_at=now,
         )
         environment.deleted_at = None
         environment.purge_blocked_at = None
+        environment.skip_grace_period = False
         environment.index = index
         environment.updated_at = now
 

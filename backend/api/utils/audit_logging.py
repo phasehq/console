@@ -206,7 +206,7 @@ def _serialize_value(val):
 
 
 def deletion_actor(organisation, resource_type, resource_id):
-    """Who scheduled an app or environment for deletion, as (actor_type,
+    """Who last asked for an app or environment to be deleted, as (actor_type,
     actor_id, actor_metadata). The purge that follows is logged as theirs."""
     scheduled = (
         AuditEvent.objects.filter(

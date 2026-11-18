@@ -240,6 +240,7 @@ from .graphene.mutations.environment import (
     CreateSecretTagMutation,
     CreateUserTokenMutation,
     DeleteEnvironmentMutation,
+    DeleteEnvironmentNowMutation,
     DeletePersonalSecretMutation,
     DeleteSecretFolderMutation,
     DeleteUserTokenMutation,
@@ -283,6 +284,7 @@ from .graphene.mutations.app import (
     BulkAddAppMembersMutation,
     CreateAppMutation,
     DeleteAppMutation,
+    DeleteAppNowMutation,
     MemberType,
     RemoveAppMemberMutation,
     RestoreAppMutation,
@@ -1475,6 +1477,7 @@ class Mutation(graphene.ObjectType):
 
     create_app = CreateAppMutation.Field()
     delete_app = DeleteAppMutation.Field()
+    delete_app_now = DeleteAppNowMutation.Field()
     restore_app = RestoreAppMutation.Field()
     update_app_info = UpdateAppInfoMutation.Field()
     add_app_member = AddAppMemberMutation.Field()
@@ -1484,6 +1487,7 @@ class Mutation(graphene.ObjectType):
 
     create_environment = CreateEnvironmentMutation.Field()
     delete_environment = DeleteEnvironmentMutation.Field()
+    delete_environment_now = DeleteEnvironmentNowMutation.Field()
     restore_environment = RestoreEnvironmentMutation.Field()
     rename_environment = RenameEnvironmentMutation.Field()
     update_environment_order = UpdateEnvironmentOrderMutation.Field()

@@ -94,7 +94,8 @@ class InitEnvSync(graphene.Mutation):
         if Environment.all_objects.filter(app=app, deleted_at__isnull=False).exists():
             raise GraphQLError(
                 "This App has an environment that is scheduled for deletion. "
-                "Restore it, or wait until it has been deleted, to enable SSE."
+                "Restore it, delete it now, or wait until it has been deleted, to "
+                "enable SSE."
             )
 
         for env in app_environments.values():

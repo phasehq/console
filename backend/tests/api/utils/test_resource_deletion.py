@@ -54,13 +54,21 @@ def _environment(deleted_ago=None, blocked_ago=None, app=None, **attrs):
 
 
 def _where(queryset):
-    """A queryset's conditions, as {(table, column, lookup): value}."""
-    return {
-        (condition.lhs.alias, condition.lhs.target.column, condition.lookup_name): (
-            condition.rhs
-        )
-        for condition in queryset.query.where.children
-    }
+    """A queryset's conditions, as {(table, column, lookup): value}. A group
+    of alternatives is under "or", in the same form."""
+
+    def conditions(node):
+        described = {}
+        for child in node.children:
+            if hasattr(child, "children"):
+                assert child.connector == "OR"
+                described["or"] = conditions(child)
+            else:
+                key = (child.lhs.alias, child.lhs.target.column, child.lookup_name)
+                described[key] = child.rhs
+        return described
+
+    return conditions(queryset.query.where)
 
 
 @contextmanager
@@ -119,6 +127,7 @@ class TestSaveKeepsTheLock:
         assert "deleted_at" not in fields
         assert "is_deleted" not in fields
         assert "purge_blocked_at" not in fields
+        assert "skip_grace_period" not in fields
         assert {"name", "updated_at"} <= set(fields)
         assert "id" not in fields
 
@@ -197,6 +206,29 @@ class TestSchedule:
 
         assert deletion.can_restore(blocked) is True
 
+    @pytest.mark.parametrize("resource", [_app, _environment])
+    def test_a_deletion_asked_for_at_once_has_no_grace_period(self, resource):
+        immediate = resource(deleted_ago=timedelta(seconds=1), skip_grace_period=True)
+
+        assert deletion.purge_due(immediate) is True
+        assert deletion.can_restore(immediate) is False
+        # No margin either: no restore can race the purge.
+        assert deletion.is_ready_for_purge(immediate) is True
+        assert deletion.deletion_scheduled_for(immediate) == immediate.deleted_at
+
+    def test_a_deletion_asked_for_at_once_is_restorable_only_while_blocked(self):
+        blocked = _app(
+            deleted_ago=timedelta(hours=2),
+            blocked_ago=timedelta(hours=1),
+            skip_grace_period=True,
+        )
+
+        assert deletion.can_restore(blocked) is True
+
+    def test_skipping_the_grace_period_means_nothing_unless_pending(self):
+        assert deletion.purge_due(_app(skip_grace_period=True)) is False
+        assert deletion.is_ready_for_purge(_app(skip_grace_period=True)) is False
+
     def test_an_app_soft_deleted_by_an_old_release_is_not_pending(self):
         # Releases before 2024 set both columns and kept the row for good.
         legacy = _app(deleted_ago=timedelta(days=900), is_deleted=True)
@@ -228,7 +260,7 @@ class TestPendingQuerysets:
 
         where = _where(deletion.ready_for_purge(model.all_objects.filter(id="id-1")))
 
-        cutoff = where.pop((table, "deleted_at", "lte"))
+        cutoff = where["or"].pop((table, "deleted_at", "lte"))
         assert earliest <= cutoff <= timezone.now() - GRACE_PERIOD - PURGE_MARGIN
         # One table, so the purge's conditional updates re-check the row they
         # waited for.
@@ -236,6 +268,8 @@ class TestPendingQuerysets:
             (table, "id", "exact"): "id-1",
             (table, "deleted_at", "isnull"): False,
             (table, "is_deleted", "exact"): False,
+            # Or at once, when the grace period was skipped.
+            "or": {(table, "skip_grace_period", "exact"): True},
         }
 
 
@@ -295,6 +329,8 @@ class TestEnvironmentNameConflict:
         in_use = deletion.environment_name_conflict_message(NAME_IN_USE, "Staging")
 
         assert "scheduled for deletion" in pending and "Restore it" in pending
+        # The way to free the name without waiting.
+        assert "delete it now" in pending
         assert in_use == "An environment named 'Staging' already exists in this app."
 
 
@@ -316,10 +352,26 @@ class TestScheduleAppDeletion:
         # Pending, not a row soft-deleted by an old release.
         assert update["is_deleted"] is False
         assert update["purge_blocked_at"] is None
+        assert update["skip_grace_period"] is False
         assert app.deleted_at == update["deleted_at"]
         assert app.purge_blocked_at is None
         assert deletion.is_pending_deletion(app)
+        assert deletion.can_restore(app)
         delete.assert_not_called()
+
+    def test_skips_the_grace_period_when_asked(self):
+        model = MagicMock()
+        model.all_objects.filter.return_value.update.return_value = 1
+        app = _app()
+
+        with _models(App=model):
+            deletion.schedule_app_deletion(app, immediately=True)
+
+        update = model.all_objects.filter.return_value.update.call_args.kwargs
+        assert update["skip_grace_period"] is True
+        assert app.skip_grace_period is True
+        assert deletion.is_ready_for_purge(app)
+        assert not deletion.can_restore(app)
 
     def test_refuses_an_app_already_scheduled(self):
         model = MagicMock()
@@ -353,7 +405,12 @@ class TestRestoreApp:
         assert restored is app
         assert app.deleted_at is None
         self.save.assert_called_once_with(
-            update_fields=["deleted_at", "purge_blocked_at", "updated_at"]
+            update_fields=[
+                "deleted_at",
+                "purge_blocked_at",
+                "skip_grace_period",
+                "updated_at",
+            ]
         )
         # The organisation row stays unlocked.
         model.all_objects.select_for_update.assert_called_once_with(of=("self",))
@@ -386,6 +443,26 @@ class TestRestoreApp:
 
         assert app.deleted_at is None
         assert app.purge_blocked_at is None
+
+    def test_refuses_a_deletion_asked_for_at_once(self):
+        app = _app(deleted_ago=timedelta(seconds=5), skip_grace_period=True)
+
+        with pytest.raises(ResourceDeletionError, match="no longer be restored"):
+            self._run(app)
+
+        self.save.assert_not_called()
+
+    def test_a_restore_while_blocked_brings_the_grace_period_back(self):
+        # Deleted again later, it is scheduled as usual unless asked otherwise.
+        app = _app(
+            deleted_ago=timedelta(hours=2),
+            blocked_ago=timedelta(hours=1),
+            skip_grace_period=True,
+        )
+
+        self._run(app)
+
+        assert app.skip_grace_period is False
 
     def test_refuses_when_the_plan_has_no_room_left(self):
         # Apps pending deletion don't count towards the limit, so the slot
@@ -428,10 +505,24 @@ class TestScheduleEnvironmentDeletion:
         update = model.all_objects.filter.return_value.update.call_args.kwargs
         assert update["is_deleted"] is False
         assert update["purge_blocked_at"] is None
+        assert update["skip_grace_period"] is False
         assert deletion.is_pending_deletion(environment)
         # Environment.save() would trigger the environment's syncs.
         save.assert_not_called()
         delete.assert_not_called()
+
+    def test_skips_the_grace_period_when_asked(self):
+        model = MagicMock()
+        model.all_objects.filter.return_value.update.return_value = 1
+        environment = _environment()
+
+        with _models(Environment=model):
+            deletion.schedule_environment_deletion(environment, immediately=True)
+
+        update = model.all_objects.filter.return_value.update.call_args.kwargs
+        assert update["skip_grace_period"] is True
+        assert deletion.is_ready_for_purge(environment)
+        assert not deletion.can_restore(environment)
 
     def test_refuses_an_environment_already_scheduled(self):
         model = MagicMock()
@@ -480,6 +571,7 @@ class TestRestoreEnvironment:
         update = model.all_objects.filter.return_value.update.call_args.kwargs
         assert update["deleted_at"] is None
         assert update["purge_blocked_at"] is None
+        assert update["skip_grace_period"] is False
         assert update["index"] == 2
         # Environment.save() would trigger syncs inside the transaction.
         self.save.assert_not_called()
@@ -565,3 +657,93 @@ class TestRestartGracePeriods:
             restarted = pending.return_value.update.call_args.kwargs
             assert timezone.now() - restarted["deleted_at"] < timedelta(seconds=5)
             assert restarted["purge_blocked_at"] is None
+
+
+class TestDeleteNow:
+    """Skipping the rest of the grace period of something already scheduled."""
+
+    def _app_now(self, app):
+        model = MagicMock()
+        locked = model.all_objects.select_for_update.return_value
+        locked.select_related.return_value.get.return_value = app
+        with _models(App=model):
+            return deletion.delete_app_now("app-1"), model
+
+    def _environment_now(self, environment):
+        model = MagicMock()
+        locked = model.all_objects.select_for_update.return_value
+        locked.select_related.return_value.get.return_value = environment
+        with _models(Environment=model), patch.object(Environment, "save") as save:
+            try:
+                return deletion.delete_environment_now("env-1"), model
+            finally:
+                self.save = save
+
+    def test_an_app_loses_the_rest_of_its_grace_period(self):
+        app = _app(deleted_ago=timedelta(hours=3))
+
+        deleted, model = self._app_now(app)
+
+        assert deleted is app
+        # The organisation row stays unlocked.
+        model.all_objects.select_for_update.assert_called_once_with(of=("self",))
+        model.all_objects.filter.assert_called_once_with(id="app-1")
+        update = model.all_objects.filter.return_value.update.call_args.kwargs
+        assert update["skip_grace_period"] is True
+        # The request the purge now acts on.
+        assert timezone.now() - update["deleted_at"] < timedelta(seconds=5)
+        assert app.skip_grace_period is True
+        assert deletion.is_ready_for_purge(app)
+        assert not deletion.can_restore(app)
+
+    def test_an_environment_loses_the_rest_of_its_grace_period(self):
+        environment = _environment(deleted_ago=timedelta(hours=3))
+
+        deleted, model = self._environment_now(environment)
+
+        assert deleted is environment
+        # The app row stays unlocked.
+        model.all_objects.select_for_update.assert_called_once_with(of=("self",))
+        update = model.all_objects.filter.return_value.update.call_args.kwargs
+        assert update["skip_grace_period"] is True
+        assert deletion.is_ready_for_purge(environment)
+        # Environment.save() would trigger the environment's syncs.
+        self.save.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "app, reason",
+        [
+            (_app(), "not scheduled for deletion"),
+            (
+                _app(deleted_ago=timedelta(days=900), is_deleted=True),
+                "not scheduled for deletion",
+            ),
+            (_app(deleted_ago=PAST_GRACE), "already under way"),
+            (
+                _app(deleted_ago=timedelta(seconds=5), skip_grace_period=True),
+                "already under way",
+            ),
+            (
+                _app(deleted_ago=timedelta(days=3), blocked_ago=timedelta(days=1)),
+                "already under way",
+            ),
+        ],
+        ids=["live", "soft-deleted-by-an-old-release", "due", "asked-already", "blocked"],
+    )
+    def test_refuses_what_has_no_grace_period_left_to_skip(self, app, reason):
+        before = app.deleted_at
+
+        with pytest.raises(ResourceDeletionError, match=reason):
+            self._app_now(app)
+
+        assert app.deleted_at == before
+
+    def test_an_environment_whose_app_is_pending_goes_with_the_app(self):
+        environment = _environment(
+            deleted_ago=timedelta(hours=3), app=_app(deleted_ago=timedelta(hours=1))
+        )
+
+        with pytest.raises(ResourceDeletionError, match="deleted with the app"):
+            self._environment_now(environment)
+
+        assert environment.skip_grace_period is False

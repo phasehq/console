@@ -16,12 +16,16 @@ from api.utils.audit_logging import log_secret_event, log_secret_events_bulk, lo
 from api.utils.resource_deletion import (
     NAME_PENDING_DELETION,
     ResourceDeletionError,
+    delete_environment_now,
     deletion_scheduled_for,
     environment_name_conflict,
     restore_environment,
     schedule_environment_deletion,
 )
-from api.tasks.resource_deletion import enqueue_environment_restored
+from api.tasks.resource_deletion import (
+    enqueue_environment_purge,
+    enqueue_environment_restored,
+)
 from api.utils.secrets import create_environment_folder_structure, normalize_path_string
 from backend.quotas import can_add_environment, can_use_custom_envs
 import graphene
@@ -130,7 +134,7 @@ def _check_environment_name_is_free(app, name, exclude_id=None):
     if conflict == NAME_PENDING_DELETION:
         raise GraphQLError(
             "An Environment with this name is scheduled for deletion in this "
-            "App! Restore it, or wait until it has been deleted."
+            "App! Restore it, delete it now, or wait until it has been deleted."
         )
     if conflict:
         raise GraphQLError("An Environment with this name already exists in this App!")
@@ -396,43 +400,98 @@ def _descendant_folder_ids(folder):
     return seen
 
 
+def _check_may_delete_environment(user, environment, include_deleted=False):
+    """`include_deleted` reaches an environment that is already pending
+    deletion, to delete it now."""
+    app = environment.app
+    org = app.organisation
+
+    if not user_has_permission(
+        user,
+        "delete",
+        "Environments",
+        org,
+        True,
+        app=app,
+        include_deleted=include_deleted,
+    ):
+        raise GraphQLError("You do not have permission to delete environments")
+
+    if not user_can_access_environment(
+        user.userId, environment.id, include_deleted=include_deleted
+    ):
+        raise GraphQLError("You don't have access to this environment")
+
+    # An env that contains live rotating secrets can't be deleted without
+    # RotatingSecrets:delete — otherwise a caller with only Environments:delete
+    # could destroy a rotation config (and its provider creds via cascade).
+    if RotatingSecret.objects.filter(
+        environment=environment, deleted_at__isnull=True
+    ).exists():
+        if not user_has_permission(
+            user,
+            "delete",
+            "RotatingSecrets",
+            org,
+            True,
+            app=app,
+            include_deleted=include_deleted,
+        ):
+            raise GraphQLError(
+                "This environment contains rotating secrets. You need "
+                "permission to delete rotating secrets to remove it."
+            )
+
+
+def _log_environment_deletion_requested(info, environment):
+    """Audit a delete request. The purge is later logged as this actor's."""
+    org = environment.app.organisation
+    if environment.skip_grace_period:
+        description = (
+            f"Requested immediate deletion of environment '{environment.name}'"
+        )
+    else:
+        description = (
+            f"Scheduled environment '{environment.name}' for deletion on "
+            f"{deletion_scheduled_for(environment):%Y-%m-%d %H:%M} UTC"
+        )
+
+    actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
+    ip_address, user_agent = get_resolver_request_meta(info.context)
+    log_audit_event(
+        organisation=org,
+        event_type="D",
+        resource_type="env",
+        resource_id=environment.id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        actor_metadata=actor_metadata,
+        resource_metadata={"name": environment.name},
+        description=description,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+
 class DeleteEnvironmentMutation(graphene.Mutation):
     """Schedule the environment for deletion. It is locked straight away and
-    purged by a background job once the grace period ends, unless restored."""
+    purged by a background job once the grace period ends, unless restored.
+    With `immediately`, there is no grace period and no restore."""
 
     class Arguments:
         environment_id = graphene.ID(required=True)
+        immediately = graphene.Boolean(default_value=False)
 
     ok = graphene.Boolean()
     environment = graphene.Field(DeletedEnvironmentType)
 
     @classmethod
-    def mutate(cls, root, info, environment_id):
+    def mutate(cls, root, info, environment_id, immediately=False):
         user = info.context.user
         environment = Environment.objects.get(id=environment_id)
         org = environment.app.organisation
 
-        if not user_has_permission(
-            info.context.user, "delete", "Environments", org, True, app=environment.app
-        ):
-            raise GraphQLError("You do not have permission to delete environments")
-
-        if not user_can_access_environment(user.userId, environment.id):
-            raise GraphQLError("You don't have access to this environment")
-
-        # An env that contains live rotating secrets can't be deleted without
-        # RotatingSecrets:delete — otherwise a caller with only Environments:delete
-        # could destroy a rotation config (and its provider creds via cascade).
-        if RotatingSecret.objects.filter(
-            environment=environment, deleted_at__isnull=True
-        ).exists():
-            if not user_has_permission(
-                user, "delete", "RotatingSecrets", org, True, app=environment.app
-            ):
-                raise GraphQLError(
-                    "This environment contains rotating secrets. You need "
-                    "permission to delete rotating secrets to remove it."
-                )
+        _check_may_delete_environment(user, environment)
 
         if not can_use_custom_envs(org):
             raise GraphQLError(
@@ -440,30 +499,46 @@ class DeleteEnvironmentMutation(graphene.Mutation):
             )
 
         try:
-            schedule_environment_deletion(environment)
+            schedule_environment_deletion(environment, immediately=bool(immediately))
         except ResourceDeletionError as e:
             raise GraphQLError(str(e))
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
-        ip_address, user_agent = get_resolver_request_meta(info.context)
-        log_audit_event(
-            organisation=org,
-            event_type="D",
-            resource_type="env",
-            resource_id=environment.id,
-            actor_type=actor_type,
-            actor_id=actor_id,
-            actor_metadata=actor_metadata,
-            resource_metadata={"name": environment.name},
-            description=(
-                f"Scheduled environment '{environment.name}' for deletion on "
-                f"{deletion_scheduled_for(environment):%Y-%m-%d %H:%M} UTC"
-            ),
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
+        _log_environment_deletion_requested(info, environment)
+        if environment.skip_grace_period:
+            transaction.on_commit(lambda: enqueue_environment_purge(environment.id))
 
         return DeleteEnvironmentMutation(ok=True, environment=environment)
+
+
+class DeleteEnvironmentNowMutation(graphene.Mutation):
+    """Delete an environment that is scheduled for deletion without waiting
+    for the rest of its grace period. It can no longer be restored."""
+
+    class Arguments:
+        environment_id = graphene.ID(required=True)
+
+    environment = graphene.Field(DeletedEnvironmentType)
+
+    @classmethod
+    def mutate(cls, root, info, environment_id):
+        user = info.context.user
+        # all_objects: an environment pending deletion is hidden from
+        # Environment.objects.
+        environment = Environment.all_objects.select_related("app__organisation").get(
+            id=environment_id
+        )
+
+        _check_may_delete_environment(user, environment, include_deleted=True)
+
+        try:
+            environment = delete_environment_now(environment.id)
+        except ResourceDeletionError as e:
+            raise GraphQLError(str(e))
+
+        _log_environment_deletion_requested(info, environment)
+        transaction.on_commit(lambda: enqueue_environment_purge(environment.id))
+
+        return DeleteEnvironmentNowMutation(environment=environment)
 
 
 class RestoreEnvironmentMutation(graphene.Mutation):

@@ -217,7 +217,12 @@ class ActivatedPhaseLicense(models.Model):
     activated_at = models.DateTimeField(auto_now_add=True)
 
 
-DELETION_LOCK_FIELDS = ("deleted_at", "is_deleted", "purge_blocked_at")
+DELETION_LOCK_FIELDS = (
+    "deleted_at",
+    "is_deleted",
+    "purge_blocked_at",
+    "skip_grace_period",
+)
 
 
 def _without_deletion_lock(instance, update_fields):
@@ -274,6 +279,8 @@ class App(models.Model):
     is_deleted = models.BooleanField(default=False)
     # Set while a credential that can't be revoked holds up the purge.
     purge_blocked_at = models.DateTimeField(blank=True, null=True)
+    # Deletion was asked for at once: no grace period, so no restore.
+    skip_grace_period = models.BooleanField(default=False)
     sse_enabled = models.BooleanField(default=False)
 
     # Declared first, so it is the default manager.
@@ -581,6 +588,8 @@ class Environment(models.Model):
     is_deleted = models.BooleanField(default=False)
     # Set while a credential that can't be revoked holds up the purge.
     purge_blocked_at = models.DateTimeField(blank=True, null=True)
+    # Deletion was asked for at once: no grace period, so no restore.
+    skip_grace_period = models.BooleanField(default=False)
 
     # Declared first, so it is the default manager.
     objects = EnvironmentManager()

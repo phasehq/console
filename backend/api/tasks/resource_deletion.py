@@ -2,7 +2,8 @@
 
 A delete request locks the app or environment (``deleted_at``): it is hidden,
 and its syncs and rotations pause. An hourly sweep enqueues a purge on the
-maintenance queue once the grace period has ended. The purge revokes live
+maintenance queue once the grace period has ended; a deletion asked for at
+once is enqueued straight away. The purge revokes live
 provider credentials, stops sync jobs, deletes the secret events in throttled
 batches, then deletes the app or environment and everything under it, and
 emails the organisation's owners. Restoring lifts the lock and resumes the
@@ -180,9 +181,21 @@ def init_resource_deletion_sweeper():
     )
 
 
+def enqueue_app_purge(app_id):
+    """For a deletion asked for at once: don't wait for the sweep, which
+    still retries it."""
+    enqueue_purges(purge_app, "purge-app", [app_id], PURGE_JOB_TIMEOUT)
+
+
+def enqueue_environment_purge(environment_id):
+    enqueue_purges(
+        purge_environment, "purge-environment", [environment_id], PURGE_JOB_TIMEOUT
+    )
+
+
 def sweep_resource_deletions():
     """Enqueue a purge for every app and environment whose grace period has
-    ended."""
+    ended, or was skipped."""
     App = apps.get_model("api", "App")
     Environment = apps.get_model("api", "Environment")
 
@@ -281,7 +294,7 @@ def _mark_blocked(pending, label, email_delayed):
 
 
 def _requested_by(actor):
-    """Who scheduled the deletion, for the email, or None if unknown."""
+    """Who asked for the deletion, for the email, or None if unknown."""
     actor_type, _, metadata = actor
     if actor_type == "sa":
         name = metadata.get("name")
@@ -290,7 +303,7 @@ def _requested_by(actor):
 
 
 def _recipients(organisation, actor):
-    """The organisation's owners, and the member who scheduled the deletion:
+    """The organisation's owners, and the member who asked for the deletion:
     nobody was waiting on the request that finished it."""
     OrganisationMember = apps.get_model("api", "OrganisationMember")
     from api.emails import get_user_display_name
@@ -331,7 +344,8 @@ def _email(organisation, actor, send):
 
 
 def purge_app(app_id):
-    """Permanently delete an app whose grace period has ended."""
+    """Permanently delete an app whose grace period has ended, or was
+    skipped."""
     App = apps.get_model("api", "App")
     Environment = apps.get_model("api", "Environment")
     from api.emails import send_app_deleted_email, send_app_deletion_delayed_email
@@ -402,7 +416,8 @@ def purge_app(app_id):
 
 
 def purge_environment(environment_id):
-    """Permanently delete an environment whose grace period has ended."""
+    """Permanently delete an environment whose grace period has ended, or
+    was skipped."""
     Environment = apps.get_model("api", "Environment")
     from api.emails import (
         send_environment_deleted_email,

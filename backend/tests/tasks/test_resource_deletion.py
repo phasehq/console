@@ -16,6 +16,8 @@ from api.tasks import resource_deletion as jobs
 from api.utils.resource_deletion import GRACE_PERIOD, PURGE_MARGIN
 
 DUE = GRACE_PERIOD + timedelta(hours=1)
+# Deleted a moment ago, with the grace period skipped.
+IMMEDIATE = {"deleted_ago": timedelta(seconds=1), "skip_grace_period": True}
 RECIPIENTS = [("owner@acme.test", "Owner"), ("dev@acme.test", "Dev")]
 
 
@@ -48,13 +50,21 @@ def _environment(deleted_ago=DUE, app=None, **attrs):
 
 
 def _where(queryset):
-    """A queryset's conditions, as {(table, column, lookup): value}."""
-    return {
-        (condition.lhs.alias, condition.lhs.target.column, condition.lookup_name): (
-            condition.rhs
-        )
-        for condition in queryset.query.where.children
-    }
+    """A queryset's conditions, as {(table, column, lookup): value}. A group
+    of alternatives is under "or", in the same form."""
+
+    def conditions(node):
+        described = {}
+        for child in node.children:
+            if hasattr(child, "children"):
+                assert child.connector == "OR"
+                described["or"] = conditions(child)
+            else:
+                key = (child.lhs.alias, child.lhs.target.column, child.lookup_name)
+                described[key] = child.rhs
+        return described
+
+    return conditions(queryset.query.where)
 
 
 @contextmanager
@@ -182,27 +192,50 @@ class TestSweep:
         apps, _, (earliest, latest) = self._sweep()
 
         where = _where(apps[2])
-        assert earliest <= where.pop(("api_app", "deleted_at", "lte")) <= latest
+        cutoff = where["or"].pop(("api_app", "deleted_at", "lte"))
+        assert earliest <= cutoff <= latest
         assert where == {
             ("api_app", "deleted_at", "isnull"): False,
             # Apps soft-deleted by releases before 2024 are never purged.
             ("api_app", "is_deleted", "exact"): False,
             # An organisation pending deletion takes its apps with it.
             ("api_organisation", "deleted_at", "isnull"): True,
+            # Or at once, when the grace period was skipped: the sweep retries
+            # a purge that was enqueued straight away and did not finish.
+            "or": {("api_app", "skip_grace_period", "exact"): True},
         }
 
     def test_an_environment_whose_app_is_pending_too_is_left_to_the_app(self):
         _, environments, (earliest, latest) = self._sweep()
 
         where = _where(environments[2])
-        cutoff = where.pop(("api_environment", "deleted_at", "lte"))
+        cutoff = where["or"].pop(("api_environment", "deleted_at", "lte"))
         assert earliest <= cutoff <= latest
         assert where == {
             ("api_environment", "deleted_at", "isnull"): False,
             ("api_environment", "is_deleted", "exact"): False,
             ("api_app", "deleted_at", "isnull"): True,
             ("api_organisation", "deleted_at", "isnull"): True,
+            "or": {("api_environment", "skip_grace_period", "exact"): True},
         }
+
+    @pytest.mark.parametrize(
+        "enqueue, purge_job, prefix",
+        [
+            ("enqueue_app_purge", "purge_app", "purge-app"),
+            ("enqueue_environment_purge", "purge_environment", "purge-environment"),
+        ],
+    )
+    def test_a_deletion_asked_for_at_once_does_not_wait_for_the_sweep(
+        self, enqueue, purge_job, prefix
+    ):
+        with patch.object(jobs, "enqueue_purges") as enqueue_purges:
+            getattr(jobs, enqueue)("id-1")
+
+        # The sweep's job id: the two can't run the same purge twice at once.
+        enqueue_purges.assert_called_once_with(
+            getattr(jobs, purge_job), prefix, ["id-1"], jobs.PURGE_JOB_TIMEOUT
+        )
 
     def test_registration_replaces_the_schedule(self):
         scheduler = MagicMock()
@@ -299,6 +332,8 @@ class TestPurgeApp:
             _app(deleted_ago=GRACE_PERIOD + timedelta(minutes=1)),
             _app(deleted_ago=timedelta(days=900), is_deleted=True),
             _app(organisation_deleted_ago=timedelta(hours=1)),
+            _app(organisation_deleted_ago=timedelta(hours=1), **IMMEDIATE),
+            _app(deleted_ago=None, skip_grace_period=True),
         ],
         ids=[
             "already-purged",
@@ -307,6 +342,8 @@ class TestPurgeApp:
             "within-the-margin",
             "soft-deleted-by-an-old-release",
             "organisation-pending-too",
+            "asked-for-at-once-but-organisation-pending-too",
+            "live-with-a-stray-flag",
         ],
     )
     def test_does_nothing_unless_due(self, app, steps):
@@ -314,6 +351,40 @@ class TestPurgeApp:
             jobs.purge_app("app-1")
 
         assert steps.mock_calls == []
+
+    def test_a_deletion_asked_for_at_once_is_not_held_for_the_grace_period(
+        self, steps
+    ):
+        app = _app(**IMMEDIATE)
+
+        with _models(App=_model(app), Environment=MagicMock()):
+            jobs.purge_app("app-1")
+
+        assert _called(steps)[:6] == [
+            "leases",
+            "rotating",
+            "claim",
+            "syncs",
+            "events",
+            "delete",
+        ]
+        steps.delete.assert_called_once_with(app)
+
+    def test_a_deletion_asked_for_at_once_can_be_blocked_like_any_other(self, steps):
+        steps.leases.side_effect = purge.PurgeBlockedError("could not revoke 1")
+
+        with _models(App=_model(_app(**IMMEDIATE))), pytest.raises(
+            purge.PurgeBlockedError
+        ):
+            jobs.purge_app("app-1")
+
+        # Nothing is deleted; the block makes it restorable.
+        assert _called(steps) == [
+            "leases",
+            "block",
+            "email_app_delayed",
+            "email_app_delayed",
+        ]
 
     def test_deletes_the_app_after_releasing_what_it_holds(self, steps):
         app = _app()
@@ -359,7 +430,7 @@ class TestPurgeApp:
         assert audit["event_type"] == "D"
         assert audit["resource_type"] == "app"
         assert audit["resource_id"] == "app-1"
-        # Logged as the action of whoever scheduled the deletion.
+        # Logged as the action of whoever asked for the deletion.
         assert audit["actor_id"] == "member-1"
         assert audit["description"] == "Permanently deleted app 'Billing'"
 
@@ -490,6 +561,11 @@ class TestPurgeEnvironment:
             _environment(
                 app=_app(deleted_ago=None, organisation_deleted_ago=timedelta(1))
             ),
+            _environment(app=_app(deleted_ago=timedelta(minutes=5)), **IMMEDIATE),
+            _environment(
+                app=_app(deleted_ago=None, organisation_deleted_ago=timedelta(1)),
+                **IMMEDIATE,
+            ),
         ],
         ids=[
             "already-purged",
@@ -499,6 +575,8 @@ class TestPurgeEnvironment:
             "soft-deleted",
             "app-pending-too",
             "organisation-pending-too",
+            "asked-for-at-once-but-app-pending-too",
+            "asked-for-at-once-but-organisation-pending-too",
         ],
     )
     def test_does_nothing_unless_due(self, environment, steps):
@@ -506,6 +584,24 @@ class TestPurgeEnvironment:
             jobs.purge_environment("env-1")
 
         assert steps.mock_calls == []
+
+    def test_a_deletion_asked_for_at_once_is_not_held_for_the_grace_period(
+        self, steps
+    ):
+        environment = _environment(**IMMEDIATE)
+
+        with _models(Environment=_model(environment)):
+            jobs.purge_environment("env-1")
+
+        assert _called(steps)[:6] == [
+            "leases",
+            "rotating",
+            "claim",
+            "syncs",
+            "events",
+            "delete",
+        ]
+        steps.delete.assert_called_once_with(environment)
 
     def test_deletes_the_environment_after_releasing_what_it_holds(self, steps):
         environment = _environment()
@@ -667,7 +763,8 @@ class TestDeletionEmails:
         assert "Hi Ada" in text
         assert "The app <b>Billing</b> in your Phase organisation <b>Acme</b>" in text
         assert "permanently deleted" in text
-        assert "scheduled for deletion by <b>dev@acme.test</b>" in text
+        # True of a scheduled deletion and of one asked for at once.
+        assert "It was deleted by <b>dev@acme.test</b>" in text
 
     def test_environment_deleted_email(self):
         subject, recipients, text = self._sent(
@@ -678,8 +775,8 @@ class TestDeletionEmails:
         assert recipients == ["owner@acme.test"]
         assert "The environment <b>Staging</b> of the app <b>Billing</b>" in text
         assert "<b>Acme</b>" in text
-        # Left out when nobody is known to have scheduled it.
-        assert "scheduled for deletion by" not in text
+        # Left out when nobody is known to have asked for it.
+        assert "It was deleted by" not in text
 
     def test_app_deletion_delayed_email(self):
         subject, recipients, text = self._sent(
