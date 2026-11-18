@@ -98,7 +98,7 @@ describe('DeleteEnvironment', () => {
   it('schedules the deletion by default, and says when the Environment will be deleted', async () => {
     await open()
 
-    expect(document.body.textContent).toContain('This Environment will be deleted on')
+    expect(document.body.textContent).toContain('This Environment will be deleted in 24 hours, on')
     expect(document.body.textContent).toContain('You can restore it until then')
     expect(document.body.textContent).toContain(
       'Its name cannot be reused until it has been deleted'
@@ -120,7 +120,9 @@ describe('DeleteEnvironment', () => {
 
     expect(document.body.textContent).toContain('This Environment will be deleted immediately')
     expect(document.body.textContent).toContain('This cannot be undone')
-    expect(document.body.textContent).not.toContain('This Environment will be deleted on')
+    expect(document.body.textContent).not.toContain(
+      'This Environment will be deleted in 24 hours, on'
+    )
     expect(button('Schedule for deletion')).toBeUndefined()
 
     await typeName('staging')
@@ -160,7 +162,7 @@ describe('DeleteEnvironment', () => {
     await act(async () => button('Cancel')!.click())
     await act(async () => button('Delete')!.click())
 
-    expect(document.body.textContent).toContain('This Environment will be deleted on')
+    expect(document.body.textContent).toContain('This Environment will be deleted in 24 hours, on')
     expect(button('Schedule for deletion')!.disabled).toBe(true)
   })
 })

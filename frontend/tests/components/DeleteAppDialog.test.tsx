@@ -78,7 +78,7 @@ describe('DeleteAppDialog', () => {
   it('schedules the deletion by default, and says when the App will be deleted', async () => {
     await open()
 
-    expect(document.body.textContent).toContain('This App will be deleted on')
+    expect(document.body.textContent).toContain('This App will be deleted in 24 hours, on')
     expect(document.body.textContent).toContain('You can restore the App until then')
     expect(document.body.textContent).not.toContain('This App will be deleted immediately')
     expect(button('Schedule for deletion')).toBeDefined()
@@ -98,7 +98,7 @@ describe('DeleteAppDialog', () => {
 
     expect(document.body.textContent).toContain('This App will be deleted immediately')
     expect(document.body.textContent).toContain('This cannot be undone')
-    expect(document.body.textContent).not.toContain('This App will be deleted on')
+    expect(document.body.textContent).not.toContain('This App will be deleted in 24 hours, on')
     expect(button('Delete now')).toBeDefined()
     expect(button('Schedule for deletion')).toBeUndefined()
 
@@ -115,7 +115,7 @@ describe('DeleteAppDialog', () => {
     await tickDeleteImmediately()
     await tickDeleteImmediately()
 
-    expect(document.body.textContent).toContain('This App will be deleted on')
+    expect(document.body.textContent).toContain('This App will be deleted in 24 hours, on')
     expect(button('Schedule for deletion')).toBeDefined()
   })
 })

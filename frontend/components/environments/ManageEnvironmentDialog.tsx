@@ -231,7 +231,8 @@ export const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
                       ) : (
                         <div className="space-y-1">
                           <p className="font-bold">
-                            This Environment will be deleted on {scheduledFor}
+                            This Environment will be deleted in {DELETION_GRACE_PERIOD}, on{' '}
+                            {scheduledFor}
                           </p>
                           <p>
                             It becomes unavailable straight away, along with all Secrets and

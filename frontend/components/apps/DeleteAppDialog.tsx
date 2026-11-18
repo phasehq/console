@@ -9,6 +9,7 @@ import { Button } from '../common/Button'
 import { DeleteApplication } from '@/graphql/mutations/deleteApp.gql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetDeletedApps } from '@/graphql/queries/apps/getDeletedApps.gql'
+import { DELETION_GRACE_PERIOD } from '@/constants'
 import { scheduledDeletionDate } from '@/utils/organisation'
 import { useMutation } from '@apollo/client'
 import { useRouter } from 'next/navigation'
@@ -154,7 +155,9 @@ export default function DeleteAppDialog(props: {
                           </div>
                         ) : (
                           <div className="space-y-1">
-                            <p className="font-bold">This App will be deleted on {scheduledFor}</p>
+                            <p className="font-bold">
+                              This App will be deleted in {DELETION_GRACE_PERIOD}, on {scheduledFor}
+                            </p>
 
                             <p>
                               Its environments and secrets become unavailable straight away. You can
