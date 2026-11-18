@@ -24,9 +24,11 @@ import {
   FaSlack,
   FaGithub,
 } from 'react-icons/fa'
+import { TbLayoutSidebarLeftCollapseFilled, TbLayoutSidebarLeftExpandFilled } from 'react-icons/tb'
 import { IconType } from 'react-icons'
 import { useQuery } from '@apollo/client'
 import { organisationContext } from '@/contexts/organisationContext'
+import { SidebarContext } from '@/contexts/sidebarContext'
 import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AppType, OrganisationType } from '@/apollo/graphql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
@@ -66,6 +68,12 @@ const INACTIVE_STYLE =
   'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
 const TOOLTIP_STYLE =
   'invisible group-hover/item:visible absolute left-full ml-4 top-1/2 -translate-y-1/2 bg-zinc-800 text-white px-2 py-1 rounded text-xs whitespace-nowrap z-50'
+
+// How long the sidebar takes to collapse or expand. Must match the duration in SLIDE
+const SLIDE_MS = 300
+// Applied only while that runs, so the sidebar never animates on load or while it is resized
+const SLIDE =
+  'transition-[width,height,grid-template-columns,opacity] duration-300 ease-in-out motion-reduce:transition-none'
 
 // Fades its child in and out as the sidebar expands and collapses
 const Fade = ({ show, children }: { show: boolean; children: React.ReactElement }) => (
@@ -107,11 +115,13 @@ const SidebarSubLink = ({ sublink }: { sublink: SidebarSubLinkT }) => (
 const SidebarItem = ({
   link,
   collapsed,
+  animating,
   open = false,
   setOpen,
 }: {
   link: SidebarLinkT
   collapsed: boolean
+  animating: boolean
   open?: boolean
   setOpen?: (open: boolean) => void
 }) => {
@@ -141,7 +151,8 @@ const SidebarItem = ({
         >
           <div className="text-base">{link.icon}</div>
           <Fade show={!collapsed}>
-            <span className="truncate">{link.name}</span>
+            {/* Clipped, not ellipsised, while the sidebar opens over it */}
+            <span className={clsx('truncate', animating && 'text-clip')}>{link.name}</span>
           </Fade>
         </Link>
         <Fade show={hasSublinks && !collapsed}>
@@ -159,17 +170,23 @@ const SidebarItem = ({
         </Fade>
       </div>
 
-      {/* Unmounted when collapsed, so the rail never has to scroll */}
-      {hasSublinks && !collapsed && (
+      {hasSublinks && (
         <div
-          inert={!open}
+          inert={!showSublinks}
           className={clsx(
-            'grid transition-[grid-template-rows] duration-200 ease-out',
-            open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+            'grid',
+            // Not for a sidebar that loads as the rail: its groups would be seen closing
+            (animating || !collapsed) && 'transition-[grid-template-rows] duration-200 ease-out',
+            showSublinks ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
           )}
         >
           <div className="overflow-hidden">
-            <ul className="ml-5 mt-1 space-y-0.5 border-l border-neutral-500/20 pl-[7px]">
+            <ul
+              className={clsx(
+                'ml-5 mt-1 space-y-0.5 border-l border-neutral-500/20 pl-[7px]',
+                animating && '[&_a]:text-clip'
+              )}
+            >
               {sublinks.map((sublink) => (
                 <li key={sublink.href}>
                   <SidebarSubLink sublink={sublink} />
@@ -204,8 +221,10 @@ const SidebarItem = ({
   )
 }
 
+// px-[13px] makes a button with a closed label 40px wide, with its icon under the nav icons
 const FOOTER_ITEM_STYLE =
-  'flex h-8 items-center gap-1.5 rounded-md text-2xs font-medium whitespace-nowrap transition ease'
+  'flex h-8 items-center rounded-md px-[13px] text-2xs font-medium whitespace-nowrap transition ease'
+const FOOTER_ICON_SLOT = 'flex size-3.5 shrink-0 items-center justify-center text-sm'
 const MENU_ROW_STYLE = 'flex h-8 w-full items-center gap-2 rounded-md px-2 text-xs transition ease'
 const MENU_ROW_ICON = 'size-3.5 shrink-0 text-neutral-500'
 
@@ -247,43 +266,68 @@ const FooterMenuLink = ({
   </Link>
 )
 
-// Popover opened from the pinned bottom row. A Popover, not a Menu, so Tab reaches the theme control
+// Closes to zero width instead of unmounting, so the button around it shrinks smoothly to its icon
+const FooterLabel = ({
+  show,
+  animating,
+  children,
+}: {
+  show: boolean
+  animating: boolean
+  children: React.ReactNode
+}) => (
+  <span
+    className={clsx(
+      'grid',
+      animating && SLIDE,
+      show ? 'grid-cols-[1fr]' : 'grid-cols-[0fr] opacity-0'
+    )}
+  >
+    {/* The padding sits a level down: on the grid item it would keep the column from closing */}
+    <span className="min-w-0 overflow-hidden">
+      <span className="flex items-center gap-1.5 pl-1.5">{children}</span>
+    </span>
+  </span>
+)
+
+// Popover opened from the pinned bottom pane. A Popover, not a Menu, so Tab reaches the theme control
 const SidebarFooterMenu = ({
   name,
   icon,
   active = false,
+  align,
   collapsed,
+  animating,
   children,
 }: {
   name: string
   icon: React.ReactNode
   active?: boolean
+  align: 'left' | 'right'
   collapsed: boolean
+  animating: boolean
   children: (close: () => void) => React.ReactNode
 }) => (
-  // Collapsed: the panel anchors to this cell. Expanded: it spans the bottom row
-  <Popover className={clsx('group/item', collapsed && 'relative')}>
+  <Popover
+    className={clsx('group/item absolute', align === 'left' ? 'left-0 top-0' : 'bottom-0 right-0')}
+  >
     {({ open }) => (
       <>
         {/* Headless focuses the button on click, which browsers draw as a keyboard focus ring */}
         <Popover.Button
-          aria-label={collapsed ? name : undefined}
           className={clsx(
             FOOTER_ITEM_STYLE,
             'outline-none data-[focus]:ring-2 data-[focus]:ring-neutral-500',
-            collapsed ? 'w-10 justify-center' : 'px-2',
             active || open ? [ACTIVE_BG, ACTIVE_TEXT] : [HOVER_BG, INACTIVE_STYLE]
           )}
         >
-          <div className="text-sm">{icon}</div>
-          <Fade show={!collapsed}>
-            <span className="flex items-center gap-1.5">
-              {name}
-              <FaChevronUp
-                className={clsx('size-2 transition transform ease', open && 'rotate-180')}
-              />
-            </span>
-          </Fade>
+          <span className={FOOTER_ICON_SLOT}>{icon}</span>
+          <FooterLabel show={!collapsed} animating={animating}>
+            {name}
+            <FaChevronUp
+              className={clsx('size-2 shrink-0 transition transform ease', open && 'rotate-180')}
+            />
+          </FooterLabel>
         </Popover.Button>
         {collapsed && !open && <div className={TOOLTIP_STYLE}>{name}</div>}
         <Transition
@@ -295,12 +339,17 @@ const SidebarFooterMenu = ({
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
+          {/* Collapsed: opens beside its button. Expanded: spans the pane, above its button */}
           <Popover.Panel
+            style={collapsed ? undefined : { width: `calc(${SIDEBAR_WIDTH} - 1.5rem)` }}
             className={clsx(
               'absolute z-20 divide-y divide-neutral-500/20 rounded-md bg-neutral-200 shadow-2xl ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-neutral-800',
               collapsed
                 ? 'bottom-0 left-full ml-4 w-56 origin-bottom-left'
-                : 'inset-x-3 bottom-full mb-1 origin-bottom'
+                : [
+                    'bottom-full mb-1',
+                    align === 'left' ? 'left-0 origin-bottom-left' : 'right-0 origin-bottom-right',
+                  ]
             )}
           >
             {({ close }) => <>{children(close)}</>}
@@ -311,8 +360,10 @@ const SidebarFooterMenu = ({
   </Popover>
 )
 
-const HelpMenu = ({ collapsed }: { collapsed: boolean }) => (
-  <SidebarFooterMenu name="Help" icon={<FaQuestionCircle />} collapsed={collapsed}>
+type FooterMenuProps = { collapsed: boolean; animating: boolean }
+
+const HelpMenu = (props: FooterMenuProps) => (
+  <SidebarFooterMenu name="Help" icon={<FaQuestionCircle />} align="left" {...props}>
     {(close) => (
       <div className="space-y-0.5 p-1">
         {HELP_LINKS.map(({ name, href, icon }) => (
@@ -328,13 +379,9 @@ const HelpMenu = ({ collapsed }: { collapsed: boolean }) => (
 const SettingsMenu = ({
   team,
   active,
-  collapsed,
-}: {
-  team: string
-  active: boolean
-  collapsed: boolean
-}) => (
-  <SidebarFooterMenu name="Settings" icon={<FaCog />} active={active} collapsed={collapsed}>
+  ...props
+}: FooterMenuProps & { team: string; active: boolean }) => (
+  <SidebarFooterMenu name="Settings" icon={<FaCog />} active={active} align="right" {...props}>
     {(close) => (
       <>
         <div className="p-1">
@@ -365,6 +412,38 @@ const SettingsMenu = ({
     )}
   </SidebarFooterMenu>
 )
+
+const SidebarCollapseToggle = ({
+  collapsed,
+  animating,
+  onToggle,
+}: FooterMenuProps & { onToggle: () => void }) => {
+  const Icon = collapsed ? TbLayoutSidebarLeftExpandFilled : TbLayoutSidebarLeftCollapseFilled
+
+  return (
+    <div className="group/item relative mb-1 flex">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        className={clsx(
+          FOOTER_ITEM_STYLE,
+          'outline-none focus-visible:ring-2 focus-visible:ring-neutral-500',
+          HOVER_BG,
+          INACTIVE_STYLE
+        )}
+      >
+        <span className={FOOTER_ICON_SLOT}>
+          <Icon className="size-[18px] shrink-0" />
+        </span>
+        <FooterLabel show={!collapsed} animating={animating}>
+          Collapse
+        </FooterLabel>
+      </button>
+      {collapsed && <div className={TOOLTIP_STYLE}>Expand sidebar</div>}
+    </div>
+  )
+}
 
 const MobileMoreMenu = ({
   overflowLinks,
@@ -469,8 +548,13 @@ const MobileMoreMenu = ({
 }
 
 const Sidebar = () => {
-  // Narrow windows get an icon rail; wider ones a sidebar the user can resize
-  const [collapsed, setCollapsed] = useState(false)
+  const { sidebarState, setUserPreference } = useContext(SidebarContext)
+  // Windows too narrow for the full sidebar get the icon rail, whatever the user chose
+  const [isAutoCollapsed, setIsAutoCollapsed] = useState(false)
+  const collapsed = isAutoCollapsed || sidebarState === 'collapsed'
+  // True while the sidebar moves between the two: see SLIDE
+  const [animating, setAnimating] = useState(false)
+  const animationTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const pathname = usePathname()
   const [, team, section, page] = pathname?.split('/') ?? []
   const { organisations, activeOrganisation } = useContext(organisationContext)
@@ -480,13 +564,40 @@ const Sidebar = () => {
 
   const navRef = useRef<HTMLElement>(null)
 
+  const stopAnimating = useCallback(() => {
+    clearTimeout(animationTimer.current)
+    setAnimating(false)
+  }, [])
+
+  const animate = useCallback(() => {
+    setAnimating(true)
+    clearTimeout(animationTimer.current)
+    // A fallback: the width transition normally ends it, but reduced motion has no transition
+    animationTimer.current = setTimeout(stopAnimating, SLIDE_MS + 50)
+  }, [stopAnimating])
+
+  useEffect(() => () => clearTimeout(animationTimer.current), [])
+
   useEffect(() => {
-    const handleResize = () => setCollapsed(window.innerWidth <= 1024)
+    let wasNarrow: boolean | null = null
+
+    const handleResize = () => {
+      const narrow = window.innerWidth <= 1024
+      // Not on load, when there is nothing to move from
+      if (wasNarrow !== null && wasNarrow !== narrow) animate()
+      wasNarrow = narrow
+      setIsAutoCollapsed(narrow)
+    }
 
     handleResize()
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [])
+  }, [animate])
+
+  const toggleCollapsed = () => {
+    animate()
+    setUserPreference(collapsed ? 'expanded' : 'collapsed')
+  }
 
   // null until the stored state has loaded, so it isn't overwritten on mount
   const [openGroups, setOpenGroups] = useState<Record<string, boolean> | null>(null)
@@ -626,8 +737,13 @@ const Sidebar = () => {
     <>
       <aside
         style={collapsed ? undefined : { width: SIDEBAR_WIDTH }}
+        onTransitionEnd={(event) => {
+          if (event.target === event.currentTarget && event.propertyName === 'width')
+            stopAnimating()
+        }}
         className={clsx(
           'relative hidden h-dvh shrink-0 flex-col text-black dark:text-white md:flex',
+          animating && SLIDE,
           collapsed && 'w-16'
         )}
       >
@@ -635,7 +751,13 @@ const Sidebar = () => {
         <div className="flex h-12 shrink-0 items-center gap-1.5 overflow-hidden pl-[23px] pr-3">
           <Link href="/" aria-label="Phase" className="shrink-0">
             {/* The rail clips the wordmark down to its mark */}
-            <div className={clsx('overflow-hidden', collapsed ? 'w-[18px]' : 'w-16')}>
+            <div
+              className={clsx(
+                'overflow-hidden',
+                animating && SLIDE,
+                collapsed ? 'w-[18px]' : 'w-16'
+              )}
+            >
               <LogoWordMark className="w-16 max-w-none fill-black dark:fill-white" />
             </div>
           </Link>
@@ -648,12 +770,12 @@ const Sidebar = () => {
           )}
         </div>
 
-        {/* Collapsed: tooltips and flyouts must overflow the rail. Expanded: scrolled items fade at the edges */}
+        {/* The settled rail lets tooltips and flyouts overflow it. Otherwise the list scrolls and fades at its edges */}
         <nav
           ref={navRef}
           className={clsx(
             'flex min-h-0 flex-1 flex-col gap-1 p-3',
-            collapsed
+            collapsed && !animating
               ? 'overflow-visible'
               : 'overflow-y-auto scrollbar-hide scroll-py-6 pb-6 [mask-image:linear-gradient(to_bottom,transparent,black_0.75rem,black_calc(100%_-_1.5rem),transparent)]'
           )}
@@ -663,20 +785,32 @@ const Sidebar = () => {
               key={link.name}
               link={link}
               collapsed={collapsed}
+              animating={animating}
               open={openGroups?.[link.name] ?? (link.active || !!link.defaultOpen)}
               setOpen={(open) => setGroupOpen(link.name, open)}
             />
           ))}
         </nav>
 
-        <div
-          className={clsx(
-            'relative flex shrink-0 gap-1 border-t border-neutral-500/20 px-3 py-2',
-            collapsed ? 'flex-col' : 'items-center justify-between'
+        <div className="shrink-0 border-t border-neutral-500/20 px-3 py-2">
+          {/* A window too narrow for the full sidebar has nothing to expand into */}
+          {!isAutoCollapsed && (
+            <SidebarCollapseToggle
+              collapsed={collapsed}
+              animating={animating}
+              onToggle={toggleCollapsed}
+            />
           )}
-        >
-          <HelpMenu collapsed={collapsed} />
-          <SettingsMenu team={team} active={settingsActive} collapsed={collapsed} />
+          {/* Help is pinned top left and Settings bottom right, so the row turns into a column as this box narrows and grows */}
+          <div className={clsx('relative', animating && SLIDE, collapsed ? 'h-[68px]' : 'h-8')}>
+            <HelpMenu collapsed={collapsed} animating={animating} />
+            <SettingsMenu
+              team={team}
+              active={settingsActive}
+              collapsed={collapsed}
+              animating={animating}
+            />
+          </div>
         </div>
 
         {!collapsed && <SidebarResizeHandle />}
