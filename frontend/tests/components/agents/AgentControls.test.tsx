@@ -1,0 +1,144 @@
+import React, { act } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { AgentSelect } from '@/components/agents/AgentSelect'
+import { AgentRequestStatusFilter } from '@/components/agents/AgentRequestStatusFilter'
+;(
+  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true
+
+describe('Agent controls', () => {
+  let container: HTMLDivElement
+  let root: Root
+
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+  })
+
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    container.remove()
+  })
+
+  test('uses the Phase listbox surface and selects an enabled option', async () => {
+    const onChange = jest.fn()
+    await act(async () => {
+      root.render(
+        <AgentSelect
+          id="test-agent-select"
+          value="org"
+          onChange={onChange}
+          options={[
+            { value: 'org', label: 'Organisation-owned' },
+            { value: 'team', label: 'Platform Team' },
+          ]}
+        />
+      )
+    })
+
+    expect(container.querySelector('select')).toBeNull()
+    const trigger = container.querySelector<HTMLButtonElement>('#test-agent-select')!
+    expect(trigger.getAttribute('aria-haspopup')).toBe('listbox')
+    expect(trigger.className).toContain('text-zinc-800')
+    expect(trigger.className).toContain('dark:text-zinc-100')
+
+    await act(async () => trigger.click())
+    const teamOption = Array.from(container.querySelectorAll<HTMLElement>('[role="option"]')).find(
+      (option) => option.textContent?.includes('Platform Team')
+    )!
+    await act(async () => teamOption.click())
+
+    expect(onChange).toHaveBeenCalledWith('team')
+  })
+
+  test("highlights the active option with the Agent menus' row tint", async () => {
+    await act(async () => {
+      root.render(
+        <AgentSelect
+          id="test-agent-select"
+          value="org"
+          onChange={jest.fn()}
+          options={[
+            { value: 'org', label: 'Organisation-owned' },
+            { value: 'team', label: 'Platform Team' },
+          ]}
+        />
+      )
+    })
+
+    await act(async () => container.querySelector<HTMLButtonElement>('#test-agent-select')!.click())
+    const listbox = container.querySelector<HTMLElement>('[role="listbox"]')!
+    await act(async () => {
+      listbox.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    })
+
+    const [org, team] = Array.from(container.querySelectorAll<HTMLElement>('[role="option"]'))
+    expect(team.className).toContain('bg-neutral-500/10')
+    expect(team.className).not.toContain('bg-zinc-100')
+    expect(org.className).not.toContain('bg-neutral-500/10')
+  })
+
+  test('keeps disabled listbox options inert', async () => {
+    const onChange = jest.fn()
+    await act(async () => {
+      root.render(
+        <AgentSelect
+          value="team"
+          onChange={onChange}
+          options={[
+            { value: 'org', label: 'Organisation-owned', disabled: true },
+            { value: 'team', label: 'Platform Team' },
+          ]}
+        />
+      )
+    })
+
+    await act(async () => container.querySelector<HTMLButtonElement>('button')!.click())
+    const organisationOption = Array.from(
+      container.querySelectorAll<HTMLElement>('[role="option"]')
+    ).find((option) => option.textContent?.includes('Organisation-owned'))!
+    expect(organisationOption.getAttribute('aria-disabled')).toBe('true')
+    await act(async () => organisationOption.click())
+
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  test('uses the log filter menu with semantic colors', async () => {
+    const onChange = jest.fn()
+    await act(async () => {
+      root.render(<AgentRequestStatusFilter value="pending" onChange={onChange} />)
+    })
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      '[title="Filter change requests by status"]'
+    )!
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(trigger.textContent).toContain('(active)')
+    // The active dot sits outside the button.
+    expect(trigger.querySelector('.bg-emerald-500')).toBeNull()
+    expect(trigger.parentElement!.querySelector('.bg-emerald-500')).not.toBeNull()
+
+    await act(async () => trigger.click())
+    const option = (label: string) =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')).find(
+        (button) => button.textContent?.includes(label)
+      )!
+    expect(option('Pending').getAttribute('aria-pressed')).toBe('true')
+    expect(option('Pending').querySelector('.text-amber-500')).not.toBeNull()
+
+    await act(async () => option('Approved').click())
+    expect(onChange).toHaveBeenLastCalledWith('approved')
+
+    // A second click on the selected status clears it.
+    await act(async () => option('Pending').click())
+    expect(onChange).toHaveBeenLastCalledWith('')
+
+    onChange.mockClear()
+    const reset = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent?.includes('Reset filter')
+    )!
+    await act(async () => reset.click())
+    expect(onChange).toHaveBeenCalledWith('')
+  })
+})

@@ -8,6 +8,7 @@ import {
   FaCubes,
   FaExchangeAlt,
   FaHome,
+  FaInbox,
   FaPlus,
   FaUsersCog,
   FaProjectDiagram,
@@ -23,24 +24,52 @@ import { ApiOrganisationPlanChoices, OrganisationType } from '@/apollo/graphql'
 import { Menu, Transition } from '@headlessui/react'
 import { Button } from '../common/Button'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
-import { FaListUl } from 'react-icons/fa6'
+import { FaListUl, FaRobot } from 'react-icons/fa6'
+import { agentsPath, requestsPath } from '@/utils/agents/routes'
+import {
+  useCanReadAgentRequests,
+  usePendingAgentRequestCount,
+} from '@/utils/agents/pendingRequests'
+import { StageBadge } from '../common/StageBadge'
 
 export type SidebarLinkT = {
   name: string
+  /** Compact label for the mobile tab bar, where `name` would truncate. */
+  shortName?: string
+  /** Release stage, rendered as a pill. Never baked into `name`, which is
+   *  also used for the tab label, the collapsed tooltip and aria-labels. */
+  stage?: string
   href: string
   icon: React.ReactNode
   active: boolean
+  /** An amber count, or a dot where there's no room; the label joins the accessible name. */
+  attention?: { count: number; label: string }
 }
+
+/** The accessible name, which should always carry the stage. */
+const linkTitle = (link: Pick<SidebarLinkT, 'name' | 'stage' | 'attention'>) =>
+  [link.stage ? `${link.name} (${link.stage})` : link.name, link.attention?.label]
+    .filter(Boolean)
+    .join(', ')
+
+const AttentionDot = () => (
+  <span
+    aria-hidden="true"
+    className="absolute -right-1 -top-0.5 size-2 rounded-full bg-amber-500 ring-2 ring-neutral-100 dark:ring-neutral-900"
+  />
+)
 
 const SidebarLink = ({
   name,
+  stage,
   href,
   icon,
   active,
+  attention,
   collapsed,
 }: SidebarLinkT & { collapsed: boolean }) => {
   return (
-    <Link href={href}>
+    <Link href={href} aria-label={linkTitle({ name, stage, attention })}>
       <div className="relative group">
         <div
           className={clsx(
@@ -51,10 +80,14 @@ const SidebarLink = ({
               : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
           )}
         >
-          <div className="text-lg">{icon}</div>
+          <div className="relative text-lg">
+            {icon}
+            {collapsed && !!attention?.count && <AttentionDot />}
+          </div>
 
           <Transition
             as="div"
+            className="min-w-0 flex-1"
             enter="transition ease-out duration-100"
             enterFrom="transform opacity-0"
             enterTo="transform opacity-100"
@@ -63,13 +96,23 @@ const SidebarLink = ({
             leaveTo="transform opacity-0"
             show={!collapsed}
           >
-            {' '}
-            {name}{' '}
+            <span className="flex items-center gap-1.5">
+              {name}
+              {stage && <StageBadge stage={stage} />}
+              {!!attention?.count && (
+                <span
+                  aria-hidden="true"
+                  className="ml-auto min-w-5 rounded-full bg-amber-500 px-1.5 text-center text-2xs font-semibold leading-5 text-white dark:bg-amber-400 dark:text-amber-950"
+                >
+                  {attention.count}
+                </span>
+              )}
+            </span>
           </Transition>
         </div>
         {collapsed && (
           <div className="invisible group-hover:visible absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-zinc-800 text-white px-2 py-1 rounded text-xs whitespace-nowrap z-50">
-            {name}
+            {linkTitle({ name, stage, attention })}
           </div>
         )}
       </div>
@@ -166,6 +209,7 @@ const MobileMoreMenu = ({
                       >
                         {link.icon}
                         {link.name}
+                        {link.stage && <StageBadge stage={link.stage} />}
                       </Link>
                     )}
                   </Menu.Item>
@@ -189,6 +233,8 @@ const Sidebar = () => {
   const switchableOrganisations = organisations?.filter((org) => !org.deletedAt) ?? null
   const showOrgsMenu = switchableOrganisations && switchableOrganisations.length > 1
   const isOwner = organisations?.some((org) => org.role!.name!.toLowerCase() === 'owner')
+  const canReadRequests = useCanReadAgentRequests()
+  const pendingRequestCount = usePendingAgentRequestCount()
 
   useEffect(() => {
     const handleResize = () => {
@@ -330,6 +376,20 @@ const Sidebar = () => {
     )
   }
 
+  const requestsLink: SidebarLinkT = {
+    name: 'Change Requests',
+    shortName: 'Requests',
+    href: team ? requestsPath(team) : '/',
+    icon: <FaInbox />,
+    active: usePathname()?.split('/')[2] === 'requests',
+    attention: pendingRequestCount
+      ? {
+          count: pendingRequestCount,
+          label: `${pendingRequestCount} pending ${pendingRequestCount === 1 ? 'change request' : 'change requests'}`,
+        }
+      : undefined,
+  }
+
   const links: SidebarLinkT[] = [
     {
       name: 'Home',
@@ -344,13 +404,24 @@ const Sidebar = () => {
       active: usePathname()?.split('/')[2] === 'apps',
     },
     {
+      name: 'AI Agents',
+      shortName: 'Agents',
+      stage: 'Beta',
+      href: team ? agentsPath(team) : '/',
+      icon: <FaRobot />,
+      active: usePathname()?.split('/')[2] === 'agents',
+    },
+    // Requests carry the pending count, and only show to members who can read them.
+    ...(canReadRequests ? [requestsLink] : []),
+    {
       name: 'Integrations',
-      href: `/${team}/integrations/syncs`,
+      href: `/${team}/integrations`,
       icon: <FaProjectDiagram />,
       active: usePathname()?.split('/')[2] === `integrations`,
     },
     {
       name: 'Access Control',
+      shortName: 'Access',
       href: `/${team}/access/members`,
       icon: <FaUsersCog />,
       active: usePathname()?.split('/')[2] === `access`,
@@ -390,9 +461,11 @@ const Sidebar = () => {
               <SidebarLink
                 key={link.name}
                 name={link.name}
+                stage={link.stage}
                 href={link.href}
                 icon={link.icon}
                 active={link.active}
+                attention={link.attention}
                 collapsed={collapsed}
               />
             ))}
@@ -427,13 +500,16 @@ const Sidebar = () => {
                 ? 'text-emerald-600 dark:text-emerald-400'
                 : 'hover:text-zinc-900 dark:hover:text-zinc-100'
             )}
-            aria-label={link.name}
+            aria-label={linkTitle(link)}
             aria-current={link.active ? 'page' : undefined}
-            title={link.name}
+            title={linkTitle(link)}
           >
-            <span className="text-lg">{link.icon}</span>
+            <span className="relative text-lg">
+              {link.icon}
+              {!!link.attention?.count && <AttentionDot />}
+            </span>
             <span className="max-w-full truncate text-[10px] font-medium">
-              {link.name === 'Access Control' ? 'Access' : link.name}
+              {link.shortName ?? link.name}
             </span>
           </Link>
         ))}

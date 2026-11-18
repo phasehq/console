@@ -32,6 +32,7 @@ import { Count } from 'reaviz'
 import { Avatar } from '../common/Avatar'
 import { PhaseActor } from '../common/PhaseActor'
 import { DeletedActor } from '../common/DeletedActor'
+import { AgentActor } from '@/components/agents/AgentActor'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
 import { usePathname } from 'next/navigation'
@@ -50,6 +51,7 @@ import { Combobox, RadioGroup } from '@headlessui/react'
 import { FaFilter } from 'react-icons/fa'
 import { GetAppAccounts } from '@/graphql/queries/apps/getAppAccounts.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import { GetAppAgentAccess } from '@/graphql/queries/apps/getAppAgentAccess.gql'
 import { FaArrowRotateLeft } from 'react-icons/fa6'
 
 // The historical start date for all log data (May 1st, 2023)
@@ -65,6 +67,9 @@ type EnvKey = {
   keys: EnvKeypair
 }
 
+/** An Agent in the actor filter, beside members and service accounts. */
+type AgentOption = { kind: 'agent'; id: string; name: string }
+
 export default function SecretLogs(props: { app: string }) {
   const DEFAULT_PAGE_SIZE = 25
   const loglistEndRef = useRef<HTMLTableCellElement>(null)
@@ -77,6 +82,7 @@ export default function SecretLogs(props: { app: string }) {
   const [eventTypes, setEventTypes] = useState<string[]>([])
   const [selectedUser, setSelectedUser] = useState<OrganisationMemberType | null>(null)
   const [selectedAccount, setSelectedAccount] = useState<ServiceAccountType | null>(null)
+  const [selectedAgent, setSelectedAgent] = useState<AgentOption | null>(null)
   const [selectedEnvironment, setSelectedEnvironment] = useState<EnvironmentType | null>(null)
   const [dateRange, setDateRange] = useState<'7' | '30' | '90' | 'custom' | null>(null)
   const [accountQuery, setAccountQuery] = useState('')
@@ -108,14 +114,22 @@ export default function SecretLogs(props: { app: string }) {
     }
   }, [dateRange])
 
+  const selectedMemberType = selectedUser
+    ? MemberType.User
+    : selectedAccount
+      ? MemberType.Service
+      : selectedAgent
+        ? MemberType.Agent
+        : null
+
   const { data, loading, fetchMore, refetch, networkStatus } = useQuery(GetAppSecretsLogs, {
     variables: {
       appId: props.app,
       start: queryStart,
       end: queryEnd,
       eventTypes: eventTypes.length ? eventTypes : null,
-      memberId: selectedUser ? selectedUser.id : selectedAccount ? selectedAccount.id : null,
-      memberType: selectedUser ? MemberType.User : selectedAccount ? MemberType.Service : null,
+      memberId: selectedUser?.id ?? selectedAccount?.id ?? selectedAgent?.id ?? null,
+      memberType: selectedMemberType,
       environmentId: selectedEnvironment ? selectedEnvironment.id : null,
     },
     fetchPolicy: 'network-only',
@@ -133,8 +147,8 @@ export default function SecretLogs(props: { app: string }) {
       start: queryStart,
       end: dateRange === 'custom' ? queryEnd : now,
       eventTypes: eventTypes.length ? eventTypes : null,
-      memberId: selectedUser?.id ?? selectedAccount?.id ?? null,
-      memberType: selectedUser ? MemberType.User : selectedAccount ? MemberType.Service : null,
+      memberId: selectedUser?.id ?? selectedAccount?.id ?? selectedAgent?.id ?? null,
+      memberType: selectedMemberType,
       pageSize: DEFAULT_PAGE_SIZE,
     })
   }
@@ -154,6 +168,22 @@ export default function SecretLogs(props: { app: string }) {
   const { hasPermission } = useAppPermissions(props.app)
 
   const userCanReadLogs = hasPermission('Logs', 'read', true)
+
+  // Agents that can use this app now; the server lists them to those who may see its service accounts.
+  const { data: agentAccessData } = useQuery(GetAppAgentAccess, {
+    variables: { appId: props.app },
+    skip: !hasPermission('ServiceAccounts', 'read', true),
+  })
+  const agentOptions: AgentOption[] = []
+  for (const row of agentAccessData?.appAgentAccess ?? []) {
+    if (row && !agentOptions.some((option) => option.id === row.agent.id))
+      agentOptions.push({ kind: 'agent', id: row.agent.id, name: row.agent.name })
+  }
+  // An Agent whose access ended can still be picked while its events are on screen.
+  for (const log of logs) {
+    if (log.agent && !agentOptions.some((option) => option.id === log.agent!.id))
+      agentOptions.push({ kind: 'agent', id: log.agent.id, name: log.agent.name })
+  }
 
   // Environment + Secret columns are hidden below md
   const tableColSpan = useResponsiveColSpan(4, 6)
@@ -311,7 +341,9 @@ export default function SecretLogs(props: { app: string }) {
             )}
           </div>
         )
-      } else if (log.serviceToken)
+      } else if (log.agent)
+        return <AgentActor agent={log.agent} team={organisation?.name} className={textStyle} />
+      else if (log.serviceToken)
         return (
           <div className={clsx('flex items-center gap-1 min-w-0', textStyle)}>
             <FaKey className="shrink-0" />{' '}
@@ -489,6 +521,20 @@ export default function SecretLogs(props: { app: string }) {
                       </div>
                     </LogField>
 
+                    {log.agent?.workflow && (
+                      <LogField label="Workflow">
+                        <span className="block truncate">{log.agent.workflow.name}</span>
+                      </LogField>
+                    )}
+                    {log.agent?.token && (
+                      <LogField label="Token">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <FaKey className="shrink-0 text-neutral-500" />
+                          <span className="truncate">{log.agent.token.name}</span>
+                        </div>
+                      </LogField>
+                    )}
+
                     {log.serviceAccountToken && (
                       <LogField label="Token">
                         <div className="flex items-center gap-2">
@@ -604,6 +650,7 @@ export default function SecretLogs(props: { app: string }) {
     setEventTypes([])
     setSelectedUser(null)
     setSelectedAccount(null)
+    setSelectedAgent(null)
     setDateRange(null)
     setQueryStart(LOGS_START_DATE)
     setQueryEnd(getCurrentTimeStamp())
@@ -614,6 +661,7 @@ export default function SecretLogs(props: { app: string }) {
     eventTypes.length > 0 ||
     selectedUser !== null ||
     selectedAccount !== null ||
+    selectedAgent !== null ||
     dateRange !== null ||
     selectedEnvironment !== null
 
@@ -727,22 +775,18 @@ export default function SecretLogs(props: { app: string }) {
                         <div className="space-y-2">
                           <div className={filterCategoryTitleStyle}>Account</div>
                           <Combobox
-                            value={selectedUser || (selectedAccount as any)}
+                            value={selectedUser || selectedAccount || (selectedAgent as any)}
                             by="id"
-                            onChange={(val) => {
-                              if (!val) {
-                                setSelectedUser(null)
-                                setSelectedAccount(null)
-                                return
-                              }
+                            onChange={(val: any) => {
+                              setSelectedUser(null)
+                              setSelectedAccount(null)
+                              setSelectedAgent(null)
+                              if (!val) return
 
-                              if ('fullName' in val || 'email' in val) {
+                              if (val.kind === 'agent') setSelectedAgent(val as AgentOption)
+                              else if ('fullName' in val || 'email' in val)
                                 setSelectedUser(val as OrganisationMemberType)
-                                setSelectedAccount(null)
-                              } else {
-                                setSelectedAccount(val as ServiceAccountType)
-                                setSelectedUser(null)
-                              }
+                              else setSelectedAccount(val as ServiceAccountType)
                             }}
                           >
                             {({ open }) => (
@@ -766,7 +810,7 @@ export default function SecretLogs(props: { app: string }) {
                                 {open && (
                                   <Combobox.Options as={Fragment}>
                                     <div className="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto bg-neutral-200 dark:bg-neutral-800 rounded-md p-2 shadow-xl space-y-1">
-                                      {[...memberOptions, ...accountOptions]
+                                      {[...memberOptions, ...accountOptions, ...agentOptions]
                                         .filter((item) => {
                                           if (!accountQuery) return true
                                           const q = accountQuery.toLowerCase()
@@ -788,19 +832,26 @@ export default function SecretLogs(props: { app: string }) {
                                                 )}
                                               >
                                                 <div className="flex items-center gap-1">
-                                                  <Avatar
-                                                    member={
-                                                      item.__typename === 'OrganisationMemberType'
-                                                        ? (item as OrganisationMemberType)
-                                                        : undefined
-                                                    }
-                                                    serviceAccount={
-                                                      item.__typename === 'ServiceAccountType'
-                                                        ? (item as ServiceAccountType)
-                                                        : undefined
-                                                    }
-                                                    size="sm"
-                                                  />
+                                                  {'kind' in item ? (
+                                                    <FaRobot
+                                                      aria-label="Agent"
+                                                      className="size-6 shrink-0 p-1 text-neutral-500"
+                                                    />
+                                                  ) : (
+                                                    <Avatar
+                                                      member={
+                                                        item.__typename === 'OrganisationMemberType'
+                                                          ? (item as OrganisationMemberType)
+                                                          : undefined
+                                                      }
+                                                      serviceAccount={
+                                                        item.__typename === 'ServiceAccountType'
+                                                          ? (item as ServiceAccountType)
+                                                          : undefined
+                                                      }
+                                                      size="sm"
+                                                    />
+                                                  )}
 
                                                   <span>
                                                     {'name' in item
@@ -965,55 +1016,55 @@ export default function SecretLogs(props: { app: string }) {
           </div>
           <div className="w-full overflow-x-auto md:overflow-visible">
             <table className="table-fixed w-full text-left text-sm">
-            {/* sticky is md+ only: below md the overflow-x-auto wrapper is the scrollport,
+              {/* sticky is md+ only: below md the overflow-x-auto wrapper is the scrollport,
                 so the offset would permanently shift the thead down over the first rows */}
-            <thead className="border-b-2 border-neutral-500/20 md:sticky md:top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg md:shadow-xl">
-              {/* Below md only Account / Event / Time render — the event cell shows
+              <thead className="border-b-2 border-neutral-500/20 md:sticky md:top-[58px] z-1 bg-neutral-200/50 dark:bg-neutral-900/60 backdrop-blur-lg md:shadow-xl">
+                {/* Below md only Account / Event / Time render — the event cell shows
                   the secret path/key; full details are in the expanded row */}
-              <tr className="text-gray-500 uppercase text-2xs tracking-wider">
-                <th className="w-6 md:w-10"></th>
-                <th className="px-2 py-2 md:px-6 md:py-4 w-24 md:w-auto">Account</th>
-                <th className="px-2 py-2 md:px-6 md:py-4">Event</th>
-                <th className="hidden md:table-cell px-6 py-4">Environment</th>
-                <th className="hidden md:table-cell px-6 py-4">Secret</th>
-                <th className="px-2 py-2 md:px-6 md:py-4 w-28 md:w-auto">Time</th>
-              </tr>
-            </thead>
-            <tbody className="h-full">
-              {logs.map((log, n) => (
-                <Fragment key={log.id}>
-                  {n !== 0 && n % DEFAULT_PAGE_SIZE === 0 && (
-                    <tr>
-                      <td colSpan={tableColSpan}>
-                        <div className="flex items-center justify-center bg-zinc-300 dark:bg-zinc-800 py-0.5 text-neutral-500 text-xs">
-                          Page {n / DEFAULT_PAGE_SIZE + 1}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  <LogRow log={log} />
-                </Fragment>
-              ))}
-
-              {loading && <SkeletonRow rows={DEFAULT_PAGE_SIZE} />}
-
-              <tr className="h-40">
-                <td colSpan={tableColSpan} ref={loglistEndRef}>
-                  <div className="flex justify-center px-6 py-4 text-neutral-500 font-medium">
-                    {!endOfList && (
-                      <Button
-                        variant="secondary"
-                        onClick={loadMore}
-                        disabled={isFetchingMore || endOfList}
-                      >
-                        <FiChevronsDown /> Load more
-                      </Button>
+                <tr className="text-gray-500 uppercase text-2xs tracking-wider">
+                  <th className="w-6 md:w-10"></th>
+                  <th className="px-2 py-2 md:px-6 md:py-4 w-24 md:w-auto">Account</th>
+                  <th className="px-2 py-2 md:px-6 md:py-4">Event</th>
+                  <th className="hidden md:table-cell px-6 py-4">Environment</th>
+                  <th className="hidden md:table-cell px-6 py-4">Secret</th>
+                  <th className="px-2 py-2 md:px-6 md:py-4 w-28 md:w-auto">Time</th>
+                </tr>
+              </thead>
+              <tbody className="h-full">
+                {logs.map((log, n) => (
+                  <Fragment key={log.id}>
+                    {n !== 0 && n % DEFAULT_PAGE_SIZE === 0 && (
+                      <tr>
+                        <td colSpan={tableColSpan}>
+                          <div className="flex items-center justify-center bg-zinc-300 dark:bg-zinc-800 py-0.5 text-neutral-500 text-xs">
+                            Page {n / DEFAULT_PAGE_SIZE + 1}
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                    {endOfList && `No${logs.length ? ' more ' : ' '}logs to show`}
-                  </div>
-                </td>
-              </tr>
-            </tbody>
+                    <LogRow log={log} />
+                  </Fragment>
+                ))}
+
+                {loading && <SkeletonRow rows={DEFAULT_PAGE_SIZE} />}
+
+                <tr className="h-40">
+                  <td colSpan={tableColSpan} ref={loglistEndRef}>
+                    <div className="flex justify-center px-6 py-4 text-neutral-500 font-medium">
+                      {!endOfList && (
+                        <Button
+                          variant="secondary"
+                          onClick={loadMore}
+                          disabled={isFetchingMore || endOfList}
+                        >
+                          <FiChevronsDown /> Load more
+                        </Button>
+                      )}
+                      {endOfList && `No${logs.length ? ' more ' : ' '}logs to show`}
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
             </table>
           </div>
         </div>

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "anthropic",
+  "name": "Anthropic",
+  "description": "The Anthropic API with an API key.",
+  "docsUrl": "https://docs.anthropic.com/en/api/overview",
+  "category": "ai",
+  "hostsEditable": false,
+  "labels": {
+    "token": "API key"
+  },
+  "definition": {
+    "specVersion": 1,
+    "hosts": [
+      {
+        "match": "exact",
+        "value": "api.anthropic.com",
+        "port": 443,
+        "path": "/v1/*"
+      }
+    ],
+    "fields": [
+      {
+        "name": "token",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        },
+        "env": "ANTHROPIC_API_KEY",
+        "decoyPrefix": "sk-ant-"
+      }
+    ],
+    "injections": [
+      {
+        "type": "header",
+        "name": "x-api-key",
+        "field": "token",
+        "whenAbsent": "attach"
+      }
+    ],
+    "preset": "headers"
+  }
+}

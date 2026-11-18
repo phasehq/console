@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "id": "slack",
+  "name": "Slack",
+  "description": "The Slack Web API with a bot or user token.",
+  "docsUrl": "https://docs.slack.dev/apis/web-api/",
+  "category": "communication",
+  "hostsEditable": false,
+  "labels": {
+    "token": "Bot or user token"
+  },
+  "definition": {
+    "specVersion": 1,
+    "hosts": [
+      {
+        "match": "exact",
+        "value": "slack.com",
+        "port": 443,
+        "path": "/api/*"
+      }
+    ],
+    "fields": [
+      {
+        "name": "token",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        },
+        "env": "SLACK_BOT_TOKEN",
+        "decoyPrefix": "xoxb-"
+      }
+    ],
+    "injections": [
+      {
+        "type": "header",
+        "name": "Authorization",
+        "prefix": "Bearer ",
+        "field": "token",
+        "whenAbsent": "attach"
+      }
+    ],
+    "preset": "bearer",
+    "operationClasses": [
+      {
+        "match": {
+          "path": "/api/*.delete*"
+        },
+        "class": "delete"
+      },
+      {
+        "match": {
+          "path": "/api/*.remove*"
+        },
+        "class": "delete"
+      },
+      {
+        "match": {
+          "path": "/api/*.kick"
+        },
+        "class": "delete"
+      },
+      {
+        "match": {
+          "path": "/api/*.archive"
+        },
+        "class": "delete"
+      },
+      {
+        "match": {
+          "path": "/api/*.list"
+        },
+        "class": "read"
+      },
+      {
+        "match": {
+          "path": "/api/*.info"
+        },
+        "class": "read"
+      },
+      {
+        "match": {
+          "path": "/api/*.history"
+        },
+        "class": "read"
+      },
+      {
+        "match": {
+          "path": "/api/*.replies"
+        },
+        "class": "read"
+      },
+      {
+        "match": {
+          "path": "/api/*.get*"
+        },
+        "class": "read"
+      },
+      {
+        "match": {
+          "path": "/api/auth.test"
+        },
+        "class": "read"
+      },
+      {
+        "match": {
+          "methods": [
+            "POST"
+          ]
+        },
+        "class": "update"
+      }
+    ]
+  }
+}

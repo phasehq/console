@@ -1,0 +1,5 @@
+{
+  "credential_environment": [
+    "SUPABASE_ACCESS_TOKEN"
+  ]
+}

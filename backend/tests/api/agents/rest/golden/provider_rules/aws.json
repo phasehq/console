@@ -1,0 +1,351 @@
+{
+  "credential_environment": [
+    "AWS_ACCESS_KEY_ID",
+    "AWS_CONFIG_FILE",
+    "AWS_CONTAINER_AUTHORIZATION_TOKEN",
+    "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE",
+    "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+    "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+    "AWS_CREDENTIAL_EXPIRATION",
+    "AWS_DEFAULT_PROFILE",
+    "AWS_PROFILE",
+    "AWS_ROLE_ARN",
+    "AWS_ROLE_SESSION_NAME",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SECURITY_TOKEN",
+    "AWS_SESSION_TOKEN",
+    "AWS_SHARED_CREDENTIALS_FILE",
+    "AWS_WEB_IDENTITY_TOKEN_FILE"
+  ],
+  "secret_guard": {
+    "operations": {
+      "cognito-identity": [
+        "GetCredentialsForIdentity",
+        "GetOpenIdToken",
+        "GetOpenIdTokenForDeveloperIdentity"
+      ],
+      "ec2": [
+        "CreateKeyPair"
+      ],
+      "ecr": [
+        "GetAuthorizationToken"
+      ],
+      "ecr-public": [
+        "GetAuthorizationToken"
+      ],
+      "elasticmapreduce": [
+        "GetClusterSessionCredentials"
+      ],
+      "iam": [
+        "CreateAccessKey",
+        "CreateLoginProfile",
+        "UpdateLoginProfile",
+        "CreateServiceSpecificCredential",
+        "ResetServiceSpecificCredential",
+        "UploadSSHPublicKey",
+        "UploadSigningCertificate"
+      ],
+      "lightsail": [
+        "GetInstanceAccessDetails",
+        "CreateKeyPair",
+        "DownloadDefaultKeyPair",
+        "CreateBucketAccessKey"
+      ],
+      "redshift": [
+        "GetClusterCredentials",
+        "GetClusterCredentialsWithIAM"
+      ],
+      "redshift-serverless": [
+        "GetCredentials"
+      ],
+      "sts": [
+        "AssumeRole",
+        "AssumeRoleWithSAML",
+        "AssumeRoleWithWebIdentity",
+        "AssumeRoot",
+        "GetFederationToken",
+        "GetSessionToken",
+        "GetWebIdentityToken"
+      ]
+    },
+    "paths": [
+      {
+        "method": "POST",
+        "pattern": "/v1/authorization-token",
+        "operation": "codeartifact:GetAuthorizationToken",
+        "services": [
+          "codeartifact"
+        ]
+      },
+      {
+        "method": "GET",
+        "pattern": "/*",
+        "query": "session",
+        "operation": "s3express:CreateSession",
+        "services": [
+          "s3express"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/keys-and-certificate",
+        "operation": "iot:CreateKeysAndCertificate",
+        "services": [
+          "iot",
+          "execute-api"
+        ],
+        "host_label": "iot"
+      },
+      {
+        "method": "POST",
+        "pattern": "/apikeys",
+        "operation": "apigateway:CreateApiKey",
+        "services": [
+          "apigateway"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/clitoken/*",
+        "operation": "airflow:CreateCliToken",
+        "services": [
+          "airflow"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/webtoken/*",
+        "operation": "airflow:CreateWebLoginToken",
+        "services": [
+          "airflow"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/workspaces/*/apikeys",
+        "operation": "grafana:CreateWorkspaceApiKey",
+        "services": [
+          "grafana"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/virtualclusters/*/endpoints/*/credentials",
+        "operation": "emr-containers:GetManagedEndpointSessionCredentials",
+        "services": [
+          "emr-containers"
+        ]
+      }
+    ]
+  },
+  "action_classes": {
+    "scheme": "aws_actions",
+    "version": 1,
+    "read_verbs": [
+      "Get",
+      "BatchGet",
+      "TransactGet",
+      "List",
+      "Describe",
+      "Head",
+      "Search",
+      "Lookup",
+      "Query",
+      "Scan",
+      "Select",
+      "Filter",
+      "Check",
+      "Validate",
+      "Simulate",
+      "Estimate",
+      "Preview"
+    ],
+    "create_verbs": [
+      "Create",
+      "Run",
+      "Allocate",
+      "Register",
+      "Import",
+      "Launch",
+      "Provision",
+      "Copy"
+    ],
+    "delete_verbs": [
+      "Delete",
+      "BatchDelete",
+      "Remove",
+      "Terminate",
+      "Deregister",
+      "Purge",
+      "Destroy",
+      "Release"
+    ],
+    "admin_services": [
+      "iam",
+      "organizations",
+      "account",
+      "sso",
+      "sso-directory",
+      "identitystore"
+    ],
+    "admin_suffixes": [
+      "Policy",
+      "Policies",
+      "Permission",
+      "Permissions",
+      "PublicAccessBlock",
+      "Acl"
+    ],
+    "exact": {
+      "application-autoscaling:DeleteScalingPolicy": "delete",
+      "application-autoscaling:PutScalingPolicy": "update",
+      "autoscaling:DeletePolicy": "delete",
+      "autoscaling:PutScalingPolicy": "update",
+      "dynamodb:BatchWriteItem": "update",
+      "dynamodb:TransactWriteItems": "update",
+      "ec2:AssociateIamInstanceProfile": "admin",
+      "ec2:DisassociateIamInstanceProfile": "admin",
+      "ec2:ModifyImageAttribute": "admin",
+      "ec2:ModifySnapshotAttribute": "admin",
+      "ec2:ReplaceIamInstanceProfileAssociation": "admin",
+      "ecr:DeleteLifecyclePolicy": "delete",
+      "ecr:PutLifecyclePolicy": "update",
+      "kms:CreateGrant": "admin",
+      "kms:RetireGrant": "admin",
+      "kms:RevokeGrant": "admin",
+      "kms:ScheduleKeyDeletion": "delete",
+      "lambda:AddPermission": "admin",
+      "lambda:CreateFunctionUrlConfig": "admin",
+      "lambda:UpdateFunctionUrlConfig": "admin",
+      "logs:DeleteRetentionPolicy": "delete",
+      "logs:PutRetentionPolicy": "update",
+      "rds:ModifyDBClusterSnapshotAttribute": "admin",
+      "rds:ModifyDBSnapshotAttribute": "admin",
+      "sns:AddPermission": "admin",
+      "sns:SetTopicAttributes": "admin",
+      "sqs:AddPermission": "admin",
+      "sqs:SetQueueAttributes": "admin"
+    },
+    "s3_subresources": {
+      "acl": "admin",
+      "delete": "delete",
+      "ownershipControls": "admin",
+      "policy": "admin",
+      "publicAccessBlock": "admin"
+    },
+    "rest_operations": [
+      {
+        "service": "lambda",
+        "method": "POST",
+        "pattern": "/*/functions/*/policy",
+        "action": "AddPermission"
+      },
+      {
+        "service": "lambda",
+        "method": "POST",
+        "pattern": "/*/functions/*/url",
+        "action": "CreateFunctionUrlConfig"
+      },
+      {
+        "service": "lambda",
+        "method": "PUT",
+        "pattern": "/*/functions/*/url",
+        "action": "UpdateFunctionUrlConfig"
+      }
+    ],
+    "query_protocol_services": [
+      "ec2",
+      "iam",
+      "sts",
+      "sns",
+      "sqs",
+      "rds",
+      "cloudformation",
+      "autoscaling",
+      "elasticloadbalancing",
+      "elasticache",
+      "redshift",
+      "monitoring",
+      "ses",
+      "elasticbeanstalk",
+      "cloudsearch",
+      "sdb"
+    ],
+    "dual_protocol_services": [
+      "sqs",
+      "monitoring"
+    ],
+    "json_target_services": [
+      "acm",
+      "acm-pca",
+      "application-autoscaling",
+      "athena",
+      "budgets",
+      "ce",
+      "cloudtrail",
+      "codebuild",
+      "codecommit",
+      "codedeploy",
+      "codepipeline",
+      "cognito-identity",
+      "cognito-idp",
+      "comprehend",
+      "config",
+      "datapipeline",
+      "datasync",
+      "dax",
+      "devicefarm",
+      "directconnect",
+      "dms",
+      "ds",
+      "dynamodb",
+      "ecr",
+      "ecr-public",
+      "ecs",
+      "elasticmapreduce",
+      "events",
+      "firehose",
+      "fsx",
+      "gamelift",
+      "glue",
+      "health",
+      "identitystore",
+      "kinesis",
+      "kinesisanalytics",
+      "kms",
+      "lightsail",
+      "logs",
+      "memorydb",
+      "opsworks",
+      "organizations",
+      "pricing",
+      "redshift-data",
+      "redshift-serverless",
+      "rekognition",
+      "route53domains",
+      "route53resolver",
+      "sagemaker",
+      "secretsmanager",
+      "shield",
+      "snowball",
+      "ssm",
+      "sso",
+      "states",
+      "storagegateway",
+      "support",
+      "swf",
+      "tagging",
+      "textract",
+      "translate",
+      "waf",
+      "waf-regional",
+      "wafv2",
+      "workspaces"
+    ],
+    "mixed_services": [
+      "ses",
+      "cloudsearch",
+      "sagemaker"
+    ]
+  }
+}

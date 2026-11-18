@@ -241,40 +241,47 @@ class TestRoleHasGlobalAccess:
 
 class TestGetRoleEffectivePolicy:
     def test_none_role(self):
-        assert get_role_effective_policy(None) == ({}, {}, False)
+        assert get_role_effective_policy(None) == ({}, {}, {}, False)
 
     def test_default_role_resolves_template_not_db_json(self):
         role = _default_role(MANAGER_ROLE_KEY)
-        org_perms, app_perms, global_access = get_role_effective_policy(role)
+        org_perms, app_perms, agent_perms, global_access = get_role_effective_policy(
+            role
+        )
 
         assert org_perms["Roles"] == ["create", "read", "update", "delete"]
         assert app_perms["Secrets"] == ["create", "read", "update", "delete"]
+        assert agent_perms["AgentWorkflows"] == ["create", "read", "update", "delete"]
         assert global_access is False
 
     def test_default_owner_has_global_access(self):
-        assert get_role_effective_policy(_default_role(OWNER_ROLE_KEY))[2] is True
+        assert get_role_effective_policy(_default_role(OWNER_ROLE_KEY))[3] is True
 
     def test_custom_role_reads_stored_json(self):
         role = _custom_role(
             {
                 "permissions": {"Members": ["read"]},
                 "app_permissions": {"Secrets": ["read", "update"]},
+                "agent_permissions": {"AgentSessions": ["read"]},
             }
         )
-        org_perms, app_perms, global_access = get_role_effective_policy(role)
+        org_perms, app_perms, agent_perms, global_access = get_role_effective_policy(
+            role
+        )
 
         assert org_perms == {"Members": ["read"]}
         assert app_perms == {"Secrets": ["read", "update"]}
+        assert agent_perms == {"AgentSessions": ["read"]}
         assert global_access is False
 
     def test_custom_role_stored_global_access_is_inert(self):
         role = _custom_role(
             {"permissions": {}, "app_permissions": {}, "global_access": True}
         )
-        assert get_role_effective_policy(role)[2] is False
+        assert get_role_effective_policy(role)[3] is False
 
     def test_custom_role_null_permissions(self):
-        assert get_role_effective_policy(_custom_role(None)) == ({}, {}, False)
+        assert get_role_effective_policy(_custom_role(None)) == ({}, {}, {}, False)
 
 
 class TestRoleGrantViolations:
@@ -336,6 +343,40 @@ class TestRoleGrantViolations:
             },
         )
         assert violations == ["app_permissions:ServiceAccounts:create"]
+
+    def test_agent_permissions_are_ceilinged(self):
+        # Manager's template holds AgentWorkflows but no AgentMemberships
+        manager = _default_role(MANAGER_ROLE_KEY)
+        violations = role_grant_violations(
+            manager,
+            {
+                "permissions": {},
+                "app_permissions": {},
+                "agent_permissions": {
+                    "AgentWorkflows": ["create", "read"],
+                    "AgentMemberships": ["read"],
+                },
+            },
+        )
+        assert violations == ["agent_permissions:AgentMemberships:read"]
+
+    def test_custom_actor_cannot_grant_agent_permissions_it_lacks(self):
+        actor = _custom_role(
+            {
+                "permissions": {"Roles": ["create", "read"]},
+                "app_permissions": {},
+                "agent_permissions": {"AgentTokens": ["read"]},
+            }
+        )
+        violations = role_grant_violations(
+            actor,
+            {
+                "permissions": {},
+                "app_permissions": {},
+                "agent_permissions": {"AgentTokens": ["create", "read"]},
+            },
+        )
+        assert violations == ["agent_permissions:AgentTokens:create"]
 
     def test_global_access_needs_global_actor(self):
         manager = _default_role(MANAGER_ROLE_KEY)
@@ -431,6 +472,18 @@ class TestRoleUpdateGrantViolations:
             )
             == []
         )
+
+    def test_grandfathered_agent_permission_can_be_kept(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        policy = {
+            "permissions": {},
+            "app_permissions": {},
+            "agent_permissions": {"AgentMemberships": ["create"]},
+        }
+        assert role_grant_violations(manager, policy) == [
+            "agent_permissions:AgentMemberships:create"
+        ]
+        assert role_update_grant_violations(manager, _custom_role(policy), policy) == []
 
     def test_partial_de_escalation(self):
         manager = _default_role(MANAGER_ROLE_KEY)
@@ -690,6 +743,19 @@ class TestRoleAssignmentError:
         )
         target.name = "Org Deleter"
         assert role_assignment_error([admin], target) is None
+
+    def test_manager_cannot_assign_agent_permissions_above_ceiling(self):
+        manager = _default_role(MANAGER_ROLE_KEY)
+        target = _custom_role(
+            {
+                "permissions": {},
+                "app_permissions": {},
+                "agent_permissions": {"AgentMemberships": ["create"]},
+            }
+        )
+        target.name = "Agent Membership Admin"
+        error = role_assignment_error([manager], target)
+        assert "agent_permissions:AgentMemberships:create" in error
 
     def test_team_override_union_permits_assignment(self):
         developer = _default_role(DEVELOPER_ROLE_KEY)

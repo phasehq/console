@@ -1,5 +1,8 @@
 from api.services import Providers, ServiceConfig
-from api.utils.syncing.auth import decrypt_credential_values, get_credentials
+from api.utils.syncing.auth import (
+    decrypt_credential_values,
+    get_sealed_credential_keys,
+)
 from api.utils.organisation_deletion import deletion_scheduled_for
 from api.utils.access.permissions import (
     user_can_access_app,
@@ -66,9 +69,12 @@ class OrganisationPlanType(ObjectType):
     max_users = graphene.Int()
     max_apps = graphene.Int()
     max_envs_per_app = graphene.Int()
+    max_agents = graphene.Int()
+    max_workflows_per_agent = graphene.Int()
     seat_limit = graphene.Int()
     seats_used = graphene.Field(SeatsUsed)
     app_count = graphene.Int()
+    agent_count = graphene.Int()
 
 
 class RoleType(DjangoObjectType):
@@ -208,7 +214,8 @@ class OrganisationType(DjangoObjectType):
 
     def resolve_plan_detail(self, info):
 
-        plan = PLAN_CONFIG[self.plan]
+        # Copy: the counts below are per organisation, and PLAN_CONFIG is shared.
+        plan = dict(PLAN_CONFIG[self.plan])
 
         plan["seats_used"] = {
             "users": (
@@ -425,6 +432,7 @@ class ServiceAccountTokenType(DjangoObjectType):
 class MemberType(graphene.Enum):
     USER = "user"
     SERVICE = "service"
+    AGENT = "agent"
 
 
 class ProviderType(graphene.ObjectType):
@@ -436,10 +444,12 @@ class ProviderType(graphene.ObjectType):
     optional_credentials = graphene.List(
         graphene.NonNull(graphene.String), required=True
     )
-    # Backwards compatibility: Null for providers that don't list them yet; their reads return every
-    # value (see ProviderCredentialsType.resolve_credentials).
-    non_sensitive_credentials = graphene.List(graphene.NonNull(graphene.String))
-    endpoint_credentials = graphene.List(graphene.NonNull(graphene.String))
+    non_sensitive_credentials = graphene.List(
+        graphene.NonNull(graphene.String), required=True
+    )
+    endpoint_credentials = graphene.List(
+        graphene.NonNull(graphene.String), required=True
+    )
     auth_scheme = graphene.String()
 
 
@@ -518,8 +528,28 @@ class SecretFolderType(DjangoObjectType):
         )
 
 
+class SecretEventAgentRefType(graphene.ObjectType):
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+
+
+class SecretEventAgentType(graphene.ObjectType):
+    """The Agent that made a secrets call, with the Workflow and token it
+    used. Names only: nothing here reaches the Agent's credentials."""
+
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+    harness_type = graphene.String(required=True)
+    deleted = graphene.Boolean(required=True)
+    workflow = graphene.Field(SecretEventAgentRefType)
+    token = graphene.Field(SecretEventAgentRefType)
+
+
 class SecretEventType(DjangoObjectType):
     actor_deleted = graphene.Boolean()
+    # Set when an Agent token made the call; ``user`` and the service
+    # account fields are then null.
+    agent = graphene.Field(SecretEventAgentType)
 
     class Meta:
         model = SecretEvent
@@ -556,6 +586,23 @@ class SecretEventType(DjangoObjectType):
             return self.user
         return None
 
+    def resolve_agent(self, info):
+        agent = self.agent if self.agent_id else None
+        if agent is None:
+            return None
+        workflow = self.agent_workflow if self.agent_workflow_id else None
+        token = self.agent_token if self.agent_token_id else None
+        return {
+            "id": str(agent.id),
+            "name": agent.name,
+            "harness_type": agent.harness_type,
+            "deleted": agent.deleted_at is not None,
+            "workflow": (
+                {"id": str(workflow.id), "name": workflow.name} if workflow else None
+            ),
+            "token": {"id": str(token.id), "name": token.name} if token else None,
+        }
+
     def resolve_actor_deleted(self, info):
         # A hard-deleted account SET_NULLs the actor FKs. The client can't
         # infer "deleted" from a null user: resolve_user also nulls for
@@ -566,6 +613,8 @@ class SecretEventType(DjangoObjectType):
             or self.service_token_id
             or self.service_account_id
             or self.service_account_token_id
+            or self.agent_id
+            or self.agent_token_id
         )
         if has_actor:
             return False
@@ -1136,11 +1185,13 @@ class EnvironmentTokenType(DjangoObjectType):
 
 class ProviderCredentialsType(DjangoObjectType):
     sync_count = graphene.Int()
+    agent_connection_count = graphene.Int()
     provider = graphene.Field(ProviderType)
-    # Nullable: resolve_credentials withholds the value for users without
+    # Nullable: both resolvers withhold the value for users without
     # IntegrationCredentials read — non-null would turn that into a hard
     # error that nulls the surrounding payload.
     credentials = graphene.JSONString()
+    sealed_credentials = graphene.List(graphene.NonNull(graphene.String))
 
     class Meta:
         model = ProviderCredentials
@@ -1149,9 +1200,12 @@ class ProviderCredentialsType(DjangoObjectType):
             "name",
             "provider",
             "credentials",
+            "sealed_credentials",
+            "revision",
             "created_at",
             "updated_at",
             "sync_count",
+            "agent_connection_count",
         )
 
     def resolve_sync_count(self, info):
@@ -1170,20 +1224,26 @@ class ProviderCredentialsType(DjangoObjectType):
     def resolve_provider(self, info):
         return Providers.get_provider_config(self.provider)
 
+    def resolve_agent_connection_count(self, info):
+        return self.agent_connections.filter(deleted_at=None).count()
+
     def resolve_credentials(self, info):
-        """Only non-sensitive values, for providers that list them."""
+        """Only non-sensitive values. Sealed values are write-only."""
         if not user_has_permission(
             info.context.user, "read", "IntegrationCredentials", self.organisation
         ):
             return None
         provider = Providers.get_provider_config(self.provider)
-        # Providers that don't list their non-sensitive fields yet still
-        # return every value.
-        if "non_sensitive_credentials" not in provider:
-            return get_credentials(self.id)
         return decrypt_credential_values(
             self.credentials, provider["non_sensitive_credentials"]
         )
+
+    def resolve_sealed_credentials(self, info):
+        if not user_has_permission(
+            info.context.user, "read", "IntegrationCredentials", self.organisation
+        ):
+            return None
+        return get_sealed_credential_keys(self)
 
 
 class UserTokenType(DjangoObjectType):

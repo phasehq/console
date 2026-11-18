@@ -1,0 +1,562 @@
+"""Human-console GraphQL queries for the AI Agents management plane."""
+
+from datetime import datetime, timedelta, timezone as dt_timezone
+
+from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
+from django.utils import timezone
+from graphql import GraphQLError
+
+from api.models import (
+    Agent,
+    AgentConnection,
+    AgentEvent,
+    AgentMembership,
+    AgentOrganisationSettings,
+    AgentRequest,
+    AgentSession,
+    AgentWorkflow,
+    AgentWorkflowGrant,
+)
+from api.utils.access.permissions import (
+    role_has_global_access,
+    role_has_permission,
+)
+from api.utils.agent_access import end_lapsed_access
+from api.utils.agent_config import get_config_registry, list_presets
+from api.utils.agents import expire_overdue_requests
+from backend.graphene.agents.common import (
+    organisation_for,
+    organisation_member,
+    require_agent,
+    require_role,
+)
+from backend.graphene.agents.types import (
+    AgentConnectionPresetType,
+    AgentEventPageType,
+    AgentRequestQueueType,
+    AgentServiceTemplateType,
+)
+
+
+# Pending requests sort first, so a capped list still shows every open one.
+AGENT_REQUEST_LIST_LIMIT = 200
+
+
+def _visible_agents(member, queryset, action="read"):
+    if not role_has_permission(member.role, action, "Agents"):
+        return queryset.none()
+    if role_has_global_access(member.role):
+        return queryset
+    return queryset.filter(
+        memberships__member=member,
+        memberships__deleted_at__isnull=True,
+    ).distinct()
+
+
+def _accessible_workflow_ids(member, organisation, action="read"):
+    workflows = AgentWorkflow.objects.select_related("agent").filter(
+        organisation=organisation,
+        agent__deleted_at__isnull=True,
+        deleted_at__isnull=True,
+    )
+    if not role_has_permission(member.role, action, "AgentWorkflows"):
+        return []
+    if not role_has_global_access(member.role):
+        workflows = workflows.filter(
+            memberships__agent_membership__member=member,
+            memberships__agent_membership__deleted_at__isnull=True,
+            memberships__deleted_at__isnull=True,
+        )
+    return list(workflows.values_list("id", flat=True))
+
+
+def resolve_agents(root, info, organisation_id, agent_id=None):
+    member = organisation_member(info, organisation_id)
+    organisation = member.organisation
+    queryset = (
+        Agent.objects.select_related("organisation", "created_by__user")
+        .filter(organisation=organisation, deleted_at__isnull=True)
+        .order_by("name", "id")
+    )
+    if agent_id:
+        queryset = queryset.filter(id=agent_id)
+    return _visible_agents(member, queryset)
+
+
+def resolve_agent_workflows(
+    root, info, organisation_id, agent_id=None, workflow_id=None
+):
+    member = organisation_member(info, organisation_id)
+    organisation = member.organisation
+    accessible_ids = _accessible_workflow_ids(member, organisation)
+    # Grants expire lazily, so end the overdue ones before listing.
+    end_lapsed_access(AgentWorkflowGrant.objects.filter(organisation=organisation))
+    queryset = (
+        AgentWorkflow.objects.select_related("agent", "organisation")
+        .prefetch_related(
+            Prefetch(
+                "grants",
+                queryset=AgentWorkflowGrant.objects.select_related(
+                    "connection__authentication"
+                )
+                .active()
+                .order_by("created_at", "id"),
+                to_attr="active_grants",
+            )
+        )
+        .filter(
+            organisation=organisation,
+            id__in=accessible_ids,
+            deleted_at__isnull=True,
+        )
+        .order_by("agent__name", "name", "id")
+    )
+    if agent_id:
+        queryset = queryset.filter(agent_id=agent_id)
+    if workflow_id:
+        queryset = queryset.filter(id=workflow_id)
+    return queryset
+
+
+def resolve_agent_memberships(
+    root,
+    info,
+    organisation_id,
+    agent_id,
+    membership_id=None,
+    member_id=None,
+):
+    member = organisation_member(info, organisation_id)
+    require_role(member, "read", "AgentMemberships")
+    try:
+        agent = Agent.objects.get(
+            id=agent_id,
+            organisation=member.organisation,
+            deleted_at__isnull=True,
+        )
+    except (Agent.DoesNotExist, ValueError) as exc:
+        raise GraphQLError("Agent not found") from exc
+    require_agent(member, agent, "read")
+    queryset = AgentMembership.objects.select_related(
+        "agent",
+        "member",
+        "member__user",
+        "member__role",
+        "assigned_by",
+    ).prefetch_related("workflow_memberships__workflow").filter(
+        agent=agent,
+        member__deleted_at__isnull=True,
+        deleted_at__isnull=True,
+    )
+    if membership_id:
+        queryset = queryset.filter(id=membership_id)
+    if member_id:
+        queryset = queryset.filter(member_id=member_id)
+    return queryset.order_by("created_at", "id")
+
+
+def resolve_agent_connections(root, info, organisation_id, connection_id=None):
+    organisation, _ = organisation_for(
+        info, organisation_id, "read", "AgentConnections"
+    )
+    queryset = AgentConnection.objects.select_related(
+        "authentication", "value_updated_by"
+    ).filter(organisation=organisation, deleted_at__isnull=True)
+    if connection_id:
+        queryset = queryset.filter(id=connection_id)
+    return queryset.order_by("name", "id")
+
+
+def resolve_agent_requests(
+    root,
+    info,
+    organisation_id,
+    request_id=None,
+    agent_id=None,
+    workflow_id=None,
+    status=None,
+    limit=None,
+):
+    organisation, member = organisation_for(
+        info, organisation_id, "read", "AgentRequests"
+    )
+    # The Requests page loads a growing window; no list goes past the cap.
+    size = (
+        AGENT_REQUEST_LIST_LIMIT
+        if limit is None
+        else max(1, min(limit, AGENT_REQUEST_LIST_LIMIT))
+    )
+    accessible_workflow_ids = _accessible_workflow_ids(member, organisation)
+    # Requests expire lazily, so close overdue ones before they show as pending.
+    expire_overdue_requests(
+        AgentRequest.objects.filter(organisation=organisation), timezone.now()
+    )
+    queryset = AgentRequest.objects.select_related(
+        "workflow__agent",
+        "connection__authentication",
+        "connection__host_rules_authored_by",
+        "connection__host_rules_approved_by",
+        "credential",
+        "resolved_by",
+    ).filter(
+        organisation=organisation,
+        workflow_id__in=accessible_workflow_ids,
+    )
+    if request_id:
+        queryset = queryset.filter(id=request_id)
+    if agent_id:
+        queryset = queryset.filter(workflow__agent_id=agent_id)
+    if workflow_id:
+        queryset = queryset.filter(workflow_id=workflow_id)
+    if status:
+        status = status.lower()
+        if status not in dict(AgentRequest.STATUS_CHOICES):
+            raise GraphQLError("Unsupported Agent request status")
+        queryset = queryset.filter(status=status)
+    return queryset.annotate(
+        _pending_first=Case(
+            When(status=AgentRequest.PENDING, then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        )
+    ).order_by("_pending_first", "-created_at", "id")[:size]
+
+
+def resolve_agent_request_queue(root, info, organisation_id, limit=None):
+    """Pending requests across the organisation that the caller may resolve.
+
+    Resolving a request takes ``update`` on AgentRequests and update access to
+    its Workflow, so the queue holds exactly those. A member who may only read
+    requests gets an empty queue.
+    """
+
+    member = organisation_member(info, organisation_id)
+    organisation = member.organisation
+    size = (
+        AGENT_REQUEST_LIST_LIMIT
+        if limit is None
+        else max(1, min(limit, AGENT_REQUEST_LIST_LIMIT))
+    )
+    if not role_has_permission(member.role, "update", "AgentRequests"):
+        return AgentRequestQueueType(requests=[], pending_count=0)
+    now = timezone.now()
+    # Requests expire lazily, so close overdue ones before counting them.
+    expire_overdue_requests(
+        AgentRequest.objects.filter(organisation=organisation), now
+    )
+    pending = AgentRequest.objects.filter(
+        Q(expires_at__isnull=True) | Q(expires_at__gt=now),
+        organisation=organisation,
+        workflow_id__in=_accessible_workflow_ids(member, organisation, "update"),
+        status=AgentRequest.PENDING,
+    )
+    return AgentRequestQueueType(
+        requests=pending.select_related(
+            "workflow__agent",
+            "connection__authentication",
+            "connection__host_rules_authored_by",
+            "connection__host_rules_approved_by",
+            "credential",
+            "resolved_by",
+        ).order_by("-created_at", "id")[:size],
+        pending_count=pending.count(),
+    )
+
+
+def resolve_agent_sessions(
+    root,
+    info,
+    organisation_id,
+    agent_id=None,
+    workflow_id=None,
+    active_only=False,
+):
+    organisation, member = organisation_for(
+        info, organisation_id, "read", "AgentSessions"
+    )
+    accessible_workflow_ids = _accessible_workflow_ids(member, organisation)
+    queryset = AgentSession.objects.select_related("workflow__agent").filter(
+        organisation=organisation,
+        workflow_id__in=accessible_workflow_ids,
+    )
+    if agent_id:
+        queryset = queryset.filter(workflow__agent_id=agent_id)
+    if workflow_id:
+        queryset = queryset.filter(workflow_id=workflow_id)
+    if active_only:
+        queryset = queryset.filter(
+            revoked_at__isnull=True, expires_at__gt=timezone.now()
+        )
+    return queryset.order_by("-created_at", "session_uid")[:500]
+
+
+def _event_cursor(value):
+    try:
+        cursor = int(value or 0)
+    except (TypeError, ValueError) as exc:
+        raise GraphQLError("Agent event cursor must be a non-negative integer") from exc
+    if cursor < 0:
+        raise GraphQLError("Agent event cursor must be a non-negative integer")
+    return cursor
+
+
+_EPOCH = datetime(1970, 1, 1, tzinfo=dt_timezone.utc)
+
+
+def _event_time_cursor(value):
+    """Parse a history cursor: event time in epoch microseconds, then ingest seq."""
+
+    try:
+        micros, sequence = (int(part) for part in str(value).split(":"))
+    except (TypeError, ValueError) as exc:
+        raise GraphQLError("Agent event cursor is invalid") from exc
+    if micros < 0 or sequence < 0:
+        raise GraphQLError("Agent event cursor is invalid")
+    return _EPOCH + timedelta(microseconds=micros), sequence
+
+
+def _format_event_time_cursor(event):
+    micros = (event.proxy_created_at - _EPOCH) // timedelta(microseconds=1)
+    return f"{micros}:{event.ingest_seq}"
+
+
+def resolve_agent_events(
+    root,
+    info,
+    organisation_id,
+    cursor=None,
+    before=None,
+    order=None,
+    limit=100,
+    agent_id=None,
+    workflow_id=None,
+    session_uid=None,
+    proxy_decision=None,
+    provider=None,
+    start=None,
+    end=None,
+):
+    """Tail by ingest order from ``cursor``, or page history by event time."""
+
+    member = organisation_member(info, organisation_id)
+    organisation = member.organisation
+    if not role_has_permission(member.role, "read", "Logs"):
+        return AgentEventPageType(
+            events=[], next_cursor=str(cursor or before or 0), has_more=False
+        )
+    if order not in (None, "newest", "oldest"):
+        raise GraphQLError("Agent event order must be newest or oldest")
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 200:
+        raise GraphQLError("Agent event limit must be between 1 and 200")
+
+    queryset = AgentEvent.objects.select_related(
+        "agent", "workflow", "connection", "session"
+    ).filter(organisation=organisation)
+    if not role_has_global_access(member.role):
+        queryset = queryset.filter(
+            workflow_id__in=_accessible_workflow_ids(member, organisation)
+        )
+    if agent_id:
+        queryset = queryset.filter(agent_id=agent_id)
+    if workflow_id:
+        queryset = queryset.filter(workflow_id=workflow_id)
+    if session_uid:
+        queryset = queryset.filter(session__session_uid=session_uid)
+    if proxy_decision:
+        proxy_decision = proxy_decision.lower()
+        if proxy_decision not in dict(AgentEvent.DECISION_CHOICES):
+            raise GraphQLError("Unsupported Agent event proxy decision")
+        queryset = queryset.filter(proxy_decision=proxy_decision)
+    if provider:
+        queryset = queryset.filter(provider=provider)
+    if start is not None:
+        queryset = queryset.filter(proxy_created_at__gte=start)
+    if end is not None:
+        queryset = queryset.filter(proxy_created_at__lte=end)
+
+    if order:
+        # Batched ingest is not event order; ingest_seq only breaks time ties.
+        newest = order == "newest"
+        if before:
+            at, sequence = _event_time_cursor(before)
+            if newest:
+                queryset = queryset.filter(
+                    Q(proxy_created_at__lt=at)
+                    | Q(proxy_created_at=at, ingest_seq__lt=sequence)
+                )
+            else:
+                queryset = queryset.filter(
+                    Q(proxy_created_at__gt=at)
+                    | Q(proxy_created_at=at, ingest_seq__gt=sequence)
+                )
+        ordering = (
+            ("-proxy_created_at", "-ingest_seq")
+            if newest
+            else ("proxy_created_at", "ingest_seq")
+        )
+        page = list(queryset.order_by(*ordering)[: limit + 1])
+        events = page[:limit]
+        next_cursor = _format_event_time_cursor(events[-1]) if events else before or ""
+        return AgentEventPageType(
+            events=events, next_cursor=next_cursor, has_more=len(page) > limit
+        )
+
+    after = _event_cursor(cursor)
+    page = list(
+        queryset.filter(ingest_seq__gt=after).order_by("ingest_seq")[: limit + 1]
+    )
+    has_more = len(page) > limit
+    events = page[:limit]
+    next_cursor = str(events[-1].ingest_seq) if events else str(after)
+    return AgentEventPageType(
+        events=events, next_cursor=next_cursor, has_more=has_more
+    )
+
+
+def _service_type(template):
+    # GenericScalar does not recursively apply Graphene's camel-case naming.
+    # Build the public, value-free wire shape explicitly so Console previews
+    # and runtime clients see the same stable contract without exposing an
+    # accidentally added registry key in the future.
+    environment_bindings = []
+    for binding in template["environment_bindings"]:
+        public_binding = {
+            "name": binding["name"],
+            "action": binding["action"],
+            "source": binding["source"],
+            "sensitive": binding["sensitive"],
+            "systemManaged": binding["system_managed"],
+        }
+        if "source_field" in binding:
+            public_binding["sourceField"] = binding["source_field"]
+        environment_bindings.append(public_binding)
+    return AgentServiceTemplateType(
+        service_type=template["service_type"],
+        display_name=template["display_name"],
+        protocol=template["protocol"],
+        provider=template.get("provider"),
+        proxy_only=template["proxy_only"],
+        hosts=template["hosts"],
+        host_rules_mode=template["host_rules_mode"],
+        config_schema=template["config_schema"],
+        injection=template["injection"],
+        fields=template["fields"],
+        environment_bindings=environment_bindings,
+        # Decoy formats are value-free pattern strings (e.g. "PHX{rand:base64:37}")
+        # used by the Console to preview what an Agent will see in place of the
+        # real secret material.
+        decoy_format=template.get("decoy_format", {}),
+        credential_providers=template["credential_providers"],
+        operation_classes=template.get("operation_classes", []),
+    )
+
+
+def resolve_agent_service_templates(root, info, organisation_id, service_type=None):
+    organisation_for(info, organisation_id, "read", "AgentConnections")
+    services = {
+        key: value
+        for key, value in get_config_registry().services.items()
+        if value["credential_providers"]
+    }
+    if service_type:
+        service_type = service_type.lower()
+        template = services.get(service_type)
+        return [_service_type(template)] if template else []
+    return [_service_type(services[key]) for key in sorted(services)]
+
+
+def resolve_agent_settings(root, info, organisation_id):
+    """The organisation's Agent settings, for anyone who can read requests."""
+
+    organisation, _ = organisation_for(info, organisation_id, "read", "AgentRequests")
+    return AgentOrganisationSettings.for_organisation(organisation)
+
+
+def resolve_agent_connection_presets(root, info, organisation_id, preset_id=None):
+    organisation_for(info, organisation_id, "read", "AgentConnections")
+    return [
+        AgentConnectionPresetType(
+            id=preset["id"],
+            name=preset["name"],
+            description=preset["description"],
+            docs_url=preset["docsUrl"],
+            category=preset["category"],
+            hosts=preset["definition"]["hosts"],
+            hosts_editable=preset["hostsEditable"],
+            labels=preset["labels"],
+            definition=preset["definition"],
+        )
+        for preset in list_presets()
+        if preset_id in (None, preset["id"])
+    ]
+
+
+def resolve_app_agent_access(root, info, app_id):
+    """Every Agent Workflow with access to an app's secrets, one row per
+    active grant of an app Connection on the app.
+
+    Visible to whoever may see the app's service accounts.
+    """
+
+    from api.models import App
+    from api.utils.access.permissions import user_can_access_app, user_has_permission
+    from api.utils.agent_app_access import connection_environments, grant_access
+    from api.models import OrganisationMember
+    from api.utils.agent_config import APP_SERVICE_TYPE
+    from api.utils.asset_visibility import asset_visibility
+
+    user = info.context.user
+    app = App.objects.filter(id=app_id, is_deleted=False).first()
+    if app is None or not hasattr(user, "userId"):
+        raise GraphQLError("App not found")
+    if not user_has_permission(user, "read", "ServiceAccounts", app.organisation, True):
+        return []
+    if not user_can_access_app(user.userId, app.id):
+        raise GraphQLError("You don't have access to this app")
+    now = timezone.now()
+    grants = (
+        AgentWorkflowGrant.objects.active(now)
+        .filter(
+            organisation=app.organisation,
+            connection__service_type=APP_SERVICE_TYPE,
+            connection__app=app,
+            connection__deleted_at__isnull=True,
+            connection__state=AgentConnection.ACTIVE,
+            workflow__deleted_at__isnull=True,
+            workflow__agent__deleted_at__isnull=True,
+        )
+        .select_related("workflow__agent", "connection")
+        .order_by("workflow__agent__name", "workflow__name", "created_at", "id")
+    )
+    # The member reaches the app; environments they cannot reach are counted,
+    # not named.
+    visibility = asset_visibility(
+        OrganisationMember.objects.select_related("role")
+        .filter(organisation=app.organisation, user=user, deleted_at__isnull=True)
+        .first()
+    )
+    rows = []
+    for grant in grants:
+        view = visibility.app_view(app, connection_environments(grant.connection))
+        rows.append(
+            {
+                "id": str(grant.id),
+                "agent": {
+                    "id": str(grant.workflow.agent_id),
+                    "name": grant.workflow.agent.name,
+                },
+                "workflow": {
+                    "id": str(grant.workflow_id),
+                    "name": grant.workflow.name,
+                },
+                "connection": {
+                    "id": str(grant.connection_id),
+                    "name": view.connection_name(grant.connection.name),
+                },
+                "environments": list(view.environments),
+                "hidden_environment_count": view.hidden_environment_count,
+                "access": grant_access(grant, now),
+                "expires_at": grant.expires_at,
+            }
+        )
+    return rows

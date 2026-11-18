@@ -1,0 +1,1240 @@
+"""Session-centric REST contract consumed by the Phase proxy and SDK."""
+
+from collections.abc import Mapping
+from datetime import timedelta
+import json
+import re
+from urllib.parse import quote, urlencode
+
+from django.conf import settings
+from django.db import transaction
+from django.db.models import F
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from djangorestframework_camel_case.parser import CamelCaseJSONParser
+from djangorestframework_camel_case.render import CamelCaseJSONRenderer
+from djangorestframework_camel_case.util import camelize
+from nacl.encoding import RawEncoder
+from nacl.hash import blake2b
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from api.auth import AgentAPIAuthentication
+from api.models import (
+    AgentConnection,
+    AgentRequest,
+    AgentSession,
+    AgentWorkflow,
+    ProviderCredentials,
+)
+from api.throttling import PlanBasedRateThrottle
+from api.utils.access.middleware import IsIPAllowed
+from api.utils.agent_sessions import (
+    SESSION_TTL,
+    create_agent_session,
+    revoke_agent_session,
+    rotate_session_credential,
+    verify_session_credential,
+)
+from api.utils.agent_access import (
+    DurationError,
+    applied_access,
+    requested_duration,
+)
+from api.utils.agents import (
+    REQUEST_LIFETIME,
+    close_agent_request,
+    expire_overdue_requests,
+    file_action_request,
+)
+from api.utils.agent_config import (
+    CLIENT_MATCHER_SCHEMA_VERSION,
+    ConfigCompatibilityError,
+    ConfigRegistryError,
+    get_config_registry,
+    is_app_service,
+    is_custom_service,
+)
+from api.utils.request_actions import (
+    CREDENTIAL_TEXT as _CREDENTIAL_TEXT,
+    ActionError,
+    action_handler,
+    fit_title,
+)
+from api.views.agents.base import (
+    AgentRuntimeError,
+    SCHEMA_VERSION,
+    authentication_error_response,
+    error_response,
+    exception_error_response,
+    resolve_session_from_request_credential,
+    resolve_session_for_request,
+    resolve_workflow_for_open,
+    require_session_workflow_permission,
+    session_authenticator_kwargs,
+    session_human_account,
+    session_credential_from_request,
+    validate_workflow_open_access,
+)
+from api.views.agents.runtime import (
+    compose_context,
+    negotiate_client,
+    prepare_workflow,
+    resolve_runtime_capabilities,
+    resolve_workflow_config,
+)
+
+
+_IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9._:/-]{8,128}$")
+# The client object is stored on the session as-is.
+_MAX_CLIENT_INFO_BYTES = 8192
+_REQUEST_ID = re.compile(r"^[A-Za-z0-9._:/-]{1,128}$")
+_REQUEST_SERVICE_TYPE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+# Request bodies and query strings arrive snake_cased by the camelCase parser
+# and middleware, so only snake_case names need handling here.
+_REQUEST_FIELDS = frozenset(
+    {
+        "schema_version",
+        "kind",
+        "service_type",
+        "credential_provider",
+        "credential_name",
+        "credential_id",
+        "connection_id",
+        "markdown",
+        "dedup_key",
+        "related_request_id",
+        "title",
+        "action",
+        "duration_seconds",
+    }
+)
+# A request that carries an action names its target there.
+_PACKAGED_TARGET_FIELDS = (
+    "service_type",
+    "credential_provider",
+    "credential_name",
+    "credential_id",
+    "connection_id",
+)
+_MAX_REQUEST_MARKDOWN = 20000
+
+
+def _packaged_request_title(kind, name):
+    """The title of a request for a packaged service, which carries no action."""
+
+    name = name or "a Connection"
+    if kind == AgentRequest.SETUP:
+        return fit_title(f"Add Connection: {name}")
+    return fit_title(f"Update the credential for {name}")
+
+_MAX_REQUEST_TITLE = 120
+_TITLE_CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_MAX_PENDING_REQUESTS = 20
+# How long a denial answers a repeated ask before the human can be asked again
+_DENIAL_COOLDOWN = timedelta(hours=1)
+_REQUEST_PAGE_SIZE = 100
+
+
+class AgentRuntimeAPIView(APIView):
+    authentication_classes = [AgentAPIAuthentication]
+    permission_classes = [IsAuthenticated, IsIPAllowed]
+    throttle_classes = [PlanBasedRateThrottle]
+    parser_classes = [CamelCaseJSONParser]
+    renderer_classes = [CamelCaseJSONRenderer]
+
+    def handle_exception(self, exc):
+        if isinstance(exc, AgentRuntimeError):
+            return error_response(exc)
+        if response := authentication_error_response(exc):
+            return response
+        return exception_error_response(exc)
+
+
+class ProviderRulesJSONRenderer(CamelCaseJSONRenderer):
+    """Leaves the keys of a manifest's data maps as written.
+
+    Their keys are names from the provider (``cognito-identity``,
+    ``kms:CreateGrant``, ``publicAccessBlock``), not schema keys, and the
+    client looks them up exactly.
+    """
+
+    json_underscoreize = {
+        **CamelCaseJSONRenderer.json_underscoreize,
+        "ignore_fields": ("operations", "exact", "s3Subresources"),
+    }
+
+
+class AgentIdentityView(AgentRuntimeAPIView):
+    """Return the workflow-scoped identity represented by an Agent token."""
+
+    def get(self, request):
+        if request.auth.get("auth_type") != "Agent":
+            raise AgentRuntimeError(
+                "agent_identity_forbidden",
+                "Agent identity is available only to Agent tokens.",
+                status.HTTP_403_FORBIDDEN,
+            )
+
+        agent = request.auth["agent"]
+        workflow = request.auth["workflow"]
+        organisation = request.auth["organisation"]
+        return Response(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "principal_type": "agent",
+                "agent": {"id": str(agent.id), "name": agent.name},
+                "workflow": {
+                    "id": str(workflow.id),
+                    "name": workflow.name,
+                },
+                "organization": {
+                    "id": str(organisation.id),
+                    "name": organisation.name,
+                },
+            }
+        )
+
+
+def _same_request_target(
+    agent_request,
+    *,
+    kind,
+    connection,
+    service_type,
+    credential_provider,
+    credential_name,
+    credential_id=None,
+    related_request_id=None,
+    action=None,
+    duration_seconds=None,
+):
+    """Whether a request reusing a dedupKey asks for the same thing."""
+
+    if agent_request.duration_seconds != duration_seconds:
+        return False
+    if action or agent_request.action:
+        return (
+            agent_request.action == action
+            and agent_request.kind == kind
+            and str(agent_request.related_request_id or "")
+            == str(related_request_id or "")
+        )
+    stored = [
+        agent_request.kind,
+        agent_request.related_request_id,
+        agent_request.service_type,
+        agent_request.credential_provider,
+        agent_request.credential_name,
+    ]
+    requested = [
+        kind,
+        related_request_id,
+        service_type,
+        credential_provider,
+        credential_name,
+    ]
+    if kind != AgentRequest.SETUP:
+        stored += [agent_request.connection_id, agent_request.credential_id]
+        requested += [getattr(connection, "id", None), credential_id]
+    return [str(value or "") for value in stored] == [
+        str(value or "") for value in requested
+    ]
+
+
+def _answers_repeated_ask(agent_request, now):
+    """Whether an earlier request with this dedupKey answers a repeated ask."""
+
+    if agent_request.status == AgentRequest.PENDING:
+        return True
+    if agent_request.status == AgentRequest.APPROVED:
+        if agent_request.action:
+            # An action changes something a member can undo, so once carried
+            # out it answers nothing: the same ask reaches a member again.
+            return False
+        # Access that was granted for a time and has run out no longer
+        # answers: the same ask has to reach a member again.
+        granted_until = ((agent_request.applied_action or {}).get("access") or {}).get(
+            "expiresAt"
+        )
+        expires_at = parse_datetime(granted_until) if granted_until else None
+        return expires_at is None or expires_at > now
+    return bool(
+        agent_request.status == AgentRequest.DENIED
+        and agent_request.resolved_at
+        and agent_request.resolved_at > now - _DENIAL_COOLDOWN
+    )
+
+
+_PROGRESS_FIELDS = frozenset({
+    "revision", "stage", "credential_id", "credential_name",
+    "credential_provider", "credential_revision", "connection_id", "grant_id",
+})
+# ``follow_on_request_id``: the pending request that carries the part of an
+# approved request its approver could not decide.
+_RESOLUTION_FIELDS = _PROGRESS_FIELDS | frozenset(
+    {"runtime_action", "follow_on_request_id"}
+)
+
+
+def _safe_request_metadata(value, allowed_fields):
+    """The allowlisted identifier fields of saved request state."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        key: item
+        for key, item in value.items()
+        if key in allowed_fields and isinstance(item, str)
+    }
+
+
+def _request_queryset(session):
+    return AgentRequest.objects.filter(
+        workflow=session.workflow,
+        organisation=session.organisation,
+    )
+
+
+def _request_approval_url(agent_request):
+    """Console page where a human reviews this request."""
+
+    origins = settings.CORS_ALLOWED_ORIGINS
+    origin = str(origins[0]).strip().rstrip("/") if origins else ""
+    if not origin:
+        return None
+    organisation_path = quote(agent_request.organisation.name, safe="")
+    # The console opens the same dialog for setup and credential replacement.
+    query = urlencode({"request": str(agent_request.id), "action": "setup"})
+    return f"{origin}/{organisation_path}/agents/requests?{query}"
+
+
+def _session_response(session, config, *, session_credential=None):
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "session_uid": str(session.session_uid),
+        "expires_at": session.expires_at,
+        "max_expires_at": session.max_expires_at,
+        "config_generation": session.config_generation,
+        **config,
+    }
+    if session_credential is not None:
+        payload["session_credential"] = session_credential
+    return payload
+
+
+def _request_response(agent_request, *, cooldown=False):
+    credential = agent_request.credential
+    if credential is None and agent_request.connection_id:
+        credential = agent_request.connection.authentication
+    pending = agent_request.status == AgentRequest.PENDING
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "id": str(agent_request.id),
+        "revision": str(agent_request.revision),
+        "workflow_id": str(agent_request.workflow_id),
+        "status": agent_request.status,
+        "kind": agent_request.kind,
+        "markdown": agent_request.markdown,
+        "service_type": agent_request.service_type,
+        "credential_provider": (
+            credential.provider
+            if credential and not pending
+            else agent_request.credential_provider
+        ),
+        "credential_name": (
+            credential.name
+            if credential and not pending
+            else agent_request.credential_name
+        ),
+        "connection_id": (
+            str(agent_request.connection_id) if agent_request.connection_id else None
+        ),
+        "grant_id": str(agent_request.grant_id) if agent_request.grant_id else None,
+        "credential_id": str(credential.id) if credential else None,
+        "credential_revision": str(credential.revision) if credential else None,
+        "progress": _safe_request_metadata(agent_request.progress, _PROGRESS_FIELDS),
+        "resolution": _safe_request_metadata(
+            agent_request.resolution, _RESOLUTION_FIELDS
+        ),
+        "related_request_id": (
+            str(agent_request.related_request_id)
+            if agent_request.related_request_id
+            else None
+        ),
+        "resolution_note": agent_request.resolution_note,
+        "resolved_at": agent_request.resolved_at,
+        "request_expires_at": agent_request.expires_at,
+        "created_at": agent_request.created_at,
+        "updated_at": agent_request.updated_at,
+    }
+    payload["title"] = agent_request.title
+    if agent_request.duration_seconds is not None:
+        # How long the access this request ends in was asked to last.
+        payload["duration_seconds"] = agent_request.duration_seconds
+    access = applied_access(agent_request.applied_action)
+    if agent_request.status == AgentRequest.APPROVED and access:
+        # What was asked for and what the member granted.
+        payload["access"] = access
+    if agent_request.action:
+        # Stored in the wire's own spelling; the renderer leaves it as it is.
+        payload["action"] = agent_request.action
+        if agent_request.applied_action:
+            payload["applied_action"] = agent_request.applied_action
+    runtime_action = (agent_request.resolution or {}).get("runtime_action")
+    if agent_request.status == AgentRequest.APPROVED and runtime_action in {
+        "retry", "restart_required"
+    }:
+        payload["runtime_action"] = runtime_action
+    if agent_request.status == AgentRequest.PENDING:
+        approval_url = _request_approval_url(agent_request)
+        if approval_url:
+            payload["approval_url"] = approval_url
+    if cooldown:
+        payload["cooldown"] = True
+    return payload
+
+
+class AgentSessionCollectionView(AgentRuntimeAPIView):
+    renderer_classes = [ProviderRulesJSONRenderer]
+
+    def post(self, request):
+        if request.data.get("schema_version") != SCHEMA_VERSION:
+            raise AgentRuntimeError(
+                "unsupported_schema_version",
+                "schemaVersion 1 is required.",
+                details={"supported": [SCHEMA_VERSION]},
+            )
+        workflow_id = request.data.get("workflow_id")
+        idempotency_key = request.data.get("idempotency_key")
+        client = request.data.get("client", {})
+        harness_label = request.data.get("harness_label", "")
+        if not isinstance(idempotency_key, str) or not _IDEMPOTENCY_KEY.fullmatch(
+            idempotency_key
+        ):
+            raise AgentRuntimeError(
+                "invalid_idempotency_key",
+                "idempotencyKey must be 8-128 URL-safe characters.",
+            )
+        if not isinstance(harness_label, str) or len(harness_label) > 128:
+            raise AgentRuntimeError(
+                "invalid_harness_label",
+                "harnessLabel must be a string of at most 128 characters.",
+            )
+        if not isinstance(client, dict):
+            raise AgentRuntimeError("invalid_client", "client must be an object.")
+        if (
+            len(str(client.get("name", ""))) > 128
+            or len(str(client.get("version", ""))) > 64
+            or len(json.dumps(client)) > _MAX_CLIENT_INFO_BYTES
+        ):
+            raise AgentRuntimeError("invalid_client", "client metadata is too long.")
+
+        workflow = resolve_workflow_for_open(request, workflow_id)
+        prepared = prepare_workflow(workflow)
+        negotiate_client(client, prepared)
+        authenticator = session_authenticator_kwargs(request)
+
+        def revalidate_open_access(agent, locked_workflow):
+            validate_workflow_open_access(request, agent, locked_workflow)
+
+        try:
+            # Commit the session before resolving its grants and decoys so an
+            # idempotent retry can safely finish an interrupted open.
+            session, session_credential, _ = create_agent_session(
+                agent=workflow.agent,
+                workflow=workflow,
+                idempotency_key=idempotency_key,
+                client_info=client,
+                harness_label=harness_label,
+                access_validator=revalidate_open_access,
+                **authenticator,
+            )
+            # Check the Workflow again now that the session holds its locks. The
+            # check above only gives early feedback; access may have changed
+            # while this request waited.
+            prepared = prepare_workflow(session.workflow)
+            negotiate_client(client, prepared)
+            config = resolve_workflow_config(
+                session,
+                include_secrets=True,
+                prepared_grants=prepared,
+            )
+        except AgentRuntimeError:
+            raise
+        except ValueError as exc:
+            raise AgentRuntimeError(
+                "agent_session_open_failed", str(exc)
+            ) from exc
+        return Response(
+            _session_response(
+                session, config, session_credential=session_credential
+            ),
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class AgentSessionConfigView(AgentRuntimeAPIView):
+    renderer_classes = [ProviderRulesJSONRenderer]
+
+    def get(self, request, session_uid):
+        session = resolve_session_for_request(request, session_uid)
+        config = resolve_workflow_config(
+            session,
+            include_secrets=True,
+        )
+        hard_limit = session.max_expires_at or session.expires_at
+        next_expiry = min(timezone.now() + SESSION_TTL, hard_limit)
+        update = {"config_generation": F("config_generation") + 1}
+        if next_expiry > session.expires_at:
+            update["expires_at"] = next_expiry
+        AgentSession.objects.filter(pk=session.pk, revoked_at__isnull=True).update(
+            **update
+        )
+        session.refresh_from_db()
+        return Response(_session_response(session, config))
+
+
+class AgentSessionContextView(AgentRuntimeAPIView):
+    def get(self, request, session_uid):
+        session = resolve_session_for_request(request, session_uid)
+        if set(request.query_params) - {"service_type"}:
+            raise AgentRuntimeError(
+                "unsupported_context_query",
+                "Context accepts only one optional serviceType parameter.",
+            )
+        if len(request.query_params.getlist("service_type")) > 1:
+            raise AgentRuntimeError(
+                "invalid_context_service_type",
+                "serviceType must occur at most once.",
+            )
+        service_type = request.query_params.get("service_type")
+        if service_type is not None:
+            if (
+                not isinstance(service_type, str)
+                or not _REQUEST_SERVICE_TYPE.fullmatch(service_type)
+            ):
+                raise AgentRuntimeError(
+                    "invalid_context_service_type",
+                    "serviceType must be a valid service identifier.",
+                )
+            service_type = service_type.lower()
+            try:
+                service = (
+                    None
+                    if is_custom_service(service_type)
+                    else get_config_registry().get_service(service_type)
+                )
+            except ConfigRegistryError as exc:
+                raise AgentRuntimeError(
+                    "unknown_context_service_type",
+                    "The requested serviceType is not supported.",
+                    status.HTTP_404_NOT_FOUND,
+                ) from exc
+            if service is not None and not service["credential_providers"]:
+                raise AgentRuntimeError(
+                    "unknown_context_service_type",
+                    "The requested serviceType is not available for Agent Connections.",
+                    status.HTTP_404_NOT_FOUND,
+                )
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "session_uid": str(session.session_uid),
+            "markdown": compose_context(session, service_type=service_type),
+        }
+        if service_type is not None:
+            payload["service_type"] = service_type
+        return Response(payload)
+
+
+class AgentSessionCapabilitiesView(AgentRuntimeAPIView):
+    def get(self, request, session_uid):
+        if request.query_params:
+            raise AgentRuntimeError(
+                "unsupported_capabilities_query",
+                "Capabilities does not accept query parameters.",
+            )
+        session = resolve_session_for_request(request, session_uid)
+        return Response(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "matcher_schema_version": CLIENT_MATCHER_SCHEMA_VERSION,
+                "kind": "phase.ai.capabilities",
+                "session_uid": str(session.session_uid),
+                "services": resolve_runtime_capabilities(session),
+            }
+        )
+
+
+class AgentSessionDiscoverView(AgentRuntimeAPIView):
+    renderer_classes = [ProviderRulesJSONRenderer]
+
+    def get(self, request, session_uid):
+        session = resolve_session_for_request(request, session_uid)
+        config = resolve_workflow_config(
+            session,
+            include_secrets=False,
+        )
+        # Ending an expired grant moves the generation on.
+        session.refresh_from_db(fields=["config_generation"])
+        return Response(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "session_uid": str(session.session_uid),
+                "config_generation": session.config_generation,
+                **config,
+            }
+        )
+
+
+class AgentSessionRevokeView(AgentRuntimeAPIView):
+    def post(self, request, session_uid):
+        session = resolve_session_for_request(request, session_uid)
+        session = revoke_agent_session(session)
+        return Response(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "session_uid": str(session.session_uid),
+                "revoked_at": session.revoked_at,
+            }
+        )
+
+
+class AgentSessionRotateView(AgentRuntimeAPIView):
+    def post(self, request, session_uid):
+        with transaction.atomic():
+            session = resolve_session_for_request(request, session_uid)
+            session = AgentSession.objects.select_for_update().get(pk=session.pk)
+            # The first verification happened before the row lock. Another
+            # rotate request may have won while this request was waiting, so
+            # the presented capability must be checked again against the
+            # locked row before replacing it.
+            if not verify_session_credential(
+                session, session_credential_from_request(request)
+            ):
+                raise AgentRuntimeError(
+                    "invalid_session_credential",
+                    "The Agent session is no longer active or its credential changed.",
+                    status.HTTP_401_UNAUTHORIZED,
+                )
+            credential = rotate_session_credential(session)
+        return Response(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "session_uid": str(session.session_uid),
+                "session_credential": credential,
+                "expires_at": session.expires_at,
+                "config_generation": session.config_generation,
+            }
+        )
+
+
+class AgentRequestCollectionView(AgentRuntimeAPIView):
+    def get(self, request):
+        session = resolve_session_from_request_credential(request)
+        require_session_workflow_permission(
+            session,
+            "read",
+            "AgentRequests",
+            code="agent_request_forbidden",
+            message=(
+                "The authenticated principal cannot read Agent requests for this "
+                "Workflow."
+            ),
+        )
+        if set(request.query_params) - {"workflow_id", "status"}:
+            raise AgentRuntimeError(
+                "unsupported_request_field", "The query contains an unsupported field."
+            )
+        if any(
+            len(request.query_params.getlist(key)) != 1
+            for key in request.query_params
+        ):
+            raise AgentRuntimeError(
+                "invalid_request_query", "Query fields must occur exactly once."
+            )
+        workflow_id = request.query_params.get("workflow_id")
+        if workflow_id is not None and workflow_id != str(session.workflow_id):
+            raise AgentRuntimeError(
+                "workflow_scope_mismatch",
+                "Requests are scoped to the authenticated Workflow.",
+                status.HTTP_403_FORBIDDEN,
+            )
+        requested_status = request.query_params.get("status", AgentRequest.PENDING)
+        if requested_status not in dict(AgentRequest.STATUS_CHOICES):
+            raise AgentRuntimeError(
+                "invalid_request_status", "The requested status is unsupported."
+            )
+        queryset = _request_queryset(session)
+        expire_overdue_requests(queryset, timezone.now())
+        requests = (
+            queryset.filter(status=requested_status)
+            .select_related(
+                "organisation", "connection__authentication", "grant", "credential"
+            )
+            .order_by("-created_at", "id")[:_REQUEST_PAGE_SIZE]
+        )
+        return Response(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "requests": [_request_response(item) for item in requests],
+            }
+        )
+
+    def post(self, request):
+        session = resolve_session_from_request_credential(request)
+        require_session_workflow_permission(
+            session,
+            "create",
+            "AgentRequests",
+            code="agent_request_forbidden",
+            message=(
+                "The authenticated principal cannot create Agent requests for this "
+                "Workflow."
+            ),
+        )
+        if not isinstance(request.data, Mapping):
+            raise AgentRuntimeError(
+                "invalid_request_body", "The request body must be a JSON object."
+            )
+        unknown_fields = sorted(set(request.data) - _REQUEST_FIELDS)
+        if unknown_fields:
+            raise AgentRuntimeError(
+                "unsupported_request_field",
+                "The request contains an unsupported field.",
+                details={"field": unknown_fields[0]},
+            )
+        if "schema_version" in request.data:
+            schema_version = request.data["schema_version"]
+            if isinstance(schema_version, bool) or schema_version != SCHEMA_VERSION:
+                raise AgentRuntimeError(
+                    "unsupported_schema_version",
+                    "schemaVersion 1 is required.",
+                    details={"supported": [SCHEMA_VERSION]},
+                )
+
+        kind = request.data.get("kind")
+        action = request.data.get("action")
+        if action is not None:
+            if kind is not None and (
+                not isinstance(kind, str)
+                or kind not in dict(AgentRequest.KIND_CHOICES)
+            ):
+                raise AgentRuntimeError(
+                    "invalid_request_kind", "kind is not a supported request kind."
+                )
+            unexpected = [
+                field for field in _PACKAGED_TARGET_FIELDS if field in request.data
+            ]
+            if unexpected:
+                raise AgentRuntimeError(
+                    "unexpected_request_field",
+                    "A request that carries an action names its target there.",
+                    details={"field": unexpected[0]},
+                )
+            # The parser renamed the action's members; give them back the
+            # spelling the action is stored and reviewed in.
+            action = camelize(action)
+        elif isinstance(kind, str) and kind in {
+            AgentRequest.CONNECTION_UPDATE,
+            AgentRequest.CONNECTION_REMOVAL,
+            AgentRequest.ACCESS_CHANGE,
+            AgentRequest.CONTEXT_UPDATE,
+        }:
+            raise AgentRuntimeError(
+                "action_required", f"A {kind} request must carry an action."
+            )
+        elif kind not in {AgentRequest.SETUP, AgentRequest.CREDENTIAL_UPDATE}:
+            raise AgentRuntimeError(
+                "invalid_request_kind",
+                "kind must be setup or credential_update.",
+            )
+        markdown = request.data.get("markdown", "")
+        if markdown is None and action is not None:
+            markdown = ""
+        # An action says what is being asked; free text is then optional.
+        if (
+            not isinstance(markdown, str)
+            or (action is None and not markdown.strip())
+            or len(markdown) > _MAX_REQUEST_MARKDOWN
+        ):
+            raise AgentRuntimeError(
+                "invalid_request_markdown",
+                (
+                    "markdown must contain 1-20,000 characters."
+                    if action is None
+                    else "markdown must contain at most 20,000 characters."
+                ),
+            )
+        if _CREDENTIAL_TEXT.search(markdown):
+            raise AgentRuntimeError(
+                "credential_in_request_markdown",
+                "Request markdown must not contain credential-shaped values.",
+            )
+        title = request.data.get("title") or ""
+        if (
+            not isinstance(title, str)
+            or len(title.strip()) > _MAX_REQUEST_TITLE
+            or _TITLE_CONTROL_CHARACTER.search(title.strip())
+        ):
+            raise AgentRuntimeError(
+                "invalid_request_title",
+                "title must be plain text of at most 120 characters.",
+            )
+        title = title.strip()
+        if _CREDENTIAL_TEXT.search(title):
+            raise AgentRuntimeError(
+                "credential_in_request_title",
+                "Request title must not contain credential-shaped values.",
+            )
+
+        dedup_key = request.data.get("dedup_key", "")
+        if not isinstance(dedup_key, str) or len(dedup_key) > 128:
+            raise AgentRuntimeError("invalid_dedup_key", "dedupKey is too long.")
+        related_request_id = request.data.get("related_request_id")
+        if related_request_id is not None and (
+            not isinstance(related_request_id, str)
+            or not _REQUEST_ID.fullmatch(related_request_id)
+        ):
+            raise AgentRuntimeError(
+                "invalid_related_request",
+                "relatedRequestId must be a valid request identifier.",
+            )
+
+        # Only a request that ends in access takes a duration: a setup, a
+        # renewal, or an allow. It is checked once the request's kind is known.
+        duration_seconds = None
+
+        def requested(value):
+            try:
+                return requested_duration(session.organisation, value)
+            except DurationError as exc:
+                raise AgentRuntimeError("invalid_duration", str(exc)) from exc
+
+        def refuse_duration():
+            if request.data.get("duration_seconds") is not None:
+                raise AgentRuntimeError(
+                    "unexpected_request_field",
+                    "durationSeconds applies only to a request that ends in "
+                    "access.",
+                    details={"field": "durationSeconds"},
+                )
+
+        service_type = request.data.get("service_type")
+        credential_provider = request.data.get("credential_provider")
+        credential_name = request.data.get("credential_name", "")
+        credential_id = request.data.get("credential_id")
+        connection_id = request.data.get("connection_id")
+
+        connection = None
+        grant = None
+        requested_credential = None
+        if action is None and kind == AgentRequest.SETUP:
+            if connection_id is not None or credential_id is not None:
+                raise AgentRuntimeError(
+                    "unexpected_request_field",
+                    "setup creates its own pending Connection and cannot target an "
+                    "existing credential.",
+                )
+            if (
+                not isinstance(service_type, str)
+                or not _REQUEST_SERVICE_TYPE.fullmatch(service_type)
+            ):
+                raise AgentRuntimeError(
+                    "service_type_required",
+                    "serviceType must be a 1-64 character identifier.",
+                )
+            service_type = service_type.lower()
+            if is_custom_service(service_type):
+                raise AgentRuntimeError(
+                    "action_required",
+                    "Ask for a custom HTTP Connection with an "
+                    "agent_connection.create action.",
+                )
+            if is_app_service(service_type):
+                raise AgentRuntimeError(
+                    "action_required",
+                    "Ask for an app's secrets with an "
+                    "agent_connection.app_access action.",
+                )
+            try:
+                service = get_config_registry().get_service(service_type)
+            except ConfigRegistryError as exc:
+                raise AgentRuntimeError(
+                    "service_not_supported",
+                    str(exc),
+                ) from exc
+            compatible_providers = set(service.get("credential_providers") or [])
+            if credential_provider not in compatible_providers:
+                raise AgentRuntimeError(
+                    "credential_provider_not_supported",
+                    "credentialProvider is incompatible with this service.",
+                )
+            if (
+                not isinstance(credential_name, str)
+                or not credential_name.strip()
+                or len(credential_name.strip()) > 64
+            ):
+                raise AgentRuntimeError(
+                    "invalid_credential_name",
+                    "credentialName must contain 1-64 characters.",
+                )
+            credential_name = credential_name.strip()
+            duration_seconds = requested(request.data.get("duration_seconds"))
+        elif action is None:
+            refuse_duration()
+            if "service_type" in request.data:
+                raise AgentRuntimeError(
+                    "unexpected_service_type",
+                    "serviceType is valid only for setup requests.",
+                )
+            if (
+                not isinstance(connection_id, str)
+                or not _REQUEST_ID.fullmatch(connection_id)
+            ):
+                raise AgentRuntimeError(
+                    "connection_id_required",
+                    "credential_update requires connectionId.",
+                )
+            grant = (
+                session.workflow.grants.select_related(
+                    "connection__authentication"
+                )
+                .active()
+                .filter(
+                    connection_id=connection_id,
+                    connection__deleted_at__isnull=True,
+                )
+                .first()
+            )
+            if grant is None:
+                raise AgentRuntimeError(
+                    "connection_not_in_workflow",
+                    "The requested Connection is not bound to this Workflow.",
+                    status.HTTP_404_NOT_FOUND,
+                )
+            connection = grant.connection
+            service_type = connection.service_type
+            if is_custom_service(service_type):
+                # A custom Connection has no integration credential to swap:
+                # the same ask is for a member to enter its secret again.
+                if credential_id is not None or credential_provider is not None:
+                    raise AgentRuntimeError(
+                        "unexpected_request_field",
+                        "A custom Connection has no integration credential.",
+                    )
+                action = {
+                    "type": "agent_connection.secret_update",
+                    "version": 1,
+                    "connectionId": connection_id,
+                }
+        if action is None and kind == AgentRequest.CREDENTIAL_UPDATE:
+            try:
+                service = get_config_registry().get_service(service_type)
+            except ConfigRegistryError as exc:
+                raise AgentRuntimeError(
+                    "service_not_supported", str(exc)
+                ) from exc
+            compatible_providers = set(service.get("credential_providers") or [])
+            if credential_provider is None:
+                credential_provider = connection.authentication.provider
+            if credential_provider not in compatible_providers:
+                raise AgentRuntimeError(
+                    "credential_provider_not_supported",
+                    "credentialProvider is incompatible with this Connection.",
+                )
+            if credential_name is None or credential_name == "":
+                credential_name = connection.authentication.name
+            if not isinstance(credential_name, str) or len(credential_name) > 64:
+                raise AgentRuntimeError(
+                    "invalid_credential_name", "credentialName is too long."
+                )
+            if credential_id is not None:
+                requested_credential = ProviderCredentials.objects.filter(
+                    id=credential_id,
+                    organisation=session.organisation,
+                    deleted_at__isnull=True,
+                ).first()
+                if (
+                    requested_credential is None
+                    or requested_credential.provider not in compatible_providers
+                ):
+                    raise AgentRuntimeError(
+                        "credential_not_found",
+                        "The requested integration credential is unavailable.",
+                        status.HTTP_404_NOT_FOUND,
+                    )
+
+        draft = None
+        if action is not None:
+            # The handler for the action's type finds and checks its own target,
+            # and records it on the request that is about to be filed.
+            draft = AgentRequest(
+                organisation=session.organisation,
+                workflow=session.workflow,
+            )
+            author = session_human_account(session)
+            try:
+                handler = action_handler(action)
+                if kind not in (None, handler.kind):
+                    raise ActionError(
+                        f"A {handler.type} request uses kind {handler.kind}.",
+                        code="request_kind_mismatch",
+                    )
+                kind = draft.kind = handler.kind
+                if handler.takes_duration:
+                    duration_seconds = requested(
+                        request.data.get("duration_seconds")
+                    )
+                else:
+                    refuse_duration()
+                draft.duration_seconds = duration_seconds
+                action = handler.validate(draft, action, author)
+                title = title or handler.describe(draft, action, author)["title"]
+            except ActionError as exc:
+                raise AgentRuntimeError(
+                    exc.code,
+                    str(exc),
+                    (
+                        status.HTTP_404_NOT_FOUND
+                        if exc.not_found
+                        else status.HTTP_400_BAD_REQUEST
+                    ),
+                ) from exc
+
+        if not dedup_key:
+            intent = (
+                {
+                    "kind": kind,
+                    "connection": str(connection_id or ""),
+                    "service": service_type,
+                    "credential_provider": credential_provider,
+                    "credential_name": credential_name,
+                    "credential_id": str(credential_id or ""),
+                    "related_request": str(related_request_id or ""),
+                }
+                if action is None
+                else {
+                    "kind": kind,
+                    "action": action,
+                    "related_request": str(related_request_id or ""),
+                }
+            )
+            if duration_seconds is not None:
+                intent["duration"] = duration_seconds
+            dedup_key = "intent-" + blake2b(
+                json.dumps(intent, sort_keys=True).encode(),
+                encoder=RawEncoder,
+                digest_size=32,
+            ).hex()
+
+        now = timezone.now()
+        scoped_requests = _request_queryset(session)
+        # Commit expiry on its own so a later error in this request can't undo it.
+        expire_overdue_requests(scoped_requests, now)
+
+        with transaction.atomic():
+            try:
+                workflow = AgentWorkflow.objects.select_for_update().get(
+                    id=session.workflow_id,
+                    organisation=session.organisation,
+                    agent=session.agent,
+                    deleted_at__isnull=True,
+                )
+            except AgentWorkflow.DoesNotExist as exc:
+                raise AgentRuntimeError(
+                    "agent_workflow_not_found",
+                    "The Agent Workflow is no longer active.",
+                    status.HTTP_404_NOT_FOUND,
+                ) from exc
+
+            related_request = None
+            if related_request_id:
+                related_request = scoped_requests.filter(
+                    id=related_request_id
+                ).first()
+                if related_request is None:
+                    raise AgentRuntimeError(
+                        "related_request_not_found",
+                        "The related request was not found in this Workflow.",
+                        status.HTTP_404_NOT_FOUND,
+                    )
+
+            existing = scoped_requests.filter(dedup_key=dedup_key).order_by(
+                "-created_at"
+            ).first()
+            if existing is not None and _answers_repeated_ask(existing, now):
+                if not _same_request_target(
+                    existing,
+                    kind=kind,
+                    connection=connection,
+                    service_type=service_type,
+                    credential_provider=credential_provider,
+                    credential_name=credential_name,
+                    credential_id=credential_id,
+                    related_request_id=related_request_id,
+                    action=action,
+                    duration_seconds=duration_seconds,
+                ):
+                    raise AgentRuntimeError(
+                        "dedup_key_conflict",
+                        "dedupKey is already in use for a different request target.",
+                        status.HTTP_409_CONFLICT,
+                    )
+                return Response(_request_response(existing, cooldown=True))
+
+            pending_count = scoped_requests.filter(
+                status=AgentRequest.PENDING
+            ).count()
+            if pending_count >= _MAX_PENDING_REQUESTS:
+                raise AgentRuntimeError(
+                    "pending_request_limit",
+                    f"This Workflow already has {_MAX_PENDING_REQUESTS} pending "
+                    "requests.",
+                    status.HTTP_429_TOO_MANY_REQUESTS,
+                    True,
+                )
+
+            if draft is not None:
+                agent_request = file_action_request(
+                    draft,
+                    workflow=workflow,
+                    title=title,
+                    action=action,
+                    markdown=markdown,
+                    dedup_key=dedup_key,
+                    related_request=related_request,
+                    now=now,
+                )
+            else:
+                if kind == AgentRequest.SETUP:
+                    connection = AgentConnection(
+                        organisation=session.organisation,
+                        name=credential_name,
+                        service_type=service_type,
+                        # Required endpoint config is derived from the selected
+                        # ProviderCredential when a human fulfills the request.
+                        config={},
+                        state=AgentConnection.PENDING_CREDENTIALS,
+                    )
+                    connection.full_clean()
+                    connection.save()
+
+                progress = {
+                    "stage": "awaiting_credentials",
+                    "connection_id": str(connection.id),
+                    "credential_provider": credential_provider,
+                    "credential_name": credential_name,
+                }
+                if kind == AgentRequest.CREDENTIAL_UPDATE:
+                    progress.update(
+                        {
+                            "baseline_authentication_id": str(
+                                connection.authentication_id
+                            ),
+                            "baseline_grant_id": str(grant.id),
+                        }
+                    )
+                agent_request = AgentRequest(
+                    organisation=session.organisation,
+                    workflow=workflow,
+                    connection=connection,
+                    grant=grant,
+                    credential=requested_credential,
+                    kind=kind,
+                    service_type=service_type,
+                    credential_provider=credential_provider,
+                    credential_name=credential_name,
+                    title=title
+                    or _packaged_request_title(
+                        kind, credential_name or service_type
+                    ),
+                    markdown=markdown.strip(),
+                    dedup_key=dedup_key,
+                    related_request=related_request,
+                    progress=progress,
+                    duration_seconds=duration_seconds,
+                    expires_at=now + REQUEST_LIFETIME,
+                )
+                agent_request.full_clean()
+                agent_request.save()
+
+        return Response(
+            _request_response(agent_request), status=status.HTTP_201_CREATED
+        )
+
+
+class AgentRequestDetailView(AgentRuntimeAPIView):
+    def get(self, request, request_id):
+        session = resolve_session_from_request_credential(request)
+        require_session_workflow_permission(
+            session,
+            "read",
+            "AgentRequests",
+            code="agent_request_forbidden",
+            message=(
+                "The authenticated principal cannot read Agent requests for this "
+                "Workflow."
+            ),
+        )
+        queryset = _request_queryset(session)
+        expire_overdue_requests(queryset.filter(id=request_id), timezone.now())
+        try:
+            agent_request = queryset.select_related(
+                "connection__authentication", "grant", "credential"
+            ).get(
+                id=request_id,
+            )
+        except (AgentRequest.DoesNotExist, ValueError):
+            raise AgentRuntimeError(
+                "agent_request_not_found",
+                "The Agent request was not found in this Workflow.",
+                status.HTTP_404_NOT_FOUND,
+            )
+        return Response(_request_response(agent_request))
+
+
+class AgentRequestCancelView(AgentRuntimeAPIView):
+    """Cancel only pending work; an approval that won the race stays intact."""
+
+    def post(self, request, request_id):
+        session = resolve_session_from_request_credential(request)
+        require_session_workflow_permission(
+            session,
+            "delete",
+            "AgentRequests",
+            code="agent_request_forbidden",
+            message=(
+                "The authenticated principal cannot cancel Agent requests for this "
+                "Workflow."
+            ),
+        )
+        if not isinstance(request.data, Mapping) or request.data:
+            raise AgentRuntimeError(
+                "invalid_request_body", "Cancellation requires an empty JSON object."
+            )
+        with transaction.atomic():
+            try:
+                agent_request = (
+                    _request_queryset(session)
+                    .select_for_update(of=("self",))
+                    .get(id=request_id)
+                )
+            except (AgentRequest.DoesNotExist, ValueError) as exc:
+                raise AgentRuntimeError(
+                    "agent_request_not_found",
+                    "The Agent request was not found in this Workflow.",
+                    status.HTTP_404_NOT_FOUND,
+                ) from exc
+            if agent_request.status == AgentRequest.PENDING:
+                now = timezone.now()
+                expired = agent_request.expires_at and agent_request.expires_at <= now
+                close_agent_request(
+                    agent_request,
+                    AgentRequest.EXPIRED if expired else AgentRequest.CANCELLED,
+                    now,
+                )
+            payload = _request_response(agent_request)
+        return Response(payload)

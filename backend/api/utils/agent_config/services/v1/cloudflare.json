@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "service_type": "cloudflare",
+  "display_name": "Cloudflare",
+  "provider": "cloudflare",
+  "protocol": "http",
+  "hosts": [
+    {"match": "exact", "value": "api.cloudflare.com", "port": 443, "path": "/client/v4/*"}
+  ],
+  "host_rules_mode": "fixed",
+  "config_schema": [],
+  "injection": {
+    "action": "set_header",
+    "name": "Authorization",
+    "value_format": "Bearer {value}",
+    "value_from": {"source": "credential", "field": "token"},
+    "when_absent": "attach"
+  },
+  "fields": {"account_id": {"class": "identifier"}, "token": {"class": "secret"}},
+  "decoy_format": {"token": "{rand:alnum:40}"},
+  "environment_bindings": [
+    {"name": "CLOUDFLARE_ACCOUNT_ID", "action": "set", "source": "identifier", "source_field": "account_id"},
+    {"name": "CLOUDFLARE_API_TOKEN", "action": "set", "source": "decoy", "source_field": "token", "sensitive": true}
+  ],
+  "credential_providers": ["cloudflare"],
+  "client_matchers": [{"kind": "executable", "values": ["wrangler"]}],
+  "context_template": "The Cloudflare API through the Phase proxy, for account {{ account_id }}. CLOUDFLARE_API_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached.",
+  "credential_environment": [
+    "CLOUDFLARE_API_TOKEN"
+  ],
+  "credential_fields": {
+    "token": "access_token",
+    "account_id": "account_id"
+  }
+}

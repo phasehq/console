@@ -1,0 +1,5 @@
+{
+  "credential_environment": [
+    "RAILWAY_API_TOKEN"
+  ]
+}

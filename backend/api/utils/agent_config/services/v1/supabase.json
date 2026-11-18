@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "service_type": "supabase",
+  "display_name": "Supabase",
+  "provider": "supabase",
+  "protocol": "http",
+  "hosts": [
+    {"match": "exact", "value": "api.supabase.com", "port": 443, "path": "/v1/*"}
+  ],
+  "host_rules_mode": "fixed",
+  "config_schema": [],
+  "injection": {
+    "action": "set_header",
+    "name": "Authorization",
+    "value_format": "Bearer {value}",
+    "value_from": {"source": "credential", "field": "token"},
+    "when_absent": "attach"
+  },
+  "fields": {"token": {"class": "secret"}},
+  "decoy_format": {"token": "sbp_{rand:hex:40}"},
+  "environment_bindings": [
+    {"name": "SUPABASE_ACCESS_TOKEN", "action": "set", "source": "decoy", "source_field": "token", "sensitive": true}
+  ],
+  "credential_providers": ["supabase"],
+  "client_matchers": [{"kind": "executable", "values": ["supabase"]}],
+  "context_template": "The Supabase Management API through the Phase proxy; this is not a project's data API. SUPABASE_ACCESS_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached.",
+  "credential_environment": [
+    "SUPABASE_ACCESS_TOKEN"
+  ],
+  "credential_fields": {
+    "token": "access_token"
+  }
+}

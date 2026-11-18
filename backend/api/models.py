@@ -1,3 +1,4 @@
+from django.contrib.postgres.functions import RandomUUID
 from django.db import models, transaction
 from django.contrib.auth.models import (
     AbstractBaseUser,
@@ -16,6 +17,11 @@ from backend.quotas import (
 )
 from django.core.exceptions import ValidationError
 from api.utils.access.roles import MANAGED_ROLE_CHOICES
+
+def _same_text_id(left, right):
+    """TextField UUID defaults may remain UUID objects until DB reload."""
+    return left is not None and right is not None and str(left) == str(right)
+
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, username, email, password=None):
@@ -370,12 +376,23 @@ class OrganisationMember(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
+    def retire_agent_access(self, *, retired_at=None):
+        from api.utils.agents import retire_organisation_member_agent_access
+
+        return retire_organisation_member_agent_access(
+            self,
+            retired_at=retired_at,
+        )
+
+    @transaction.atomic
     def delete(self, *args, **kwargs):
         """
         Soft delete the object by setting the 'deleted_at' field.
         """
-        self.deleted_at = timezone.now()
-        self.save()
+        now = timezone.now()
+        self.retire_agent_access(retired_at=now)
+        self.deleted_at = now
+        self.save(update_fields=["deleted_at", "updated_at"])
 
 
 class ServiceAccountManager(models.Manager):
@@ -611,9 +628,19 @@ class ProviderCredentials(models.Model):
     name = models.CharField(max_length=64)
     provider = models.CharField(max_length=50, choices=Providers.get_provider_choices())
     credentials = models.JSONField()
+    # The database default lets older app versions insert during a rolling deploy.
+    revision = models.UUIDField(default=uuid4, db_default=RandomUUID(), editable=False)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        fields = kwargs.get("update_fields")
+        if not self._state.adding:
+            self.revision = uuid4()
+            if fields is not None and "revision" not in fields:
+                kwargs["update_fields"] = [*fields, "revision"]
+        super().save(*args, **kwargs)
 
 
 class EnvironmentSync(models.Model):
@@ -1312,6 +1339,22 @@ class SecretEvent(models.Model):
     service_account_token = models.ForeignKey(
         ServiceAccountToken, on_delete=models.SET_NULL, blank=True, null=True
     )
+    # Set when an Agent token made the call, through an app Connection of
+    # this Workflow. Not indexed: building an index on this large table would
+    # block writes to the secret log, and every query on these fields is also
+    # narrowed by an indexed column.
+    agent = models.ForeignKey(
+        "Agent", on_delete=models.SET_NULL, blank=True, null=True,
+        related_name="secret_events", db_index=False,
+    )
+    agent_token = models.ForeignKey(
+        "AgentToken", on_delete=models.SET_NULL, blank=True, null=True,
+        related_name="secret_events", db_index=False,
+    )
+    agent_workflow = models.ForeignKey(
+        "AgentWorkflow", on_delete=models.SET_NULL, blank=True, null=True,
+        related_name="secret_events", db_index=False,
+    )
     key = models.TextField()
     key_digest = models.TextField()
     value = models.TextField()
@@ -1366,6 +1409,9 @@ class AuditEvent(models.Model):
     TEAM = "team"
     ROTATING_SECRET = "rs"
     LOG_STREAM = "stream"
+    AGENT = "agent"
+    AGENT_CONNECTION = "agent_conn"
+    AGENT_REQUEST = "agent_request"
     ORGANISATION = "org"
     RESOURCE_TYPES = [
         (APP, "App"),
@@ -1381,6 +1427,9 @@ class AuditEvent(models.Model):
         (TEAM, "Team"),
         (ROTATING_SECRET, "RotatingSecret"),
         (LOG_STREAM, "LogStream"),
+        (AGENT, "Agent"),
+        (AGENT_CONNECTION, "AgentConnection"),
+        (AGENT_REQUEST, "AgentRequest"),
         (ORGANISATION, "Organisation"),
     ]
 
@@ -1407,7 +1456,7 @@ class AuditEvent(models.Model):
 
     # What happened
     event_type = models.CharField(max_length=1, choices=EVENT_TYPES)
-    resource_type = models.CharField(max_length=10, choices=RESOURCE_TYPES)
+    resource_type = models.CharField(max_length=16, choices=RESOURCE_TYPES)
     resource_id = models.TextField()
 
     # Who did it (no ForeignKey — survives entity deletion)
@@ -1533,7 +1582,7 @@ class Team(models.Model):
 
     def delete(self, *args, **kwargs):
         self.deleted_at = timezone.now()
-        self.save()
+        self.save(update_fields=["deleted_at", "updated_at"])
 
     def __str__(self):
         return f"{self.name} ({self.organisation.name})"
@@ -1899,3 +1948,1245 @@ class LogStreamDeliveryEvent(models.Model):
             ),
         ]
         ordering = ["-created_at"]
+
+
+# AI Agents
+
+
+class Agent(models.Model):
+    """An organisation-owned principal with explicitly assigned members."""
+
+    CLAUDE_CODE = "claude_code"
+    CODEX = "codex"
+    CURSOR = "cursor"
+    OPENCODE = "opencode"
+    OTHER = "other"
+    HARNESS_CHOICES = [
+        (CLAUDE_CODE, "Claude Code"),
+        (CODEX, "Codex"),
+        (CURSOR, "Cursor"),
+        (OPENCODE, "OpenCode"),
+        (OTHER, "Other"),
+    ]
+
+    ACTIVE = "active"
+    DISABLED = "disabled"
+    STATUS_CHOICES = [(ACTIVE, "Active"), (DISABLED, "Disabled")]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="agents"
+    )
+    name = models.CharField(max_length=255)
+    harness_type = models.CharField(
+        max_length=32, choices=HARNESS_CHOICES, default=OTHER
+    )
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=ACTIVE)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    # Ed25519 public key. The Agent is the cryptographic principal: every
+    # Workflow's tokens carry shares of this one key, so Workflow isolation is
+    # enforced by the server, not by keys. The keyring is server-managed, as for
+    # service accounts with server-side key management.
+    identity_key = models.CharField(max_length=256)
+    server_wrapped_keyring = models.TextField(null=True)
+    server_wrapped_recovery = models.TextField(null=True)
+    created_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agents_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    @transaction.atomic
+    def delete(self, *args, **kwargs):
+        from api.utils.agent_access import end_connection_access
+        from api.utils.agent_sessions import revoke_agent_sessions
+        from api.utils.agents import cancel_pending_requests
+
+        session_ids = list(
+            AgentSession.objects.filter(
+                workflow__agent=self, revoked_at__isnull=True
+            ).values_list("pk", flat=True)
+        )
+        now = timezone.now()
+        # Requests first: fulfilment locks a request before its Connection and grant.
+        cancel_pending_requests(AgentRequest.objects.filter(workflow__agent=self), now)
+        self.workflows.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now
+        )
+        self.memberships.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now
+        )
+        AgentWorkflowMembership.objects.filter(
+            agent_membership__agent=self,
+            deleted_at__isnull=True,
+        ).update(deleted_at=now, updated_at=now)
+        AgentToken.objects.filter(
+            workflow__agent=self, deleted_at__isnull=True
+        ).update(deleted_at=now, updated_at=now, wrapped_key_share="")
+        end_connection_access(
+            AgentWorkflowGrant.objects.filter(workflow__agent=self), ended_at=now
+        )
+        self.deleted_at = now
+        self.status = self.DISABLED
+        self.server_wrapped_keyring = None
+        self.server_wrapped_recovery = None
+        self.save(
+            update_fields=[
+                "deleted_at",
+                "status",
+                "server_wrapped_keyring",
+                "server_wrapped_recovery",
+                "updated_at",
+            ]
+        )
+        revoke_agent_sessions(session_ids)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["organisation", "deleted_at"],
+                name="agent_org_active_idx",
+            )
+        ]
+
+
+class AgentWorkflow(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="agent_workflows"
+    )
+    agent = models.ForeignKey(
+        Agent, on_delete=models.CASCADE, related_name="workflows"
+    )
+    name = models.CharField(max_length=255)
+    # Markdown notes an Agent reads as a small knowledge base. Members edit it
+    # and an Agent may ask to; it is untrusted text wherever it is shown.
+    context_markdown = models.TextField(blank=True, default="")
+    context_updated_at = models.DateTimeField(null=True, blank=True)
+    context_updated_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_workflow_contexts_updated",
+    )
+    created_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_workflows_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    def clean(self):
+        if self.agent_id and not _same_text_id(
+            self.agent.organisation_id, self.organisation_id
+        ):
+            raise ValidationError("Workflow Agent must belong to the same organisation")
+
+    @transaction.atomic
+    def delete(self, *args, **kwargs):
+        from api.utils.agent_access import end_connection_access
+        from api.utils.agent_sessions import revoke_agent_sessions
+        from api.utils.agents import cancel_pending_requests
+
+        session_ids = list(
+            self.sessions.filter(revoked_at__isnull=True).values_list(
+                "pk", flat=True
+            )
+        )
+        now = timezone.now()
+        # Requests first: fulfilment locks a request before its Connection and grant.
+        cancel_pending_requests(self.requests.all(), now)
+        end_connection_access(self.grants.all(), ended_at=now)
+        self.memberships.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now
+        )
+        self.tokens.filter(deleted_at__isnull=True).update(
+            deleted_at=now, updated_at=now, wrapped_key_share=""
+        )
+        self.deleted_at = now
+        self.save(update_fields=["deleted_at", "updated_at"])
+        revoke_agent_sessions(session_ids)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["agent", "name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="unique_active_agent_workflow_name",
+                violation_error_message=(
+                    "This Agent already has a Workflow with this name"
+                ),
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["organisation", "agent", "deleted_at"],
+                name="workflow_org_agent_active_idx",
+            )
+        ]
+
+
+class AgentMembership(models.Model):
+    """Assign an organisation member to an Agent."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    agent = models.ForeignKey(
+        Agent, on_delete=models.CASCADE, related_name="memberships"
+    )
+    member = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.CASCADE,
+        related_name="agent_memberships",
+    )
+    assigned_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_memberships_assigned",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    def clean(self):
+        if self.agent_id and self.member_id and not _same_text_id(
+            self.agent.organisation_id, self.member.organisation_id
+        ):
+            raise ValidationError("Agent membership crosses an organisation boundary")
+        if self.agent_id and self.assigned_by_id and not _same_text_id(
+            self.agent.organisation_id, self.assigned_by.organisation_id
+        ):
+            raise ValidationError(
+                "Agent membership assigner crosses an organisation boundary"
+            )
+        if (
+            self.deleted_at is None
+            and self.member_id
+            and self.member.deleted_at is not None
+        ):
+            raise ValidationError(
+                "Agent memberships require an active organisation member"
+            )
+
+    @transaction.atomic
+    def delete(self, *args, **kwargs):
+        from api.utils.agents import retire_member_agent_authentication
+
+        now = timezone.now()
+        self.workflow_memberships.filter(deleted_at__isnull=True).update(
+            deleted_at=now,
+            updated_at=now,
+        )
+        self.deleted_at = now
+        self.save(update_fields=["deleted_at", "updated_at"])
+        retire_member_agent_authentication(
+            member_id=self.member_id,
+            agent_id=self.agent_id,
+            retired_at=now,
+        )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["agent", "member"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="unique_active_agent_member",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["member", "deleted_at"],
+                name="agent_member_active_idx",
+            ),
+        ]
+
+
+class AgentWorkflowMembership(models.Model):
+    """Assign an Agent member to one Workflow of that Agent."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    workflow = models.ForeignKey(
+        AgentWorkflow, on_delete=models.CASCADE, related_name="memberships"
+    )
+    agent_membership = models.ForeignKey(
+        AgentMembership,
+        on_delete=models.CASCADE,
+        related_name="workflow_memberships",
+    )
+    assigned_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_workflow_memberships_assigned",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    def clean(self):
+        if self.workflow_id and self.agent_membership_id:
+            if not _same_text_id(
+                self.workflow.agent_id, self.agent_membership.agent_id
+            ):
+                raise ValidationError(
+                    "Workflow membership must belong to the same Agent"
+                )
+            if not _same_text_id(
+                self.workflow.organisation_id,
+                self.agent_membership.agent.organisation_id,
+            ):
+                raise ValidationError(
+                    "Workflow membership crosses an organisation boundary"
+                )
+            if not _same_text_id(
+                self.workflow.organisation_id,
+                self.agent_membership.member.organisation_id,
+            ):
+                raise ValidationError(
+                    "Workflow membership crosses an organisation boundary"
+                )
+        if self.workflow_id and self.assigned_by_id and not _same_text_id(
+            self.workflow.organisation_id, self.assigned_by.organisation_id
+        ):
+            raise ValidationError(
+                "Workflow membership assigner crosses an organisation boundary"
+            )
+        if (
+            self.deleted_at is None
+            and self.agent_membership_id
+            and self.agent_membership.deleted_at is not None
+        ):
+            raise ValidationError(
+                "Workflow memberships require an active Agent membership"
+            )
+
+    @transaction.atomic
+    def delete(self, *args, **kwargs):
+        from api.utils.agents import retire_member_agent_authentication
+
+        now = timezone.now()
+        self.deleted_at = now
+        self.save(update_fields=["deleted_at", "updated_at"])
+        retire_member_agent_authentication(
+            member_id=self.agent_membership.member_id,
+            workflow_id=self.workflow_id,
+            retired_at=now,
+        )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workflow", "agent_membership"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="unique_active_workflow_member",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["agent_membership", "deleted_at"],
+                name="workflow_member_active_idx",
+            ),
+        ]
+
+
+class AgentConnection(models.Model):
+    PENDING_CREDENTIALS = "pending_credentials"
+    ACTIVE = "active"
+    DISABLED = "disabled"
+    STATE_CHOICES = [
+        (PENDING_CREDENTIALS, "Pending credentials"),
+        (ACTIVE, "Active"),
+        (DISABLED, "Disabled"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="agent_connections"
+    )
+    name = models.CharField(max_length=255)
+    service_type = models.CharField(max_length=64)
+    config = models.JSONField(default=dict, blank=True)
+    authentication = models.ForeignKey(
+        ProviderCredentials,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_connections",
+    )
+    state = models.CharField(
+        max_length=32, choices=STATE_CHOICES, default=PENDING_CREDENTIALS
+    )
+    host_rules_authored_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_host_rules_authored",
+    )
+    host_rules_approved_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_host_rules_approved",
+    )
+    # User-supplied hosts are executable trust-boundary configuration. Every
+    # revision records authorship; the service registry decides whether it is a
+    # normal required endpoint or an optional override needing separate review.
+    host_rules_version = models.TextField(default=uuid4, editable=False)
+    host_rules_approved_version = models.TextField(blank=True, default="")
+    # Custom ("http") Connections only. The value is stored once, sealed to
+    # this Connection's own X25519 key; AgentConnectionKeyCopy holds that
+    # key's private half wrapped once per reader.
+    encryption_public_key = models.CharField(max_length=64, blank=True, default="")
+    key_version = models.PositiveIntegerField(default=0)
+    sealed_value = models.TextField(blank=True, default="")
+    value_revision = models.PositiveIntegerField(default=0)
+    value_updated_at = models.DateTimeField(null=True, blank=True)
+    value_updated_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_connection_values_updated",
+    )
+    # One inline access policy, as api.utils.agent_config.access_policy stores
+    # it, for every Workflow granted this Connection. Empty means every call
+    # the Connection allows is allowed. HTTP and app Connections only.
+    policy = models.JSONField(default=dict, blank=True)
+    # App Connections ("phase_app") only: the SSE app whose secrets the
+    # Console serves to the Workflows granted this Connection, for the
+    # environments listed in AgentConnectionEnvironment. Apps are hard
+    # deleted and grants hold their Connection, so a deleted app leaves the
+    # Connection covering nothing rather than taking it with it.
+    app = models.ForeignKey(
+        App,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_connections",
+    )
+    created_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_connections_created",
+    )
+    updated_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_connections_updated",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    def clean(self):
+        if self.authentication_id:
+            if not _same_text_id(
+                self.authentication.organisation_id, self.organisation_id
+            ):
+                raise ValidationError(
+                    "Connection authentication must belong to the same organisation"
+                )
+            if self.authentication.deleted_at is not None:
+                raise ValidationError("Connection authentication must be active")
+            from api.utils.agent_config import (
+                ConfigRegistryError,
+                get_config_registry,
+            )
+
+            try:
+                service = get_config_registry().get_service(self.service_type)
+            except ConfigRegistryError as exc:
+                raise ValidationError("Connection service type is unsupported") from exc
+            allowed_providers = set(service.get("credential_providers") or [])
+            if self.authentication.provider not in allowed_providers:
+                raise ValidationError(
+                    "Connection authentication provider is incompatible with its service"
+                )
+        from api.utils.agent_config import APP_SERVICE_TYPE, HTTP_SERVICE_TYPE
+
+        # A custom Connection holds its own sealed value instead, and an app
+        # Connection needs no credential: the Console serves the secrets.
+        if (
+            self.state == self.ACTIVE
+            and not self.authentication_id
+            and self.service_type not in (HTTP_SERVICE_TYPE, APP_SERVICE_TYPE)
+        ):
+            raise ValidationError("Active connections require authentication")
+        if self.service_type == APP_SERVICE_TYPE:
+            if (self._state.adding and not self.app_id) or self.authentication_id:
+                raise ValidationError(
+                    "App Connections name an app and carry no credential"
+                )
+            if self.app_id and not _same_text_id(
+                self.app.organisation_id, self.organisation_id
+            ):
+                raise ValidationError("Connection app must belong to the same organisation")
+        elif self.app_id:
+            raise ValidationError("Only app Connections name an app")
+        configured_hosts = (self.config or {}).get("hosts")
+        if configured_hosts:
+            if not self.host_rules_authored_by_id:
+                raise ValidationError("Configured host rules require an author")
+            if not _same_text_id(
+                self.host_rules_authored_by.organisation_id,
+                self.organisation_id,
+            ):
+                raise ValidationError("Host-rule author crosses an organisation boundary")
+            if self.host_rules_approved_by_id:
+                if not _same_text_id(
+                    self.host_rules_approved_by.organisation_id,
+                    self.organisation_id,
+                ):
+                    raise ValidationError(
+                        "Host-rule approver crosses an organisation boundary"
+                    )
+                if (
+                    self.host_rules_authored_by.user_id
+                    == self.host_rules_approved_by.user_id
+                ):
+                    raise ValidationError(
+                        "Host rules must be approved by a different human"
+                    )
+                if not _same_text_id(
+                    self.host_rules_version,
+                    self.host_rules_approved_version,
+                ):
+                    raise ValidationError(
+                        "Host-rule approval does not match the current version"
+                    )
+            elif self.host_rules_approved_version:
+                raise ValidationError(
+                    "Pending host rules cannot carry an approved version"
+                )
+        elif (
+            self.host_rules_authored_by_id
+            or self.host_rules_approved_by_id
+            or self.host_rules_approved_version
+        ):
+            raise ValidationError(
+                "Connections without configured hosts cannot carry host-rule metadata"
+            )
+
+        if not self._state.adding:
+            previous = (
+                AgentConnection.objects.filter(id=self.id)
+                .values("service_type", "config", "host_rules_version")
+                .first()
+            )
+            previous_hosts = (previous or {}).get("config") or {}
+            host_scope_changed = (
+                previous
+                and bool(previous_hosts.get("hosts") or configured_hosts)
+                and (
+                    previous["service_type"] != self.service_type
+                    or previous_hosts.get("hosts") != configured_hosts
+                )
+            )
+            if host_scope_changed and _same_text_id(
+                previous["host_rules_version"], self.host_rules_version
+            ):
+                raise ValidationError(
+                    "Changing configured host rules requires a new approval version"
+                )
+
+
+class AgentConnectionEnvironment(models.Model):
+    """One environment an app Connection covers."""
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    connection = models.ForeignKey(
+        AgentConnection, on_delete=models.CASCADE, related_name="app_environments"
+    )
+    environment = models.ForeignKey(
+        Environment, on_delete=models.CASCADE, related_name="agent_connections"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["connection", "environment"],
+                name="unique_agent_connection_environment",
+            )
+        ]
+
+
+class AgentConnectionKeyCopy(models.Model):
+    """One reader's wrapped copy of a custom Connection's private key."""
+
+    SERVER = "server"
+    AGENT = "agent"
+    MEMBER = "member"
+    READER_CHOICES = [
+        (SERVER, "Server"),
+        (AGENT, "Agent"),
+        # Reserved: no member copy is written yet.
+        (MEMBER, "Member"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    connection = models.ForeignKey(
+        AgentConnection, on_delete=models.CASCADE, related_name="key_copies"
+    )
+    reader_type = models.CharField(max_length=16, choices=READER_CHOICES)
+    agent = models.ForeignKey(
+        Agent,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="connection_key_copies",
+    )
+    member = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="agent_connection_key_copies",
+    )
+    key_version = models.PositiveIntegerField()
+    wrapped_key = models.TextField()
+    # What the key was wrapped to: the reader's public key in hex today.
+    wrapped_with = models.CharField(max_length=256)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["connection"],
+                condition=models.Q(reader_type="server"),
+                name="unique_agent_connection_server_key_copy",
+            ),
+            models.UniqueConstraint(
+                fields=["connection", "agent"],
+                condition=models.Q(agent__isnull=False),
+                name="unique_agent_connection_agent_key_copy",
+            ),
+            models.UniqueConstraint(
+                fields=["connection", "member"],
+                condition=models.Q(member__isnull=False),
+                name="unique_agent_connection_member_key_copy",
+            ),
+        ]
+
+
+class AgentWorkflowGrantQuerySet(models.QuerySet):
+    """Every question about the state of a grant is asked through these."""
+
+    def active(self, now=None):
+        """Grants in force: not ended, and not past their expiry."""
+
+        now = now or timezone.now()
+        return self.filter(
+            models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=now),
+            deleted_at__isnull=True,
+        )
+
+    def not_ended(self):
+        """Grants not yet ended, whether or not their expiry has passed."""
+
+        return self.filter(deleted_at__isnull=True)
+
+    def lapsed(self, now=None):
+        """Grants past their expiry that have not been ended yet."""
+
+        return self.not_ended().filter(expires_at__lte=now or timezone.now())
+
+    def expired(self, now=None):
+        """Grants that ran out, as opposed to being taken away before then."""
+
+        return self.filter(
+            models.Q(deleted_at__isnull=True)
+            | models.Q(deleted_at__gte=models.F("expires_at")),
+            expires_at__lte=now or timezone.now(),
+        )
+
+
+class AgentWorkflowGrant(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="agent_workflow_grants"
+    )
+    workflow = models.ForeignKey(
+        AgentWorkflow, on_delete=models.CASCADE, related_name="grants"
+    )
+    connection = models.ForeignKey(
+        AgentConnection, on_delete=models.RESTRICT, related_name="workflow_grants"
+    )
+    created_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_workflow_grants_created",
+    )
+    # When set, access stops at this time. An expired grant is ended lazily,
+    # the next time it is looked at.
+    expires_at = models.DateTimeField(null=True, blank=True)
+    # Approved exceptions to ``ask`` rules of the Connection's access policy,
+    # each with its own expiry. They open a call for this Workflow only.
+    temporary_allows = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    objects = AgentWorkflowGrantQuerySet.as_manager()
+
+    @property
+    def is_active(self):
+        """The one-row form of ``AgentWorkflowGrantQuerySet.active``."""
+
+        return self.deleted_at is None and (
+            self.expires_at is None or self.expires_at > timezone.now()
+        )
+
+    def clean(self):
+        assets = [self.workflow, self.connection]
+        if any(
+            not _same_text_id(asset.organisation_id, self.organisation_id)
+            for asset in assets
+        ):
+            raise ValidationError("Grant assets must belong to the same organisation")
+        if self.connection.deleted_at is not None:
+            raise ValidationError("Grant connections must be active")
+        if self.connection.state != AgentConnection.ACTIVE:
+            raise ValidationError("Grant connections require active authentication")
+
+    @transaction.atomic
+    def delete(self, *args, **kwargs):
+        """Soft-delete the Workflow binding."""
+
+        from api.utils.agent_access import end_connection_access
+
+        end_connection_access(AgentWorkflowGrant.objects.filter(pk=self.pk))
+        self.refresh_from_db(fields=["deleted_at", "updated_at"])
+
+    class Meta:
+        constraints = [
+            # A database condition cannot read the clock, so this covers every
+            # grant that has not been ended. grant_connection_access ends a
+            # lapsed grant before it creates another for the same pair, which
+            # keeps an expired grant from holding the pair.
+            models.UniqueConstraint(
+                fields=["workflow", "connection"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="unique_active_workflow_connection_grant",
+            )
+        ]
+
+
+class AgentOrganisationSettings(models.Model):
+    """Organisation-wide settings for Agents."""
+
+    DEFAULT_MAX_REQUEST_DURATION_SECONDS = 86400
+    DEFAULT_REQUEST_DURATION_SECONDS = 3600
+
+    organisation = models.OneToOneField(
+        Organisation,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="agent_settings",
+    )
+    # The longest access an Agent may ask for, and what a request that names
+    # no duration asks for. A member approving a request may grant any length.
+    max_request_duration_seconds = models.PositiveIntegerField(
+        default=DEFAULT_MAX_REQUEST_DURATION_SECONDS
+    )
+    default_request_duration_seconds = models.PositiveIntegerField(
+        default=DEFAULT_REQUEST_DURATION_SECONDS
+    )
+    updated_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_settings_updated",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def for_organisation(cls, organisation):
+        """The organisation's settings, or the defaults when none are saved."""
+
+        organisation_id = getattr(organisation, "pk", organisation)
+        return cls.objects.filter(organisation_id=organisation_id).first() or cls(
+            organisation_id=organisation_id
+        )
+
+
+class AgentToken(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    workflow = models.ForeignKey(
+        AgentWorkflow, on_delete=models.CASCADE, related_name="tokens"
+    )
+    name = models.CharField(max_length=64)
+    # BLAKE2b digest of the reveal-once bearer agent token. Plaintext is never stored.
+    token = models.CharField(max_length=64, unique=True)
+    identity_key = models.CharField(max_length=256)
+    # Cleared when the token is retired, so an old token string and a copy of
+    # this row cannot rebuild the Agent key.
+    wrapped_key_share = models.CharField(max_length=406)
+    created_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.CASCADE,
+        related_name="agent_tokens_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def agent(self):
+        """The Agent this row belongs to, through its Workflow."""
+        return self.workflow.agent
+
+    @property
+    def agent_id(self):
+        return self.workflow.agent_id
+
+    def clean(self):
+        if self.created_by_id and not _same_text_id(
+            self.created_by.organisation_id, self.workflow.organisation_id
+        ):
+            raise ValidationError("Agent token creator crosses an organisation boundary")
+        if self.created_by_id and self.created_by.deleted_at is not None:
+            raise ValidationError("Agent tokens require an active organisation member")
+        try:
+            token_lookup = bytes.fromhex(self.token)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Agent token digest must be hex encoded") from exc
+        if len(token_lookup) != 32:
+            raise ValidationError("Agent token digest must be 32 bytes")
+
+    def delete(self, *args, **kwargs):
+        self.deleted_at = timezone.now()
+        self.wrapped_key_share = ""
+        self.save(update_fields=["deleted_at", "wrapped_key_share", "updated_at"])
+
+
+class AgentSession(models.Model):
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="agent_sessions"
+    )
+    workflow = models.ForeignKey(
+        AgentWorkflow, on_delete=models.CASCADE, related_name="sessions"
+    )
+    session_uid = models.TextField(default=uuid4, primary_key=True, editable=False)
+    hashed_session_credential = models.CharField(max_length=128)
+    open_idempotency_key = models.CharField(
+        max_length=128, unique=True, null=True, blank=True
+    )
+    expires_at = models.DateTimeField()
+    max_expires_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    config_generation = models.PositiveBigIntegerField(default=1)
+    # Non-secret, Agent-visible provider metadata captured during an authorized
+    # config render. Discover reads this versioned snapshot so it can reproduce
+    # the active proxy environment without decrypting or provisioning a second
+    # credential.
+    runtime_snapshot = models.JSONField(default=dict, blank=True)
+    client_info = models.JSONField(default=dict, blank=True)
+    harness_label = models.CharField(max_length=128, blank=True, default="")
+    agent_token = models.ForeignKey(
+        AgentToken,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sessions",
+    )
+    opened_by_member = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_sessions_opened",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def agent(self):
+        """The Agent this row belongs to, through its Workflow."""
+        return self.workflow.agent
+
+    @property
+    def agent_id(self):
+        return self.workflow.agent_id
+
+    def clean(self):
+        if self.workflow_id and not _same_text_id(
+            self.workflow.organisation_id, self.organisation_id
+        ):
+            raise ValidationError("AgentSession Workflow must belong to its organisation")
+        authenticators = [
+            self.agent_token,
+            self.opened_by_member,
+        ]
+        authenticator_count = sum(
+            authenticator is not None for authenticator in authenticators
+        )
+        if self._state.adding and authenticator_count == 0:
+            raise ValidationError("AgentSession requires exactly one authenticator")
+        if authenticator_count > 1:
+            raise ValidationError("AgentSession requires exactly one authenticator")
+        if self.agent_token_id and not _same_text_id(
+            self.agent_token.workflow_id, self.workflow_id
+        ):
+            raise ValidationError("Agent token is not scoped to this Workflow")
+        authenticator = (
+            self.opened_by_member
+            or (self.agent_token.agent if self.agent_token_id else None)
+        )
+        if authenticator is not None and not _same_text_id(
+            authenticator.organisation_id, self.organisation_id
+        ):
+            raise ValidationError(
+                "AgentSession authenticator crosses an organisation boundary"
+            )
+
+    @property
+    def is_active(self):
+        return self.revoked_at is None and self.expires_at > timezone.now()
+
+    class Meta:
+        constraints = [
+            # Creation requires exactly one authenticator (see clean()). Once a
+            # session exists, its token or member may be deleted (SET_NULL), so
+            # the database only forbids two authenticators at once.
+            models.CheckConstraint(
+                condition=~models.Q(
+                    agent_token__isnull=False,
+                    opened_by_member__isnull=False,
+                ),
+                name="agent_session_at_most_one_authenticator",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["workflow", "-created_at"],
+                name="agent_session_recent_idx",
+            ),
+            models.Index(
+                fields=["organisation", "revoked_at", "expires_at"],
+                name="agent_session_status_idx",
+            ),
+            models.Index(
+                fields=["hashed_session_credential"],
+                name="agent_session_credential_idx",
+            ),
+        ]
+
+
+class AgentDecoy(models.Model):
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="agent_decoys"
+    )
+    agent = models.ForeignKey(
+        Agent,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decoys",
+    )
+    authentication = models.ForeignKey(
+        ProviderCredentials,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="decoys",
+    )
+    grant = models.ForeignKey(
+        AgentWorkflowGrant, on_delete=models.CASCADE, related_name="decoys"
+    )
+    session = models.ForeignKey(
+        AgentSession, on_delete=models.CASCADE, related_name="decoys"
+    )
+    kind = models.CharField(max_length=64)
+    field_name = models.CharField(max_length=128)
+    decoy_value = models.TextField(unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "grant", "field_name"],
+                name="unique_agent_decoy_field_per_grant",
+            ),
+        ]
+
+
+class AgentRequest(models.Model):
+    SETUP = "setup"
+    CREDENTIAL_UPDATE = "credential_update"
+    CONNECTION_UPDATE = "connection_update"
+    CONNECTION_REMOVAL = "connection_removal"
+    ACCESS_CHANGE = "access_change"
+    CONTEXT_UPDATE = "context_update"
+    KIND_CHOICES = [
+        (SETUP, "Setup"),
+        (CREDENTIAL_UPDATE, "Credential update"),
+        (CONNECTION_UPDATE, "Connection update"),
+        (CONNECTION_REMOVAL, "Connection removal"),
+        (ACCESS_CHANGE, "Access change"),
+        (CONTEXT_UPDATE, "Context update"),
+    ]
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    DENIED = "denied"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
+    STATUS_CHOICES = [
+        (CANCELLED, "Cancelled"),
+        (PENDING, "Pending"),
+        (APPROVED, "Approved"),
+        (DENIED, "Denied"),
+        (EXPIRED, "Expired"),
+    ]
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="agent_requests"
+    )
+    workflow = models.ForeignKey(
+        AgentWorkflow, on_delete=models.CASCADE, related_name="requests"
+    )
+    connection = models.ForeignKey(
+        AgentConnection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requests",
+    )
+    grant = models.ForeignKey(
+        AgentWorkflowGrant,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requests",
+    )
+    kind = models.CharField(max_length=32, choices=KIND_CHOICES)
+    credential = models.ForeignKey(
+        ProviderCredentials,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_requests",
+    )
+    title = models.CharField(max_length=120, blank=True, default="")
+    markdown = models.TextField(blank=True, default="")
+    # A request may carry a typed action. ``action`` is what was asked for and
+    # ``applied_action`` what a reviewer approved, possibly after editing it.
+    # Neither ever holds a secret.
+    action = models.JSONField(default=dict, blank=True)
+    applied_action = models.JSONField(default=dict, blank=True)
+    # How the request was approved, e.g. {"version": 1, "assurance": "session"}.
+    approval = models.JSONField(default=dict, blank=True)
+    # How long the access a request ends in was asked to last. What was
+    # granted is recorded under ``access`` in ``applied_action``.
+    duration_seconds = models.PositiveIntegerField(null=True, blank=True)
+    service_type = models.CharField(max_length=64, null=True, blank=True)
+    credential_provider = models.CharField(max_length=50, null=True, blank=True)
+    credential_name = models.CharField(max_length=64, blank=True, default="")
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=PENDING)
+    resolution_note = models.TextField(blank=True, default="")
+    progress = models.JSONField(default=dict, blank=True)
+    resolution = models.JSONField(default=dict, blank=True)
+    revision = models.TextField(default=uuid4, editable=False)
+    related_request = models.ForeignKey("self", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="followups")
+    resolved_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_requests_resolved",
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    dedup_key = models.CharField(max_length=128, blank=True, default="", db_index=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        fields = kwargs.get("update_fields")
+        if not self._state.adding and (fields is None or "revision" not in fields):
+            self.revision = str(uuid4())
+            if fields is not None:
+                kwargs["update_fields"] = [*fields, "revision"]
+        super().save(*args, **kwargs)
+
+    @property
+    def agent(self):
+        """The Agent this row belongs to, through its Workflow."""
+        return self.workflow.agent
+
+    @property
+    def agent_id(self):
+        return self.workflow.agent_id
+
+    def clean(self):
+        if self.workflow_id and not _same_text_id(
+            self.workflow.organisation_id, self.organisation_id
+        ):
+            raise ValidationError("Request Workflow must belong to its organisation")
+        if self.connection_id and not _same_text_id(
+            self.connection.organisation_id, self.organisation_id
+        ):
+            raise ValidationError("Request Connection crosses an organisation boundary")
+        if self.credential_id and not _same_text_id(
+            self.credential.organisation_id, self.organisation_id
+        ):
+            raise ValidationError("Request Credential crosses an organisation boundary")
+        if self.grant_id:
+            if not _same_text_id(self.grant.organisation_id, self.organisation_id):
+                raise ValidationError("Request Grant crosses an organisation boundary")
+            if not _same_text_id(self.grant.workflow_id, self.workflow_id):
+                raise ValidationError("Request Grant must belong to its Workflow")
+            if self.connection_id and not _same_text_id(
+                self.grant.connection_id, self.connection_id
+            ):
+                raise ValidationError("Request Connection must match its Grant")
+        if self.action:
+            # The handler for the action's type validates its own target.
+            return
+        if self.kind == self.SETUP:
+            if not self.connection_id or not self.service_type:
+                raise ValidationError("setup requests require a pending connection")
+            if not self.credential_provider or not self.credential_name:
+                raise ValidationError(
+                    "setup requests require a credential provider and name"
+                )
+            if (
+                self.status == self.PENDING
+                and self.connection.state != AgentConnection.PENDING_CREDENTIALS
+            ):
+                raise ValidationError("setup requests require a pending connection")
+        elif self.kind == self.CREDENTIAL_UPDATE:
+            if not self.connection_id:
+                raise ValidationError("credential_update requests require a connection")
+        else:
+            raise ValidationError("Unsupported Agent request kind")
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["organisation", "status", "-created_at"],
+                name="agent_request_queue_idx",
+            ),
+            models.Index(
+                fields=["workflow", "status", "-created_at"],
+                name="agent_request_workflow_idx",
+            ),
+        ]
+
+
+class AgentEvent(models.Model):
+    """High-volume runtime stream with monotonic ingest and idempotent event IDs."""
+
+    ALLOW = "allow"
+    BLOCK = "block"
+    # Stopped by an access policy until a member approves the call.
+    ASK = "ask"
+    AUTH_DENY = "auth_deny"
+    ERROR = "error"
+    DECISION_CHOICES = [
+        (ALLOW, "Allow"),
+        (BLOCK, "Block"),
+        (ASK, "Ask"),
+        (AUTH_DENY, "Authentication denied"),
+        (ERROR, "Error"),
+    ]
+
+    ingest_seq = models.BigAutoField(primary_key=True)
+    event_id = models.TextField()
+    organisation = models.ForeignKey(
+        Organisation, on_delete=models.CASCADE, related_name="agent_events"
+    )
+    agent = models.ForeignKey(
+        Agent, on_delete=models.SET_NULL, null=True, related_name="events"
+    )
+    workflow = models.ForeignKey(
+        AgentWorkflow, on_delete=models.SET_NULL, null=True, related_name="events"
+    )
+    connection = models.ForeignKey(
+        AgentConnection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="events",
+    )
+    session = models.ForeignKey(
+        AgentSession,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="events",
+    )
+    proxy_created_at = models.DateTimeField()
+    ingested_at = models.DateTimeField(auto_now_add=True)
+    event_type = models.CharField(max_length=64)
+    protocol = models.CharField(max_length=32)
+    method = models.CharField(max_length=32, blank=True, default="")
+    host = models.CharField(max_length=512)
+    port = models.PositiveIntegerField(null=True, blank=True)
+    path = models.TextField(blank=True, default="")
+    provider = models.CharField(max_length=64)
+    status_code = models.IntegerField(null=True, blank=True)
+    proxy_decision = models.CharField(max_length=32, choices=DECISION_CHOICES)
+    outcome = models.CharField(max_length=32, blank=True, default="")
+    latency_ms = models.PositiveIntegerField(null=True, blank=True)
+    credential_action = models.CharField(max_length=64, blank=True, default="")
+    bytes_in = models.PositiveBigIntegerField(default=0)
+    bytes_out = models.PositiveBigIntegerField(default=0)
+    reason = models.CharField(max_length=512, blank=True, default="")
+    detail = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "event_id"],
+                name="unique_agent_event_id_per_session",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["agent", "ingest_seq"], name="agent_event_agent_seq_idx"
+            ),
+            # The console pages an Agent's history by event time.
+            models.Index(
+                fields=["agent", "proxy_created_at", "ingest_seq"],
+                name="agent_event_agent_time_idx",
+            ),
+            models.Index(
+                fields=["workflow", "ingest_seq"],
+                name="agent_event_workflow_seq_idx",
+            ),
+            models.Index(
+                fields=["session", "ingest_seq"], name="agent_event_session_seq_idx"
+            ),
+            models.Index(
+                fields=["organisation", "ingest_seq"], name="agent_event_org_seq_idx"
+            ),
+        ]
+        ordering = ["-ingest_seq"]

@@ -1,43 +1,64 @@
-import { EnvironmentSyncType, ProviderCredentialsType } from '@/apollo/graphql'
 import DeleteProviderCreds from '@/graphql/mutations/syncing/deleteProviderCredentials.gql'
 import GetSavedCredentials from '@/graphql/queries/syncing/getSavedCredentials.gql'
 import { Dialog, Transition } from '@headlessui/react'
-import { useState, Fragment } from 'react'
-import { FaTrashAlt, FaTimes } from 'react-icons/fa'
+import { useContext, useState, Fragment } from 'react'
+import Link from 'next/link'
+import { FaArrowRight, FaTrashAlt, FaTimes } from 'react-icons/fa'
 import { Button } from '../common/Button'
+import { organisationContext } from '@/contexts/organisationContext'
+import { agentsPath } from '@/utils/agents/routes'
 import { useMutation } from '@apollo/client'
+import type { IntegrationCredentialSummary } from '@/utils/integrationCredentials'
 
 export const DeleteProviderCredentialDialog = (props: {
-  credential: ProviderCredentialsType
+  credential: IntegrationCredentialSummary
   orgId: string
+  onDeleted?: () => void | Promise<unknown>
 }) => {
   const { credential, orgId } = props
 
+  const { activeOrganisation } = useContext(organisationContext)
   const [isOpen, setIsOpen] = useState<boolean>(false)
 
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const agentConnectionCount = credential.agentConnectionCount ?? 0
 
   const [deleteCredential] = useMutation(DeleteProviderCreds)
 
   const closeModal = () => {
+    setDeleteError('')
+    setDeleteLoading(false)
     setIsOpen(false)
   }
 
   const openModal = () => {
+    setDeleteError('')
     setIsOpen(true)
   }
 
   const handleDelete = async () => {
+    if (agentConnectionCount > 0) return
     setDeleteLoading(true)
-    await deleteCredential({
-      variables: { credentialId: credential.id },
-      refetchQueries: [
-        {
-          query: GetSavedCredentials,
-          variables: { orgId },
-        },
-      ],
-    })
+    setDeleteError('')
+    try {
+      await deleteCredential({
+        variables: { credentialId: credential.id },
+        refetchQueries: [
+          {
+            query: GetSavedCredentials,
+            variables: { orgId },
+          },
+        ],
+        awaitRefetchQueries: true,
+      })
+      await props.onDeleted?.()
+      closeModal()
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Could not delete credentials')
+    } finally {
+      setDeleteLoading(false)
+    }
   }
 
   return (
@@ -81,7 +102,11 @@ export const DeleteProviderCredentialDialog = (props: {
                       Delete authentication credentials
                     </h3>
 
-                    <Button variant="text" onClick={closeModal}>
+                    <Button
+                      variant="text"
+                      onClick={closeModal}
+                      aria-label="Close delete credentials dialog"
+                    >
                       <FaTimes className="text-zinc-900 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300" />
                     </Button>
                   </Dialog.Title>
@@ -93,16 +118,48 @@ export const DeleteProviderCredentialDialog = (props: {
                     {credential.syncCount! > 0 && (
                       <p className="text-neutral-500">
                         Doing so will disrupt {credential.syncCount} integration
-                        {credential.syncCount !== 1 && 's'} (syncs or log streams). You
-                        will need to assign new credentials for them to continue
-                        working.
+                        {credential.syncCount !== 1 && 's'} (syncs or log streams). You will need to
+                        assign new credentials for them to continue working.
+                      </p>
+                    )}
+                    {agentConnectionCount > 0 && (
+                      <div
+                        role="alert"
+                        className="space-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300"
+                      >
+                        <p>
+                          These credentials are used by {agentConnectionCount} Agent Connection
+                          {agentConnectionCount === 1 ? '' : 's'}. Assign different credentials to{' '}
+                          {agentConnectionCount === 1 ? 'that Connection' : 'those Connections'}{' '}
+                          before deleting them.
+                        </p>
+                        {activeOrganisation && (
+                          <Link href={agentsPath(activeOrganisation.name, 'connections')}>
+                            <Button variant="textWarning" icon={FaArrowRight} iconPosition="right">
+                              View Agent Connections
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    )}
+                    {deleteError && (
+                      <p
+                        role="alert"
+                        className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300"
+                      >
+                        {deleteError}
                       </p>
                     )}
                     <div className="flex items-center gap-4">
                       <Button variant="secondary" type="button" onClick={closeModal}>
                         Cancel
                       </Button>
-                      <Button variant="danger" onClick={handleDelete} isLoading={deleteLoading}>
+                      <Button
+                        variant="danger"
+                        onClick={handleDelete}
+                        isLoading={deleteLoading}
+                        disabled={agentConnectionCount > 0}
+                      >
                         Delete
                       </Button>
                     </div>

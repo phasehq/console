@@ -36,6 +36,8 @@ def _credential(credential_id, host, organisation):
         organisation=organisation,
         organisation_id=organisation.id,
         credentials={"gitlab_host": host},
+        revision="rev-1",
+        agent_connections=MagicMock(),
     )
 
 
@@ -59,7 +61,17 @@ def sync_mocks(monkeypatch):
     }
     mock_creds_model = MagicMock()
     mock_creds_model.objects.get.side_effect = lambda id: credentials[id]
+    # A credential update locks the row inside a transaction; there is no
+    # database here, and these tests store their values in the clear.
+    mock_creds_model.objects.select_for_update.return_value.get.side_effect = (
+        lambda id, **_: credentials[id]
+    )
     monkeypatch.setattr(mutations, "ProviderCredentials", mock_creds_model)
+    monkeypatch.setattr(mutations, "transaction", MagicMock())
+    monkeypatch.setattr(mutations, "get_sealed_credential_keys", lambda credential: [])
+    monkeypatch.setattr(
+        mutations, "validate_credential_values", MagicMock(return_value=None)
+    )
 
     # Stored credentials are encrypted; the tests store the host in the clear
     def get_gitlab_host(stored_credentials):
@@ -431,6 +443,7 @@ def _update_credential(credential_id, host):
         None,
         _make_info(),
         credential_id=credential_id,
+        expected_revision="rev-1",
         name="GitLab",
         credentials={"gitlab_host": host, "gitlab_token": "glpat-new"},
     )

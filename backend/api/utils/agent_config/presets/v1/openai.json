@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "openai",
+  "name": "OpenAI",
+  "description": "The OpenAI API with a project or user API key.",
+  "docsUrl": "https://platform.openai.com/docs/api-reference/authentication",
+  "category": "ai",
+  "hostsEditable": false,
+  "labels": {
+    "token": "API key"
+  },
+  "definition": {
+    "specVersion": 1,
+    "hosts": [
+      {
+        "match": "exact",
+        "value": "api.openai.com",
+        "port": 443,
+        "path": "/v1/*"
+      }
+    ],
+    "fields": [
+      {
+        "name": "token",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        },
+        "env": "OPENAI_API_KEY",
+        "decoyPrefix": "sk-"
+      }
+    ],
+    "injections": [
+      {
+        "type": "header",
+        "name": "Authorization",
+        "prefix": "Bearer ",
+        "field": "token",
+        "whenAbsent": "attach"
+      }
+    ],
+    "preset": "bearer"
+  }
+}

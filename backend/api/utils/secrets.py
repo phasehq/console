@@ -291,7 +291,13 @@ def check_environment_access(account, environment, require_resolved_references):
     if not account:
         return True
 
-    if isinstance(account, ServiceAccount):
+    from api.utils.agent_app_access import AgentSecretsReader
+
+    if isinstance(account, AgentSecretsReader):
+        # An Agent reaches only what its Workflow may read right now.
+        has_access = account.can_read_environment(environment.id)
+        error_msg = "This Agent doesn't have permission to read secrets in one or more referenced environments."
+    elif isinstance(account, ServiceAccount):
         has_access = service_account_can_access_environment(account.id, environment.id)
         error_msg = "This service account doesn't have permission to read secrets in one or more referenced environments."
     else:
@@ -554,6 +560,88 @@ def decrypt_secret_value(
         raise SecretReferenceException("\n".join(unresolved_local_references))
 
     return value
+
+
+# One ${...} with no brace inside. Unlike the three patterns above this one
+# cannot backtrack, so it is safe on a value an Agent supplies.
+_REFERENCE_BODY_PATTERN = re.compile(r"\$\{([^{}]+)\}")
+
+
+def split_references(value):
+    """
+    The references in a plaintext value, as CROSS_APP_ENV_PATTERN,
+    CROSS_ENV_PATTERN and LOCAL_REF_PATTERN find them, in time linear in the
+    length of the value.
+
+    Returns:
+        tuple: ([(app, env)], [env], has_local_reference)
+    """
+    cross_app, cross_env, has_local = [], [], False
+    for body in _REFERENCE_BODY_PATTERN.findall(value):
+        if "." not in body:
+            has_local = True
+            continue
+        separator = body.find("::", 1)
+        if separator != -1:
+            dot = body.find(".", separator + 3)
+            if dot != -1 and dot + 1 < len(body):
+                cross_app.append((body[:separator], body[separator + 2 : dot]))
+            continue
+        if "::" in body:
+            continue
+        dot = body.find(".")
+        if 0 < dot < len(body) - 1:
+            cross_env.append(body[:dot])
+    return cross_app, cross_env, has_local
+
+
+def reference_target_environments(value, environment):
+    """
+    The environment each reference in a plaintext value points at, found the
+    way decrypt_secret_value finds it for a secret stored in `environment`:
+    cross-app, cross-env (same app) and local references.
+
+    A reference whose app or environment cannot be told apart (no match, or
+    more than one) yields None.
+
+    Returns:
+        list[Environment | None]: One entry per cross-app or cross-env
+        reference, and `environment` once if the value has a local reference.
+    """
+    Environment = apps.get_model("api", "Environment")
+    App = apps.get_model("api", "App")
+
+    targets = []
+    cross_app, cross_env, has_local = split_references(value)
+
+    for ref_app, ref_env in cross_app:
+        try:
+            referenced_app = App.objects.get(
+                name__iexact=ref_app, organisation=environment.app.organisation
+            )
+            targets.append(
+                Environment.objects.get(name__iexact=ref_env, app=referenced_app)
+            )
+        except (
+            App.DoesNotExist,
+            App.MultipleObjectsReturned,
+            Environment.DoesNotExist,
+            Environment.MultipleObjectsReturned,
+        ):
+            targets.append(None)
+
+    for ref_env in cross_env:
+        try:
+            targets.append(
+                Environment.objects.get(name__iexact=ref_env, app=environment.app)
+            )
+        except (Environment.DoesNotExist, Environment.MultipleObjectsReturned):
+            targets.append(None)
+
+    if has_local:
+        targets.append(environment)
+
+    return targets
 
 
 def get_referenced_environment_ids(source_env_id, name_ctx):

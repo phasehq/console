@@ -139,6 +139,23 @@ def get_actor_info(request):
                 "type": "sa_token",
             }
         return ("sa", str(sa.id), metadata)
+    elif auth.get("auth_type") == "Agent":
+        agent = auth["agent"]
+        metadata = {"name": agent.name}
+        agent_token = auth.get("agent_token")
+        if agent_token is not None:
+            metadata["token"] = {
+                "id": str(agent_token.id),
+                "name": agent_token.name,
+                "type": "agent_token",
+            }
+        workflow = auth.get("workflow")
+        if workflow is not None:
+            metadata["workflow"] = {
+                "id": str(workflow.id),
+                "name": workflow.name,
+            }
+        return ("agent", str(agent.id), metadata)
     return ("user", "", {})
 
 
@@ -311,10 +328,15 @@ def log_secret_events_bulk(
     service_account_token=None,
     ip_address=None,
     user_agent=None,
+    *,
+    agent=None,
+    agent_token=None,
+    agent_workflow=None,
 ):
     """
     Bulk version of log_secret_event. Logs events for multiple secrets
-    using bulk_create to reduce database round-trips.
+    using bulk_create to reduce database round-trips. A call made with an
+    Agent token is attributed to the Agent, its token and its Workflow.
     """
 
     if not secrets:
@@ -335,6 +357,9 @@ def log_secret_events_bulk(
             user=user,
             service_account=service_account,
             service_account_token=service_account_token,
+            agent=agent,
+            agent_token=agent_token,
+            agent_workflow=agent_workflow,
             key=secret.key,
             key_digest=secret.key_digest,
             value=secret.value,

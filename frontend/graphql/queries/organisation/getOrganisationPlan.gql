@@ -4,6 +4,8 @@ query GetOrganisationPlan($organisationId: ID!) {
     maxUsers
     maxApps
     maxEnvsPerApp
+    maxAgents
+    maxWorkflowsPerAgent
     seatsUsed {
       users
       serviceAccounts
@@ -11,5 +13,6 @@ query GetOrganisationPlan($organisationId: ID!) {
     }
     seatLimit
     appCount
+    agentCount
   }
 }

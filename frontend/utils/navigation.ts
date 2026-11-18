@@ -1,6 +1,7 @@
 import { startCase } from 'lodash'
 import { AppType, EnvironmentType } from '@/apollo/graphql'
 import { isUUID } from '@/utils/copy'
+import { agentsPath } from '@/utils/agents/routes'
 
 export type NavigationItem = {
   label: string
@@ -62,6 +63,26 @@ export const generateBreadcrumbs = (ctx: NavigationContext): NavigationItem[] =>
   const breadcrumbs: NavigationItem[] = [
     { label: team ?? '', href: `/${team}`, isLink: Boolean(team) },
   ]
+
+  if (context === 'agents') {
+    breadcrumbs.push({
+      label: 'Agents',
+      href: page && team ? agentsPath(team) : undefined,
+      isLink: Boolean(page && team),
+    })
+    if (page) {
+      breadcrumbs.push({
+        label: isUUID(page) ? 'Agent' : page,
+        isLink: false,
+      })
+    }
+    return breadcrumbs
+  }
+
+  if (context === 'requests') {
+    breadcrumbs.push({ label: 'Change Requests', isLink: false })
+    return breadcrumbs
+  }
 
   if (activeApp) {
     // App name should only be clickable if we're not at the app home
@@ -126,6 +147,9 @@ export const generateBreadcrumbs = (ctx: NavigationContext): NavigationItem[] =>
 
 export const generatePageTitle = (ctx: NavigationContext): string => {
   const breadcrumbs = generateBreadcrumbs(ctx)
+  // The app home lists the app's secrets; its breadcrumb is only the app name.
+  if (ctx.activeApp && !ctx.page && !ctx.activeEnv)
+    breadcrumbs.push({ label: 'Secrets', isLink: false })
 
   const filteredCrumbs = breadcrumbs.filter((crumb) => crumb.label && crumb.label.trim())
 
