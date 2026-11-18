@@ -11,13 +11,11 @@ import {
   FaGithub,
   FaHome,
   FaKey,
-  FaMoon,
   FaPlus,
   FaProjectDiagram,
   FaRegListAlt,
   FaRobot,
   FaSearch,
-  FaSun,
   FaUserPlus,
   FaUsers,
   FaUsersCog,
@@ -36,6 +34,7 @@ import { KeyringContext } from '@/contexts/keyringContext'
 import { useSecretSearch } from '@/hooks/useSecretSearch'
 import debounce from 'lodash/debounce'
 import Spinner from './Spinner'
+import { THEME_OPTIONS } from './ModeToggle'
 import clsx from 'clsx'
 
 type CommandItem = {
@@ -173,15 +172,18 @@ const CommandPalette: React.FC = () => {
     })
   }
 
-  const actionCommands: CommandItem[] = [
-    {
-      id: 'toggle-theme',
-      name: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
-      description: 'Switch between dark and light mode',
-      icon: theme === 'dark' ? <FaSun /> : <FaMoon />,
-      action: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
-    },
-  ]
+  const actionCommands: CommandItem[] = THEME_OPTIONS.filter(
+    (option) => option.value !== theme
+  ).map(({ value, label, icon: Icon }) => ({
+    id: `theme-${value}`,
+    name: `Switch to ${label.toLowerCase()} theme`,
+    description:
+      value === 'system'
+        ? "Follow your device's light or dark setting"
+        : 'Switch between dark and light mode',
+    icon: <Icon />,
+    action: () => setTheme(value),
+  }))
 
   if (userCanCreateApps)
     actionCommands.push({

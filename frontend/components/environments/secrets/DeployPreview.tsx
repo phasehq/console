@@ -256,8 +256,8 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
               {change.type === 'Added' && (
                 <div className="flex flex-col mb-6">
                   <div className="flex flex-row items-center space-x-2">
-                    <GoDotFill className="text-emerald-400" />
-                    <p className="text-emerald-400">Created</p>
+                    <GoDotFill className="text-emerald-600 dark:text-emerald-400" />
+                    <p className="shrink-0 text-emerald-600 dark:text-emerald-400">Created</p>
                     <p className="text-zinc-900 dark:text-zinc-100 font-mono break-all">
                       {change.secretName}
                     </p>
@@ -270,7 +270,7 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
                   <div className="flex items-center space-x-2">
                     <div className="flex flex-row space-x-2 items-center">
                       <GoDotFill className="text-yellow-500" />
-                      <p className="text-amber-400 ">Updated</p>
+                      <p className="shrink-0 text-amber-600 dark:text-amber-400">Updated</p>
                       <p className="text-zinc-900 dark:text-zinc-100 font-mono">
                         {change.secretName}
                       </p>
@@ -285,8 +285,8 @@ export const DeployPreview: React.FC<DeployPreviewProps> = ({
             const deletedSecret = serverSecrets.find((secret) => secret.id === secretId)
             return (
               <div key={secretId} className="flex items-center space-x-2 mb-6">
-                <GoDotFill className="text-red-400" />
-                <p key={secretId} className="text-red-400">
+                <GoDotFill className="text-red-600 dark:text-red-400" />
+                <p key={secretId} className="shrink-0 text-red-600 dark:text-red-400">
                   Deleted
                 </p>
                 <p className="text-zinc-900 dark:text-zinc-100 font-mono">{deletedSecret?.key}</p>
