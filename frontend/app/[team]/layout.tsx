@@ -126,11 +126,12 @@ export default function RootLayout(props: {
   }
 
   return (
-    // md+: the sidebar and navbar share the shell colour, and the page sits in an inset panel
+    // The navigation shares the shell colour, and the page sits in an inset panel: beside the
+    // sidebar from md up, and between the navbar and the tab bar below it
     <div
       className={clsx(
         'flex h-dvh w-full overflow-hidden',
-        showNav && 'md:bg-neutral-300/50 md:dark:bg-neutral-950/50'
+        showNav && 'bg-neutral-300/50 dark:bg-neutral-950/50'
       )}
     >
       {showUnlockDialog && <UnlockKeyringDialog organisation={activeOrganisation} />}
@@ -141,7 +142,7 @@ export default function RootLayout(props: {
           className={clsx(
             'min-h-0 flex-1 overflow-auto',
             showNav &&
-              'pb-[var(--mobile-tabbar-height)] md:rounded-tl-2xl md:border-l md:border-t md:border-neutral-500/20 md:bg-neutral-200 md:dark:bg-neutral-900'
+              'mb-[var(--mobile-tabbar-height)] rounded-2xl border-y border-neutral-500/20 bg-neutral-200 dark:bg-neutral-900 md:rounded-none md:rounded-tl-2xl md:border-b-0 md:border-l'
           )}
         >
           {orgInSync && children}

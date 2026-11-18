@@ -7,7 +7,6 @@ import {
   FaCog,
   FaCubes,
   FaHome,
-  FaPlus,
   FaUsersCog,
   FaProjectDiagram,
   FaBook,
@@ -30,10 +29,11 @@ import { useQuery } from '@apollo/client'
 import { organisationContext } from '@/contexts/organisationContext'
 import { SidebarContext } from '@/contexts/sidebarContext'
 import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { AppType, OrganisationType } from '@/apollo/graphql'
+import { AppType } from '@/apollo/graphql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { Menu, Popover, Transition } from '@headlessui/react'
 import { LogoWordMark } from '../common/LogoWordMark'
+import { OrgMenuItems } from './OrgSwitcher'
 import { SIDEBAR_WIDTH, SidebarResizeHandle } from './SidebarResizeHandle'
 import { ModeToggle } from '../common/ModeToggle'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
@@ -445,33 +445,47 @@ const SidebarCollapseToggle = ({
   )
 }
 
-const MobileMoreMenu = ({
-  overflowLinks,
-  organisations,
-  activeOrganisation,
-  isOwner,
+const MOBILE_TAB_STYLE =
+  'flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 transition ease'
+const MOBILE_MENU_ROW =
+  'flex h-10 w-full items-center gap-2.5 rounded-md px-2.5 text-sm transition ease'
+
+// The highlight sits behind the icon, as it does on the icon rail
+const MobileTab = ({
+  name,
+  icon,
+  active,
 }: {
-  overflowLinks: SidebarLinkT[]
-  organisations: OrganisationType[] | null
-  activeOrganisation: OrganisationType | null
-  isOwner: boolean
-}) => {
-  return (
-    <Menu as="div" className="relative flex-1 min-w-0">
-      {({ open }) => (
+  name: string
+  icon: React.ReactNode
+  active: boolean
+}) => (
+  <>
+    <span
+      className={clsx(
+        'flex h-7 w-12 items-center justify-center rounded-lg text-base transition ease',
+        active && ACTIVE_BG
+      )}
+    >
+      {icon}
+    </span>
+    <span className="max-w-full truncate text-3xs font-medium">{name}</span>
+  </>
+)
+
+const MobileMoreMenu = ({ overflowLinks }: { overflowLinks: SidebarLinkT[] }) => (
+  <Menu as="div" className="relative min-w-0 flex-1">
+    {({ open }) => {
+      const highlighted = open || overflowLinks.some((link) => link.active)
+
+      return (
         <>
           <Menu.Button
-            className={clsx(
-              'flex w-full h-14 flex-col items-center justify-center gap-0.5 px-1 transition-colors',
-              open || overflowLinks.some((link) => link.active)
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-zinc-600 dark:text-zinc-400'
-            )}
+            className={clsx(MOBILE_TAB_STYLE, 'w-full', highlighted ? ACTIVE_TEXT : INACTIVE_STYLE)}
             aria-label="More navigation"
             title="More"
           >
-            <FaEllipsisH className="text-lg" />
-            <span className="text-[10px] font-medium">More</span>
+            <MobileTab name="More" icon={<FaEllipsisH />} active={highlighted} />
           </Menu.Button>
           <Transition
             as={Fragment}
@@ -482,57 +496,27 @@ const MobileMoreMenu = ({
             leaveFrom="transform opacity-100 translate-y-0"
             leaveTo="transform opacity-0 translate-y-1"
           >
-            <Menu.Items className="absolute bottom-full right-2 mb-2 w-64 origin-bottom-right divide-y divide-neutral-500/40 rounded-md bg-neutral-200 p-1 shadow-2xl ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-neutral-800">
-              <div className="px-2 py-2 text-xs font-medium text-neutral-500">Organisation</div>
-              <div className="py-1">
-                {organisations?.map((org: OrganisationType) => (
-                  <Menu.Item key={org.id}>
-                    {({ active }) => (
-                      <Link
-                        href={`/${org.name}`}
-                        className={clsx(
-                          'flex items-center justify-between gap-2 rounded px-2 py-2 text-sm',
-                          active && 'bg-neutral-100 dark:bg-neutral-700'
-                        )}
-                      >
-                        <span className="truncate">{org.name}</span>
-                        {org.id === activeOrganisation?.id && (
-                          <span className="text-emerald-500">Current</span>
-                        )}
-                      </Link>
-                    )}
-                  </Menu.Item>
-                ))}
-                {!isOwner && (
-                  <Menu.Item>
-                    {({ active }) => (
-                      <Link
-                        href="/onboard"
-                        className={clsx(
-                          'flex items-center gap-3 rounded px-2 py-2 text-sm',
-                          active && 'bg-neutral-100 dark:bg-neutral-700'
-                        )}
-                      >
-                        <FaPlus />
-                        Create New Organisation
-                      </Link>
-                    )}
-                  </Menu.Item>
-                )}
-              </div>
-              <div className="py-1">
+            <Menu.Items className="absolute bottom-full right-1 mb-2 w-64 origin-bottom-right divide-y divide-neutral-500/20 rounded-md bg-neutral-200 shadow-2xl ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-neutral-800">
+              <OrgMenuItems heading="Organisation" touch />
+              <div className="space-y-0.5 p-1">
                 {overflowLinks.map((link) => (
                   <Menu.Item key={link.name}>
                     {({ active }) => (
                       <Link
                         href={link.href}
+                        aria-current={link.active ? 'page' : undefined}
                         className={clsx(
-                          'flex items-center gap-3 rounded px-2 py-2 text-sm',
-                          active && 'bg-neutral-100 dark:bg-neutral-700',
-                          link.active && 'text-emerald-600 dark:text-emerald-400'
+                          MOBILE_MENU_ROW,
+                          link.active
+                            ? [ACTIVE_BG, ACTIVE_TEXT]
+                            : [
+                                'text-zinc-600 dark:text-zinc-400',
+                                active &&
+                                  'bg-zinc-900/5 text-zinc-900 dark:bg-white/5 dark:text-zinc-100',
+                              ]
                         )}
                       >
-                        {link.icon}
+                        <span className="text-neutral-500">{link.icon}</span>
                         {link.name}
                       </Link>
                     )}
@@ -542,10 +526,10 @@ const MobileMoreMenu = ({
             </Menu.Items>
           </Transition>
         </>
-      )}
-    </Menu>
-  )
-}
+      )
+    }}
+  </Menu>
+)
 
 const Sidebar = () => {
   const { sidebarState, setUserPreference } = useContext(SidebarContext)
@@ -557,10 +541,7 @@ const Sidebar = () => {
   const animationTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const pathname = usePathname()
   const [, team, section, page] = pathname?.split('/') ?? []
-  const { organisations, activeOrganisation } = useContext(organisationContext)
-  // Orgs pending deletion are locked, so they can't be switched to.
-  const switchableOrganisations = organisations?.filter((org) => !org.deletedAt) ?? null
-  const isOwner = organisations?.some((org) => org.role!.name!.toLowerCase() === 'owner')
+  const { activeOrganisation } = useContext(organisationContext)
 
   const navRef = useRef<HTMLElement>(null)
 
@@ -816,34 +797,26 @@ const Sidebar = () => {
         {!collapsed && <SidebarResizeHandle />}
       </aside>
 
-      {/* z-10 keeps Headless UI dialogs (also z-10, portaled later in <body>) painting above the nav */}
-      <nav className="fixed inset-x-0 bottom-0 z-10 flex h-[var(--mobile-tabbar-height)] items-start border-t border-neutral-300 bg-neutral-100/95 pb-[env(safe-area-inset-bottom)] text-zinc-600 backdrop-blur-md dark:border-neutral-700 dark:bg-neutral-900/95 dark:text-zinc-400 md:hidden">
+      {/* Below md the links become a tab bar, drawn on the shell colour like the sidebar. */}
+      {/* z-10 keeps Headless UI dialogs (also z-10, portaled later in <body>) painting above it */}
+      <nav className="fixed inset-x-0 bottom-0 z-10 flex h-[var(--mobile-tabbar-height)] items-start px-1 pb-[env(safe-area-inset-bottom)] md:hidden">
         {mobileLinks.map((link) => (
           <Link
             key={link.name}
             href={link.href}
-            className={clsx(
-              'flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 transition-colors',
-              link.active
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'hover:text-zinc-900 dark:hover:text-zinc-100'
-            )}
+            className={clsx(MOBILE_TAB_STYLE, link.active ? ACTIVE_TEXT : INACTIVE_STYLE)}
             aria-label={link.name}
             aria-current={link.active ? 'page' : undefined}
             title={link.name}
           >
-            <span className="text-lg">{link.icon}</span>
-            <span className="max-w-full truncate text-[10px] font-medium">
-              {link.name === 'Access Control' ? 'Access' : link.name}
-            </span>
+            <MobileTab
+              name={link.name === 'Access Control' ? 'Access' : link.name}
+              icon={link.icon}
+              active={link.active}
+            />
           </Link>
         ))}
-        <MobileMoreMenu
-          overflowLinks={overflowLinks}
-          organisations={switchableOrganisations}
-          activeOrganisation={activeOrganisation}
-          isOwner={!!isOwner}
-        />
+        <MobileMoreMenu overflowLinks={overflowLinks} />
       </nav>
     </>
   )
