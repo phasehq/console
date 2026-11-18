@@ -8,7 +8,7 @@ import { MdLogout } from 'react-icons/md'
 import { handleSignout } from '@/apollo/client'
 import { Button } from './common/Button'
 import { Avatar } from './common/Avatar'
-import { FaMoon, FaPalette, FaShieldAlt, FaSun, FaUserCircle } from 'react-icons/fa'
+import { FaBuilding, FaMoon, FaPalette, FaSun, FaUserCircle } from 'react-icons/fa'
 import { ModeToggle } from './common/ModeToggle'
 import { organisationContext } from '@/contexts/organisationContext'
 import Link from 'next/link'
@@ -78,15 +78,11 @@ export default function UserMenu({ themeInSidebar = false }: { themeInSidebar?: 
                 <Menu.Item>
                   {({ active }) => (
                     <Link
-                      href={`/${activeOrganisation.name}/settings?tab=account`}
-                      title={`Account & security in ${activeOrganisation.name}`}
+                      href={`/${activeOrganisation.name}/settings`}
                       className={clsx(ROW_STYLE, ROW_TEXT, active && ROW_ACTIVE)}
                     >
-                      <FaShieldAlt className={ROW_ICON} />
-                      <span className="flex-1 whitespace-nowrap">Account &amp; security</span>
-                      <span className="min-w-0 truncate text-2xs text-neutral-500">
-                        {activeOrganisation.name}
-                      </span>
+                      <FaBuilding className={ROW_ICON} />
+                      Organisation settings
                     </Link>
                   )}
                 </Menu.Item>
