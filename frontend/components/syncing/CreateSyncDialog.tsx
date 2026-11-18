@@ -1,5 +1,5 @@
 import { Dialog, Transition } from '@headlessui/react'
-import { useState, Fragment, ReactNode, ReactElement, useContext } from 'react'
+import { useState, Fragment, ReactElement } from 'react'
 import { FaBan, FaCheckCircle, FaTimes, FaTimesCircle } from 'react-icons/fa'
 import { Button } from '../common/Button'
 import { CreateCloudflarePagesSync } from './Cloudflare/CreateCloudflarePagesSync'
@@ -13,8 +13,6 @@ import { CreateGitLabCISync } from './GitLab/CreateGitLabCISync'
 import { CreateRailwaySync } from './Railway/CreateRailwaySync'
 import { CreateVercelSync } from './Vercel/CreateVercelSync'
 import { CreateCloudflareWorkersSync } from './Cloudflare/CreateCloudflareWorkersSync'
-import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
 import { EmptyState } from '../common/EmptyState'
 import clsx from 'clsx'
 import { CreateRenderSync } from './Render/CreateRenderSync'
@@ -28,22 +26,10 @@ export const CreateSyncDialog = (props: {
   button: ReactElement
 
   service: string
+  userCanReadEnvs: boolean
+  userCanCreateIntegrations: boolean
 }) => {
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-
-  const userCanReadEnvs = userHasPermission(
-    organisation?.role?.permissions,
-    'Environments',
-    'read',
-    true
-  )
-
-  const userCanCreateIntegrations = userHasPermission(
-    organisation?.role?.permissions,
-    'Integrations',
-    'create',
-    true
-  )
+  const { userCanReadEnvs, userCanCreateIntegrations } = props
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
 

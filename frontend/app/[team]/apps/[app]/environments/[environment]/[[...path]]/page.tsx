@@ -189,6 +189,7 @@ export default function EnvironmentPath(props0: {
   const userCanReadEnvironments = hasPermission('Environments', 'read', true)
   const userCanReadSecrets = hasPermission('Secrets', 'read', true)
   const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
+  const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true)
   const userCanReadSyncs = hasPermission('Integrations', 'read', true)
 
   const [readSecrets] = useMutation(LogSecretReads)
@@ -1536,6 +1537,7 @@ export default function EnvironmentPath(props0: {
                     key={folder.id}
                     folder={folder}
                     handleDelete={handleDeleteFolder}
+                    userCanDeleteFolders={userCanDeleteSecrets}
                   />
                 ))}
 

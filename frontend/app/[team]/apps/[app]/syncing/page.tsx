@@ -11,7 +11,7 @@ import { useSearchParams } from 'next/navigation'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { EnableSSEDialog } from '@/components/apps/EnableSSEDialog'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FaBan } from 'react-icons/fa'
+import { FaBan, FaProjectDiagram, FaTimesCircle } from 'react-icons/fa'
 
 export default function Syncing(props: { params: Promise<{ team: string; app: string }> }) {
   const params = use(props.params)
@@ -90,6 +90,29 @@ export default function Syncing(props: { params: Promise<{ team: string; app: st
                 <SyncCard key={sync.id} sync={sync} showAppName={false} showManageButton={true} />
               ))}
             </div>
+          )}
+          {!userCanCreateSyncs && data.syncs?.length === 0 && (
+            <EmptyState
+              title="No syncs"
+              subtitle="This app doesn't have any syncs yet."
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <FaProjectDiagram />
+                </div>
+              }
+            >
+              <div className="space-y-2 p-4 ring-1 ring-inset ring-neutral-500/40 bg-zinc-100 dark:bg-zinc-800 rounded-md">
+                <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                  Creating a sync requires this permission:
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <FaTimesCircle className="text-red-500" />
+                  <code className="text-zinc-900 dark:text-zinc-100 font-medium">
+                    Integrations:create
+                  </code>
+                </div>
+              </div>
+            </EmptyState>
           )}
         </>
       )}
