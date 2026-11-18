@@ -277,6 +277,7 @@ function SecretRow(props: {
               secretId={secret.id}
               comment={secret.comment}
               handlePropertyChange={handlePropertyChange}
+              userCanUpdateSecrets={userCanUpdateSecrets}
             />
           </div>
         )}
@@ -349,7 +350,10 @@ function SecretRow(props: {
 
       {canonicalSecret && !isSealedAndSaved && (
         <div className="">
-          <ShareSecretDialog secret={secret} />
+          <ShareSecretDialog
+            secret={secret}
+            userCanCreateLockbox={hasPermission('Lockbox', 'create', true)}
+          />
         </div>
       )}
 

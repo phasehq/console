@@ -25,18 +25,14 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { UpsellDialog } from '../settings/organisation/UpsellDialog'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { sanitizeInput } from '@/utils/environment'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const userCanUpdateEnvironments = userHasPermission(
-    organisation?.role?.permissions,
-    'Environments',
-    'update',
-    true
-  )
+  const { hasPermission } = useAppPermissions(props.environment.app.id)
+  const userCanUpdateEnvironments = hasPermission('Environments', 'update', true)
 
   const allowRename =
     organisation?.plan !== ApiOrganisationPlanChoices.Fr && userCanUpdateEnvironments
@@ -104,12 +100,8 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
 export const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  const userCanDeleteEnvironments = userHasPermission(
-    organisation?.role?.permissions,
-    'Environments',
-    'delete',
-    true
-  )
+  const { hasPermission } = useAppPermissions(props.environment.app.id)
+  const userCanDeleteEnvironments = hasPermission('Environments', 'delete', true)
 
   const planDisplay = {
     planName: 'Free',
