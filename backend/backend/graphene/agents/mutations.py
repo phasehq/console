@@ -998,6 +998,10 @@ class UpdateAgentConnectionMutation(graphene.Mutation):
                 connection.host_rules_approved_version = ""
                 connection.host_rules_approved_by = None
                 connection.host_rules_authored_by = member if next_hosts else None
+            elif next_hosts and connection.host_rules_authored_by_id is None:
+                # The author's account is gone; whoever keeps the hosts
+                # answers for them now.
+                connection.host_rules_authored_by = member
             connection.config = checked_config
             connection.state = AgentConnection.ACTIVE
             connection.updated_by = member
