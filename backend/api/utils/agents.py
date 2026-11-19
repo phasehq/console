@@ -16,6 +16,7 @@ from api.models import (
     AgentToken,
     AgentWorkflow,
     AgentWorkflowMembership,
+    Organisation,
 )
 from api.utils.access.permissions import role_has_global_access
 from api.utils.crypto import (
@@ -248,6 +249,8 @@ def create_agent_with_default_workflow(
 ):
     if created_by is None:
         raise ValueError("Agent creator is required")
+    # Locked so two Agents created at once are counted one after the other.
+    organisation = Organisation.objects.select_for_update().get(pk=organisation.pk)
     if not can_add_agent(organisation):
         plan = PLAN_CONFIG[organisation.plan]
         raise AgentPlanLimitReached(
