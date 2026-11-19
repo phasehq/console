@@ -942,6 +942,12 @@ class UpdateAgentConnectionMutation(graphene.Mutation):
                 ).get(id=connection_id, deleted_at__isnull=True)
             except AgentConnection.DoesNotExist as exc:
                 raise GraphQLError("Agent Connection not found") from exc
+            if connection.state == AgentConnection.PENDING_CREDENTIALS:
+                # Only approving the request gives it a credential and a grant.
+                raise GraphQLError(
+                    "This Connection is waiting for its setup request. Approve "
+                    "or deny that request on the Requests page."
+                )
             if next_credential is not None and credential_sets_endpoint(
                 next_credential.provider
             ):
