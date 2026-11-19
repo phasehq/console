@@ -608,6 +608,16 @@ describe('custom Connection dialogs', () => {
       expect(save().disabled).toBe(true)
     })
 
+    test('a rename after it arrived sends only the name', async () => {
+      await openEdit()
+      await type(field(container, 'Connection name'), 'Example API v2')
+      await rerender(newer)
+      expect(container.textContent).toContain('This Connection changed since you opened')
+      const variables = await saved()
+      expect(variables.name).toBe('Example API v2')
+      expect(variables).not.toHaveProperty('definition')
+    })
+
     test('a typed secret counts as an edit', async () => {
       await openEdit()
       await type(secretInputs()[0], 'typed-secret-value')

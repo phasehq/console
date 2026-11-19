@@ -301,9 +301,12 @@ export function EditCustomConnectionDialog({
   const definition = editable ? editor.built.definition : current
   const enteredSecrets = editable ? editor.enteredSecrets : fieldSecrets
   const nextName = (editable ? editor.form.name : name).trim()
-  const nameChanged = !!nextName && nextName !== connection.name
+  // Compared with what the form opened with: a refetch that landed meanwhile is not the
+  // member's edit, and saving must not send it back as the older value.
+  const base = seeded ?? { name: connection.name, definition: current }
+  const nameChanged = !!nextName && nextName !== base.name
   const definitionChanged =
-    editable && !!definition && !!current && !sameDefinition(definition, current)
+    editable && !!definition && !!base.definition && !sameDefinition(definition, base.definition)
   // The hosts or the set of secrets differ, even while a host is half-typed: the
   // stored value no longer fits, so every secret is entered again.
   const rebound = editable && editor.requirement.required

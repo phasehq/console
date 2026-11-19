@@ -461,6 +461,32 @@ describe('editing an app Connection', () => {
     })
   })
 
+  test('a rename after a refetch sends only the name, not the older environments', async () => {
+    const save = jest.fn().mockResolvedValue({})
+    ;(useMutation as jest.Mock).mockReturnValue([save, { loading: false }])
+    ;(useQuery as jest.Mock).mockReturnValue({ data: { apps: [] } })
+    await act(async () =>
+      root.render(<EditAppConnectionDialog connection={appConnection() as any} />)
+    )
+    await click(container, 'Edit')
+    await type(field(container, 'Connection name'), 'orders reader')
+    // Another member added Production meanwhile.
+    const refetched = appConnection({
+      environments: [
+        ...appConnection().environments,
+        { id: 'env-prd', name: 'Production', envType: 'prod' },
+      ],
+    })
+    await act(async () => root.render(<EditAppConnectionDialog connection={refetched as any} />))
+    await click(container, 'Save Connection')
+    await settle(() => save.mock.calls.length > 0)
+
+    expect(save.mock.calls[0][0].variables).toEqual({
+      connectionId: 'app-connection',
+      name: 'orders reader',
+    })
+  })
+
   test('reads the apps only once the dialog has been opened', async () => {
     ;(useMutation as jest.Mock).mockReturnValue([jest.fn(), { loading: false }])
     ;(useQuery as jest.Mock).mockClear()
