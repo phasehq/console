@@ -18,12 +18,21 @@ export type FolderInEnv = {
   folderCount: number
   /** Whether the env's column is shown: like an edit, a folder action starts with those */
   shown: boolean
+  /** The env isn't decrypted yet, so its secrets aren't in the counts */
+  pending?: boolean
 }
 
 /** The envs a folder dialog starts with ticked: the shown ones, or all when it is in none of them */
 export const defaultFolderEnvIds = (envs: FolderInEnv[]) => {
   const shown = envs.filter((entry) => entry.shown)
   return new Set((shown.length > 0 ? shown : envs).map((entry) => entry.env.id))
+}
+
+/** Nothing is deleted from an env whose contents can't be counted yet */
+const deletableFolderEnvIds = (envs: FolderInEnv[]) => {
+  const ids = defaultFolderEnvIds(envs.filter((entry) => !entry.pending))
+  for (const entry of envs) if (entry.pending) ids.delete(entry.env.id)
+  return ids
 }
 
 export type FolderTarget = {
@@ -59,7 +68,7 @@ export const DeleteAppFolderDialog = ({
   const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    if (target) setSelected(defaultFolderEnvIds(target.envs))
+    if (target) setSelected(deletableFolderEnvIds(target.envs))
   }, [target])
 
   const toggle = (envId: string) =>
@@ -132,7 +141,7 @@ export const DeleteAppFolderDialog = ({
                               size="sm"
                               checked={selected.has(entry.env.id)}
                               onChange={() => toggle(entry.env.id)}
-                              disabled={deleting}
+                              disabled={deleting || entry.pending}
                             />
                             <FaCircle
                               className="shrink-0 text-[7px]"
@@ -145,8 +154,9 @@ export const DeleteAppFolderDialog = ({
                               <span className="text-2xs text-neutral-500">hidden</span>
                             )}
                             <span className="ml-auto text-2xs text-neutral-500">
-                              {plural(entry.secretCount, 'secret')} ·{' '}
-                              {plural(entry.folderCount, 'folder')}
+                              {entry.pending
+                                ? 'Still loading'
+                                : `${plural(entry.secretCount, 'secret')} · ${plural(entry.folderCount, 'folder')}`}
                             </span>
                           </li>
                         ))}

@@ -1957,8 +1957,24 @@ export const AppSecrets = ({
   // Deleting a folder removes it, and everything in it, from the envs picked in the dialog
   const [folderDeleteTarget, setFolderDeleteTarget] = useState<FolderTarget | null>(null)
   const [folderEditTarget, setFolderEditTarget] = useState<FolderTarget | null>(null)
-  const folderDataRef = useRef({ clientAppSecrets, serverAppSecretsById, appFolders, appDynamicSecrets, orderedEnvironments, checkedSet })
-  folderDataRef.current = { clientAppSecrets, serverAppSecretsById, appFolders, appDynamicSecrets, orderedEnvironments, checkedSet }
+  const folderDataRef = useRef({
+    clientAppSecrets,
+    serverAppSecretsById,
+    appFolders,
+    appDynamicSecrets,
+    orderedEnvironments,
+    checkedSet,
+    pendingEnvIds,
+  })
+  folderDataRef.current = {
+    clientAppSecrets,
+    serverAppSecretsById,
+    appFolders,
+    appDynamicSecrets,
+    orderedEnvironments,
+    checkedSet,
+    pendingEnvIds,
+  }
 
   /** A folder as each env has it, for the dialogs that act on it across envs */
   const describeFolder = useCallback((folder: AppFolder, fullPath: string): FolderTarget => {
@@ -1988,6 +2004,7 @@ export const AppSecrets = ({
           secretCount,
           folderCount,
           shown: data.checkedSet.has(env.id),
+          pending: data.pendingEnvIds.includes(env.id),
         },
       ]
     })
