@@ -6,6 +6,7 @@ is the one that starts or extends it.
 
 from datetime import timedelta
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -108,6 +109,55 @@ def prune_temporary_allows(grants, *, now=None):
             grant.save(update_fields=["temporary_allows", "updated_at"])
 
 
+def _exported_names(connection):
+    """The environment variables a custom Connection gives an Agent, keyed
+    without regard to case."""
+
+    from api.utils.agent_config import ConfigRegistryError, load_definition
+
+    try:
+        fields = load_definition(connection.config)["fields"]
+    except ConfigRegistryError:
+        return {}
+    return {
+        field["env"].casefold(): field["env"] for field in fields if field.get("env")
+    }
+
+
+def _refuse_contested_names(workflow, connection, now):
+    """Refuse a custom Connection that exports a variable another custom
+    Connection of the Workflow already exports: an Agent's environment holds
+    one value per name, so neither would reach it."""
+
+    from api.utils.agent_config import HTTP_SERVICE_TYPE, is_custom_service
+
+    if not is_custom_service(connection.service_type):
+        return
+    names = _exported_names(connection)
+    if not names:
+        return
+    held = (
+        AgentWorkflowGrant.objects.active(now)
+        .filter(
+            workflow=workflow,
+            connection__service_type=HTTP_SERVICE_TYPE,
+            connection__deleted_at__isnull=True,
+        )
+        .exclude(connection=connection)
+        .select_related("connection")
+        .order_by("created_at", "id")
+    )
+    for other in held:
+        shared = sorted(set(names) & set(_exported_names(other.connection)))
+        if shared:
+            raise ValidationError(
+                f"'{connection.name}' and '{other.connection.name}' both export "
+                f"the variable {names[shared[0]]}, and this Workflow already has "
+                f"'{other.connection.name}'. Change the variable's name on one of "
+                "them, or remove the other from this Workflow first."
+            )
+
+
 def grant_connection_access(
     workflow, connection, member, *, expires_at=None, extend=False
 ):
@@ -122,6 +172,7 @@ def grant_connection_access(
     grant = pair.select_for_update(of=("self",)).active(now).first()
     created = grant is None
     if created:
+        _refuse_contested_names(workflow, connection, now)
         grant = AgentWorkflowGrant(
             organisation=workflow.organisation,
             workflow=workflow,
