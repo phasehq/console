@@ -914,7 +914,7 @@ describe('AgentEventLog leak protection', () => {
     expect(field(panel, 'Found in')?.textContent).toBe('Body')
     expect(Array.from(field(panel, 'Found')!.children).map((line) => line.textContent)).toEqual([
       '4 known secret values',
-      '1 token format replaced',
+      '1 token-shaped value replaced',
       '5 distinct secrets in the request',
     ])
     expect(field(panel, 'Token formats')?.textContent).toBe('AWS access key ID')
@@ -934,6 +934,25 @@ describe('AgentEventLog leak protection', () => {
     // The chip is the log's own badge.
     expect(chips[0].parentElement!.className).toContain('rounded-full')
     expect(field(panel, 'Placeholders')!.textContent).toContain('+1 more not named in this event')
+    expect(panel.textContent).not.toContain('Key names are not sent')
+  })
+
+  test('shows a placeholder without an id as it is, with one note for the group', async () => {
+    await renderLog([
+      {
+        ...CENSORED,
+        eventId: 'personal',
+        detail: { mode: 'censor', placeholders: 'ph:secret,ph:github_token', placeholder_count: 2 },
+      },
+    ])
+    const placeholders = field(expand('personal'), 'Placeholders')!
+
+    expect(
+      Array.from(placeholders.querySelectorAll('code')).map((chip) => chip.textContent)
+    ).toEqual(['ph:secret', 'ph:github_token'])
+    expect(placeholders.textContent).toBe(
+      'ph:secretph:github_tokenKey names are not sent for this login.'
+    )
   })
 
   test('names the secret behind a placeholder only as far as the viewer may see', async () => {

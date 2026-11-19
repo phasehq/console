@@ -52,6 +52,10 @@ export type LeakProtection = {
   placeholders: LeakPlaceholder[]
   /** Distinct secrets in the request that the event does not name. */
   unlistedPlaceholders: number
+  /** Says so, in words; '' when the event names every one. */
+  unlistedNote: string
+  /** Shown once beside the placeholders when one of them has no id; '' otherwise. */
+  placeholderNote: string
   /** Detail members not known here, so that nothing the CLI sent is hidden. */
   other: Record<string, unknown>
 }
@@ -68,7 +72,9 @@ const DETAIL_KEYS = [
   'ruleAlerts',
   'signedFindings',
   'placeholderCount',
+  'replacedCount',
   'windowSeconds',
+  'scope',
   'labels',
   'placeholders',
   // Added by the Console: where the secrets behind the placeholders live.
@@ -79,6 +85,18 @@ type Detail = Record<string, unknown>
 
 /** An event names at most this many placeholders. */
 const MAX_PLACEHOLDERS = 20
+
+/** A count above this reads "more than 10,000". */
+const MAX_COUNT = 10_000
+
+/** A pause longer than this reads "more than a day". */
+const MAX_WINDOW_SECONDS = 24 * 60 * 60
+
+/**
+ * For a login that is not an Agent token the CLI sends a placeholder as `ph:<type>`,
+ * without the id, because the id would be the secret's key name.
+ */
+const KEY_NAMES_NOT_SENT = 'Key names are not sent for this login.'
 
 const TOOLS: Record<string, string> = {
   claude: 'Claude Code',
@@ -114,10 +132,10 @@ const REASONS: Record<string, string> = {
   message_binary: 'it was binary',
   tls_refused: "the tool refused Phase's certificate",
   hello_unreadable: "the tool's TLS hello could not be read",
-  hello_resumption: 'the tool resumed an earlier TLS session',
+  hello_resumption: 'the tool offered to resume an earlier secure session that Phase cannot copy',
   hello_not_mirrored: "the tool's TLS hello could not be copied",
-  upstream_handshake_failed: "Phase's own connection to the provider failed",
-  upstream_not_http1: 'the provider chose a protocol other than HTTP/1.1',
+  upstream_handshake_failed: 'the service did not accept the connection Phase opened',
+  upstream_not_http1: 'the service chose a protocol Phase does not read here',
 }
 
 /** Says only that something was found, which every headline already does. */
@@ -191,13 +209,26 @@ const text = (detail: Detail, key: DetailKey) => {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-const count = (detail: Detail, key: DetailKey) => {
+/** A count the event carries, as a whole number not below zero; null when it carries none. */
+const given = (detail: Detail, key: DetailKey) => {
   const value = member(detail, key)
   const number = typeof value === 'string' && value.trim() ? Number(value) : value
-  return typeof number === 'number' && Number.isFinite(number) && number > 0
-    ? Math.floor(number)
-    : 0
+  return typeof number === 'number' && Number.isFinite(number)
+    ? Math.max(0, Math.floor(number))
+    : null
 }
+
+const count = (detail: Detail, key: DetailKey) => given(detail, key) ?? 0
+
+/** A count in words: 3, or "more than 10,000" for a count no request holds. */
+const amount = (value: number) => (value > MAX_COUNT ? 'more than 10,000' : `${value}`)
+
+/** "1 known secret value", "3 known secret values", "more than 10,000 known secret values". */
+const counted = (value: number, one: string, many: string) =>
+  `${amount(value)} ${value === 1 ? one : many}`
+
+const pause = (seconds: number) =>
+  seconds > MAX_WINDOW_SECONDS ? 'more than a day' : describeDuration(seconds)
 
 const list = (detail: Detail, key: DetailKey) => {
   const value = member(detail, key)
@@ -211,9 +242,10 @@ const named = (names: Record<string, string>, value?: string | null) =>
   lower(value) ? names[lower(value)] ?? sentence(value || '') : ''
 
 const secretValues = (found: number) =>
-  found ? `${found} secret ${found === 1 ? 'value' : 'values'}` : 'secret values'
+  found ? counted(found, 'secret value', 'secret values') : 'secret values'
 
-const someSecrets = (found: number) => (found > 1 ? `${found} secrets` : 'a secret')
+const someSecrets = (found: number) =>
+  found > 1 ? counted(found, 'secret', 'secrets') : 'a secret'
 
 /** A place a finding sat, as a blocked request's headline names it. */
 const BLOCKED_PLACES: Record<string, string> = {
@@ -230,6 +262,8 @@ const LEFT_PLACES: Record<string, string> = {
 }
 
 type Unit = 'request' | 'message' | 'connection'
+
+const UNITS: readonly string[] = ['request', 'message', 'connection'] satisfies Unit[]
 
 const reasonWords = (reason: string | null | undefined, unit: Unit) => {
   const known = REASONS[lower(reason)]
@@ -284,7 +318,8 @@ export const leakSecretPath = (team: string, location: LeakSecretLocation) => {
 
 /** A leak protection event in words; null for an event of any other type. */
 export const describeLeakProtection = (event: AgentEventRow): LeakProtection | null => {
-  if (lower(event.eventType) !== LEAK_PROTECTION_EVENT) return null
+  // Matched exactly, as the backend matches it.
+  if (event.eventType !== LEAK_PROTECTION_EVENT) return null
   const detail = isRecord(event.detail) ? event.detail : {}
   const reason = lower(event.reason)
   // A block is a block, whatever outcome came with it.
@@ -299,12 +334,15 @@ export const describeLeakProtection = (event: AgentEventRow): LeakProtection | n
   const signed = count(detail, 'signedFindings')
   const distinct = count(detail, 'placeholderCount')
   const window = count(detail, 'windowSeconds')
+  const scope = lower(text(detail, 'scope'))
 
-  // A refused certificate, a hello that cannot be used or a failed connection to
-  // the provider is about the connection; a WebSocket carries messages;
-  // everything else is a request.
-  const unit: Unit =
-    /^(hello|tls|upstream)_/.test(reason) || lower(event.method) === 'connect'
+  // The CLI says what an unread reason covers. Without that: a refused
+  // certificate, a hello that cannot be used or a failed connection to the
+  // service is about the connection; a WebSocket carries messages; everything
+  // else is a request.
+  const unit: Unit = UNITS.includes(scope)
+    ? (scope as Unit)
+    : /^(hello|tls|upstream)_/.test(reason) || lower(event.method) === 'connect'
       ? 'connection'
       : reason.startsWith('message_') || lower(event.protocol) === 'websocket'
         ? 'message'
@@ -313,13 +351,23 @@ export const describeLeakProtection = (event: AgentEventRow): LeakProtection | n
   const why = reasonWords(event.reason, unit)
   // Distinct secrets when the event counts them, else what it found.
   const found = distinct || inventory + redactions || alerts
+  // What a censored request had replaced: the CLI's own count of distinct secrets
+  // replaced, else known values and token-shaped values replaced, never what was
+  // only noted or left in signed text. null when the event counts nothing at all.
+  const counts = (
+    ['inventoryHits', 'ruleRedactions', 'ruleAlerts', 'signedFindings', 'placeholderCount'] as const
+  ).some((key) => given(detail, key) !== null)
+  const replaced = given(detail, 'replacedCount') ?? (counts ? inventory + redactions : null)
 
   const headline = (() => {
     if (outcome === 'denied') {
       const where = listWords(places.map((place) => BLOCKED_PLACES[place] ?? `its ${words(place)}`))
       return `Blocked ${to} with ${someSecrets(found)} in ${where || 'it'}`
     }
-    if (outcome === 'censored') return `Removed ${secretValues(found)} from ${to}`
+    if (outcome === 'censored')
+      return replaced === 0
+        ? `Checked ${to} and removed nothing`
+        : `Removed ${secretValues(replaced ?? 0)} from ${to}`
     if (outcome === 'observed')
       return `Saw ${secretValues(found)} in ${to} (observe mode, nothing changed)`
     if (outcome === 'reported') {
@@ -337,7 +385,7 @@ export const describeLeakProtection = (event: AgentEventRow): LeakProtection | n
     }
     if (outcome === 'unread') return `Did not read ${to}${why ? `: ${why}` : ''}`
     if (outcome === 'bypass') {
-      const span = window ? describeDuration(window) : 'a while'
+      const span = window ? pause(window) : 'a while'
       return `Not reading ${host || 'this host'} for ${span}: ${why || REASONS.tls_refused}`
     }
     const said = [words(event.outcome || ''), why].filter(Boolean).join(', ')
@@ -358,18 +406,18 @@ export const describeLeakProtection = (event: AgentEventRow): LeakProtection | n
   add('Found in', capitalise(listWords(places.map((place) => words(place)))))
   add(
     'Found',
-    inventory ? `${inventory} known secret ${inventory === 1 ? 'value' : 'values'}` : '',
+    inventory ? counted(inventory, 'known secret value', 'known secret values') : '',
     redactions
-      ? `${redactions} token ${redactions === 1 ? 'format' : 'formats'} ${
+      ? `${counted(redactions, 'token-shaped value', 'token-shaped values')} ${
           outcome === 'censored' ? 'replaced' : 'found'
         }`
       : '',
     alerts
-      ? `${alerts} token-shaped ${alerts === 1 ? 'string' : 'strings'} noted, not replaced`
+      ? `${counted(alerts, 'token-shaped string', 'token-shaped strings')} noted, not replaced`
       : '',
-    signed ? `${signed} found in signed text, left alone` : '',
+    signed ? `${amount(signed)} found in signed text, left alone` : '',
     distinct
-      ? `${distinct} distinct ${distinct === 1 ? 'secret' : 'secrets'} in the ${
+      ? `${counted(distinct, 'distinct secret', 'distinct secrets')} in the ${
           unit === 'message' ? 'message' : 'request'
         }`
       : ''
@@ -380,7 +428,7 @@ export const describeLeakProtection = (event: AgentEventRow): LeakProtection | n
       .map((label) => LABELS[label.toLowerCase()] ?? sentence(label))
       .join(', ')
   )
-  add('Not reading for', window ? describeDuration(window) : '')
+  add('Not reading for', window ? pause(window) : '')
   // The other headlines say the reason themselves.
   if (['denied', 'censored', 'observed', 'reported'].includes(outcome))
     add('Reason', capitalise(why))
@@ -394,6 +442,7 @@ export const describeLeakProtection = (event: AgentEventRow): LeakProtection | n
   const placeholders = list(detail, 'placeholders')
     .slice(0, MAX_PLACEHOLDERS)
     .map((placeholder) => ({ text: placeholder, secret: resolved.get(placeholder) ?? null }))
+  const unlisted = Math.max(0, distinct - placeholders.length)
 
   return {
     headline,
@@ -414,7 +463,15 @@ export const describeLeakProtection = (event: AgentEventRow): LeakProtection | n
     capture,
     rows,
     placeholders,
-    unlistedPlaceholders: Math.max(0, distinct - placeholders.length),
+    unlistedPlaceholders: unlisted,
+    unlistedNote: unlisted
+      ? unlisted > MAX_COUNT
+        ? 'More than 10,000 more not named in this event'
+        : `+${unlisted} more not named in this event`
+      : '',
+    placeholderNote: placeholders.some(({ text }) => /^ph:[^:]+$/.test(text))
+      ? KEY_NAMES_NOT_SENT
+      : '',
     other: Object.fromEntries(Object.entries(detail).filter(([key]) => !KNOWN_KEYS.has(key))),
   }
 }

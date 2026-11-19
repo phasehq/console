@@ -46,24 +46,56 @@ const BYPASS = {
 
 describe('leak protection headlines', () => {
   test('a censored request says how many secret values were removed, and where it was going', () => {
-    expect(headline({}, { placeholderCount: 3 })).toBe(
+    expect(headline({}, { placeholderCount: 3, replacedCount: 3 })).toBe(
       'Removed 3 secret values from a request to api.anthropic.com'
     )
-    expect(headline({}, { placeholderCount: 1 })).toBe(
+    expect(headline({}, { placeholderCount: 1, replacedCount: 1 })).toBe(
       'Removed 1 secret value from a request to api.anthropic.com'
     )
   })
 
-  test('counts distinct secrets, or what was found when the event does not count them', () => {
-    expect(headline({}, { placeholderCount: 2, inventoryHits: 9, ruleRedactions: 4 })).toBe(
-      'Removed 2 secret values from a request to api.anthropic.com'
-    )
-    expect(headline({}, { inventoryHits: 2, ruleRedactions: 1 })).toBe(
-      'Removed 3 secret values from a request to api.anthropic.com'
-    )
-    expect(headline({}, { ruleRedactions: 1 })).toBe(
+  test('counts the secrets the CLI says it replaced, whatever else was found', () => {
+    expect(
+      headline({}, { placeholderCount: 5, replacedCount: 2, inventoryHits: 9, ruleAlerts: 4 })
+    ).toBe('Removed 2 secret values from a request to api.anthropic.com')
+    expect(headline({}, { placeholder_count: 5, replaced_count: 1, rule_alerts: 4 })).toBe(
       'Removed 1 secret value from a request to api.anthropic.com'
     )
+    expect(headline({}, { replacedCount: '4' })).toBe(
+      'Removed 4 secret values from a request to api.anthropic.com'
+    )
+  })
+
+  test('without that count, counts known values and token-shaped values replaced', () => {
+    expect(headline({}, { placeholderCount: 2, inventoryHits: 9, ruleRedactions: 4 })).toBe(
+      'Removed 13 secret values from a request to api.anthropic.com'
+    )
+    expect(headline({}, { inventoryHits: 2, ruleRedactions: 1, ruleAlerts: 5 })).toBe(
+      'Removed 3 secret values from a request to api.anthropic.com'
+    )
+    expect(headline({}, { ruleRedactions: 1, signedFindings: 3 })).toBe(
+      'Removed 1 secret value from a request to api.anthropic.com'
+    )
+    // An event that counts nothing at all does not say how many.
+    expect(headline({}, { mode: 'censor', replacedCount: 'many' })).toBe(
+      'Removed secret values from a request to api.anthropic.com'
+    )
+  })
+
+  test('a censored request that had nothing replaced does not say anything was removed', () => {
+    const nothing = 'Checked a request to api.anthropic.com and removed nothing'
+    expect(headline({}, { placeholderCount: 3, ruleAlerts: 3, replacedCount: 0 })).toBe(nothing)
+    expect(headline({}, { inventoryHits: 2, replacedCount: 0 })).toBe(nothing)
+    expect(headline({}, { replaced_count: 0, signed_findings: 2 })).toBe(nothing)
+    // Alerts and signed findings are never counted as removed.
+    expect(headline({}, { ruleAlerts: 2, placeholderCount: 2 })).toBe(nothing)
+    expect(headline({}, { signedFindings: 1 })).toBe(nothing)
+    expect(headline({ host: '' }, { ruleAlerts: 1 })).toBe('Checked a request and removed nothing')
+    // The rows still list what was noted.
+    expect(row('Found', {}, { ruleAlerts: 2, signedFindings: 1, replacedCount: 0 })).toEqual([
+      '2 token-shaped strings noted, not replaced',
+      '1 found in signed text, left alone',
+    ])
   })
 
   test('an observed request says nothing was changed', () => {
@@ -144,7 +176,7 @@ describe('leak protection headlines', () => {
     ],
     [
       'hello_resumption',
-      'Did not read a connection to api.anthropic.com: the tool resumed an earlier TLS session',
+      'Did not read a connection to api.anthropic.com: the tool offered to resume an earlier secure session that Phase cannot copy',
     ],
     [
       'hello_not_mirrored',
@@ -152,11 +184,11 @@ describe('leak protection headlines', () => {
     ],
     [
       'upstream_handshake_failed',
-      "Did not read a connection to api.anthropic.com: Phase's own connection to the provider failed",
+      'Did not read a connection to api.anthropic.com: the service did not accept the connection Phase opened',
     ],
     [
       'upstream_not_http1',
-      'Did not read a connection to api.anthropic.com: the provider chose a protocol other than HTTP/1.1',
+      'Did not read a connection to api.anthropic.com: the service chose a protocol Phase does not read here',
     ],
   ])('an unread %s says what was not read and why', (reason, expected) => {
     expect(headline({ outcome: 'unread', reason })).toBe(expected)
@@ -172,6 +204,45 @@ describe('leak protection headlines', () => {
         host: 'chatgpt.com',
       })
     ).toBe('Did not read a message to chatgpt.com: it was over the size limit')
+  })
+
+  test.each([
+    ['request', 'Did not read a request to chatgpt.com: it was compressed'],
+    ['message', 'Did not read a message to chatgpt.com: it was compressed'],
+    ['connection', 'Did not read a connection to chatgpt.com: it was compressed'],
+  ])('the scope %s decides what was not read', (scope, expected) => {
+    expect(
+      headline({ outcome: 'unread', reason: 'message_compressed', host: 'chatgpt.com' }, { scope })
+    ).toBe(expected)
+  })
+
+  test('the scope wins over what the protocol and reason suggest, and is optional', () => {
+    const websocket = {
+      outcome: 'unread',
+      protocol: 'websocket',
+      method: 'GET',
+      host: 'chatgpt.com',
+    }
+    expect(headline({ ...websocket, reason: 'body_over_limit' }, { scope: 'request' })).toBe(
+      'Did not read a request to chatgpt.com: the body was over the size limit'
+    )
+    expect(headline({ ...websocket, reason: 'body_over_limit' }, { scope: 'message' })).toBe(
+      'Did not read a message to chatgpt.com: it was over the size limit'
+    )
+    expect(headline({ outcome: 'unread', reason: 'tls_refused' }, { scope: 'request' })).toBe(
+      "Did not read a request to api.anthropic.com: the tool refused Phase's certificate"
+    )
+    expect(
+      headline({ outcome: 'unread', reason: 'body_over_limit' }, { scope: 'connection' })
+    ).toBe('Did not read a connection to api.anthropic.com: the body was over the size limit')
+    // Absent or not known here: inferred as before.
+    expect(headline({ ...websocket, reason: 'body_over_limit' }, {})).toBe(
+      'Did not read a message to chatgpt.com: it was over the size limit'
+    )
+    expect(headline({ outcome: 'unread', reason: 'tls_refused' }, { scope: 'stream' })).toBe(
+      "Did not read a connection to api.anthropic.com: the tool refused Phase's certificate"
+    )
+    expect(described({ outcome: 'unread' }, { scope: 'request' }).other).toEqual({})
   })
 
   test('a reason not known here still reads as words', () => {
@@ -210,6 +281,17 @@ describe('leak protection headlines', () => {
       "Not reading chatgpt.com for a while: the tool refused Phase's certificate"
     )
     expect(row('Not reading for', BYPASS, { windowSeconds: 40 })).toEqual(['40 seconds'])
+  })
+
+  test('a pause longer than a day reads "more than a day"', () => {
+    expect(headline(BYPASS, { windowSeconds: 86400 })).toBe(
+      "Not reading chatgpt.com for 1 day: the tool refused Phase's certificate"
+    )
+    for (const windowSeconds of [86401, 1e30])
+      expect(headline(BYPASS, { windowSeconds })).toBe(
+        "Not reading chatgpt.com for more than a day: the tool refused Phase's certificate"
+      )
+    expect(row('Not reading for', BYPASS, { windowSeconds: 1e30 })).toEqual(['more than a day'])
   })
 
   test('an outcome not known here is still shown, in words', () => {
@@ -344,7 +426,7 @@ describe('leak protection detail rows', () => {
         label: 'Found',
         lines: [
           '3 known secret values',
-          '1 token format replaced',
+          '1 token-shaped value replaced',
           '2 token-shaped strings noted, not replaced',
           '1 found in signed text, left alone',
           '3 distinct secrets in the request',
@@ -369,7 +451,7 @@ describe('leak protection detail rows', () => {
       )
     ).toEqual([
       '1 known secret value',
-      '2 token formats replaced',
+      '2 token-shaped values replaced',
       '1 token-shaped string noted, not replaced',
       '2 found in signed text, left alone',
       '1 distinct secret in the request',
@@ -383,12 +465,59 @@ describe('leak protection detail rows', () => {
 
   test('says a token format was replaced only when the request was censored', () => {
     expect(row('Found', { outcome: 'observed' }, { ruleRedactions: 2 })).toEqual([
-      '2 token formats found',
+      '2 token-shaped values found',
     ])
-    expect(row('Found', BLOCKED, { ruleRedactions: 1 })).toEqual(['1 token format found'])
+    expect(row('Found', BLOCKED, { ruleRedactions: 1 })).toEqual(['1 token-shaped value found'])
+    expect(row('Found', {}, { ruleRedactions: 1 })).toEqual(['1 token-shaped value replaced'])
     expect(row('Found', { protocol: 'websocket', method: 'GET' }, { placeholderCount: 2 })).toEqual(
       ['2 distinct secrets in the message']
     )
+  })
+
+  test('a count no request holds reads "more than 10,000", never as an exponent', () => {
+    const huge = 1e30
+    expect(headline({}, { replacedCount: huge })).toBe(
+      'Removed more than 10,000 secret values from a request to api.anthropic.com'
+    )
+    expect(headline({}, { inventoryHits: huge })).toBe(
+      'Removed more than 10,000 secret values from a request to api.anthropic.com'
+    )
+    expect(headline({ outcome: 'observed' }, { placeholderCount: 10001 })).toBe(
+      'Saw more than 10,000 secret values in a request to api.anthropic.com (observe mode, nothing changed)'
+    )
+    expect(headline(BLOCKED, { where: 'url', placeholderCount: huge })).toBe(
+      'Blocked a request to api.anthropic.com with more than 10,000 secrets in its URL'
+    )
+    expect(headline({ outcome: 'reported' }, { signedFindings: huge })).toBe(
+      'Found more than 10,000 secrets in signed text sent to api.anthropic.com and left them'
+    )
+    expect(headline({}, { replacedCount: 10000 })).toBe(
+      'Removed 10000 secret values from a request to api.anthropic.com'
+    )
+    expect(
+      row(
+        'Found',
+        {},
+        {
+          inventoryHits: huge,
+          ruleRedactions: huge,
+          ruleAlerts: huge,
+          signedFindings: huge,
+          placeholderCount: huge,
+        }
+      )
+    ).toEqual([
+      'more than 10,000 known secret values',
+      'more than 10,000 token-shaped values replaced',
+      'more than 10,000 token-shaped strings noted, not replaced',
+      'more than 10,000 found in signed text, left alone',
+      'more than 10,000 distinct secrets in the request',
+    ])
+    const { headline: said, rows } = described({}, { inventoryHits: huge, placeholderCount: huge })
+    expect(JSON.stringify([said, rows])).not.toMatch(/e\+/)
+    expect(
+      described({}, { placeholders: 'ph:secret:a1', placeholderCount: huge }).unlistedNote
+    ).toBe('More than 10,000 more not named in this event')
   })
 
   test('reads the snake case keys the Console stores as well as the camel case ones', () => {
@@ -398,7 +527,9 @@ describe('leak protection detail rows', () => {
       ruleAlerts: 2,
       signedFindings: 1,
       placeholderCount: 2,
+      replacedCount: 1,
       windowSeconds: 40,
+      scope: 'request',
     }
     const snake = {
       inventory_hits: 3,
@@ -406,7 +537,9 @@ describe('leak protection detail rows', () => {
       rule_alerts: 2,
       signed_findings: 1,
       placeholder_count: 2,
+      replaced_count: 1,
       window_seconds: 40,
+      scope: 'request',
     }
     expect(described({}, snake)).toEqual(described({}, camel))
     expect(described(BYPASS, snake).headline).toBe(
@@ -481,6 +614,28 @@ describe('leak protection placeholders', () => {
       0
     )
     expect(described({}, { placeholders: listed }).unlistedPlaceholders).toBe(0)
+    expect(described({}, { placeholders: listed, placeholderCount: 5 }).unlistedNote).toBe(
+      '+3 more not named in this event'
+    )
+    expect(described({}, { placeholders: listed }).unlistedNote).toBe('')
+  })
+
+  test('a placeholder without an id is shown as it is, with one note for the group', () => {
+    const { placeholders, placeholderNote } = described(
+      {},
+      { placeholders: 'ph:secret,ph:github_token,ph:secret:s1', secrets: SECRETS }
+    )
+    expect(placeholders.map(({ text }) => text)).toEqual([
+      'ph:secret',
+      'ph:github_token',
+      'ph:secret:s1',
+    ])
+    expect(placeholders[0].secret).toBeNull()
+    expect(placeholders[1].secret).toBeNull()
+    expect(placeholderNote).toBe('Key names are not sent for this login.')
+    expect(described({}, { placeholders: 'ph:secret:s1,ph:jwt:1' }).placeholderNote).toBe('')
+    expect(described({}, { placeholders: 'ph:,ph:secret:' }).placeholderNote).toBe('')
+    expect(described().placeholderNote).toBe('')
   })
 
   const SECRETS = [
@@ -571,7 +726,17 @@ describe('leak protection placeholders', () => {
 
 describe('other events', () => {
   test('an event of another type is not described here', () => {
-    for (const eventType of ['request', 'app_secrets', 'leak', ''])
+    for (const eventType of [
+      'request',
+      'app_secrets',
+      'leak',
+      '',
+      // Matched exactly, as the backend matches it.
+      'Leak_Protection',
+      'LEAK_PROTECTION',
+      ' leak_protection',
+      'leak_protection ',
+    ])
       expect(
         describeLeakProtection(event({ eventType }, { placeholders: 'ph:secret:a1' }))
       ).toBeNull()

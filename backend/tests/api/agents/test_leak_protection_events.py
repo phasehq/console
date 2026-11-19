@@ -16,9 +16,16 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from api.models import AgentEvent
+from api.utils.agent_leak_events import event_placeholders
 from backend.graphene.agents.types import AgentEventType
 
-from .app_secrets import lab, member, put_secret, sse_app  # noqa: F401
+from .app_secrets import (  # noqa: F401
+    give_environment,
+    lab,
+    member,
+    put_secret,
+    sse_app,
+)
 from .custom_connections import (
     agent_client,
     graphql,
@@ -354,6 +361,9 @@ def test_a_secrets_key_and_value_are_never_read(scene):
 @pytest.mark.django_db
 @pytest.mark.parametrize("order", ["newest", None], ids=["history", "tail"])
 def test_a_page_looks_its_placeholders_up_in_one_query(scene, order):
+    # The secret lookup is one query for the whole page. Access checks add
+    # queries of their own: for a member without global access, one for each
+    # distinct app and environment on the page, never one for each event.
     def load(reader):
         with CaptureQueriesContext(db_connection) as queries:
             rows = listed(scene, reader, order=order)
@@ -391,8 +401,60 @@ def test_a_page_looks_its_placeholders_up_in_one_query(scene, order):
     assert len(rows) == 5 and len(leaks) == 4
     assert all(len(row["detail"]["secrets"]) == 2 for row in leaks)
     assert lookups == 1
-    # Access is checked once for each app and environment, not for each event.
+    # Every secret here is in one app and two environments, so more events add
+    # no access checks.
     assert grown == baseline
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("reader", ["partial", "owner"])
+def test_secrets_in_two_apps_are_still_looked_up_in_one_query(scene, reader):
+    other_app, (other_dev, *_) = sse_app(scene, name="billing-service")
+    other_app.members.add(scene.partial)
+    give_environment(scene.partial, other_dev)
+    elsewhere = put_secret(other_dev, "BILLING_KEY", "value-billing-0001")
+    event(scene, "leak-0", placeholders=[placeholder(scene.secret)])
+    event(scene, "leak-1", placeholders=[placeholder(elsewhere)])
+    event(
+        scene,
+        "leak-2",
+        placeholders=[placeholder(elsewhere), placeholder(scene.secret)],
+    )
+
+    with CaptureQueriesContext(db_connection) as queries:
+        rows = details(scene, getattr(scene, reader))
+
+    lookups = [query for query in queries if 'FROM "api_secret"' in query["sql"]]
+    assert len(lookups) == 1
+    apps = [[entry["app_name"] for entry in rows[f"leak-{i}"]["secrets"]] for i in range(3)]
+    assert apps == [[APP], ["billing-service"], ["billing-service", APP]]
+    assert rows["leak-1"]["secrets"][0]["environment_name"] == "Development"
+
+
+@pytest.mark.django_db
+def test_a_placeholder_without_an_id_names_no_secret(scene):
+    # For a login that is not an Agent token the CLI leaves the id out, since
+    # it would be the secret's key name.
+    leak = event(
+        scene,
+        "leak",
+        placeholders=["ph:secret", "ph:github_token", placeholder(scene.secret)],
+    )
+
+    assert event_placeholders(leak) == [
+        (placeholder(scene.secret), str(scene.secret.id))
+    ]
+    detail = details(scene, scene.full)["leak"]
+    assert detail["placeholders"] == (
+        f"ph:secret,ph:github_token,{placeholder(scene.secret)}"
+    )
+    assert [entry["placeholder"] for entry in detail["secrets"]] == [
+        placeholder(scene.secret)
+    ]
+
+    only_without = event(scene, "unnamed", placeholders=["ph:secret", "ph:jwt"])
+    assert event_placeholders(only_without) == []
+    assert "secrets" not in details(scene, scene.full)["unnamed"]
 
 
 @pytest.mark.django_db

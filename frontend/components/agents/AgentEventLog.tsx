@@ -284,10 +284,9 @@ function LeakProtectionDetail({
                       ))}
                   </span>
                 ))}
-                {leak.unlistedPlaceholders > 0 && (
-                  <span className="text-neutral-500">
-                    +{leak.unlistedPlaceholders} more not named in this event
-                  </span>
+                {leak.unlistedNote && <span className="text-neutral-500">{leak.unlistedNote}</span>}
+                {leak.placeholderNote && (
+                  <span className="text-neutral-500">{leak.placeholderNote}</span>
                 )}
               </div>
             </LogField>
