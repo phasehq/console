@@ -1,14 +1,15 @@
 'use client'
 
-import { ProviderCredentialsType, RotatingSecretType } from '@/apollo/graphql'
+import { ProviderCredentialsType, RotatingSecretType, RotationProviderType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Input } from '@/components/common/Input'
 import { ProviderCredentialPicker } from '@/components/syncing/ProviderCredentialPicker'
 import { organisationContext } from '@/contexts/organisationContext'
 import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotatingSecrets.gql'
+import { GetRotationProviders } from '@/graphql/queries/secrets/rotation/getRotationProviders.gql'
 import { UpdateRotatingSecretOP } from '@/graphql/mutations/environments/secrets/rotation/updateRotatingSecret.gql'
-import { useMutation } from '@apollo/client'
+import { useMutation, useQuery } from '@apollo/client'
 import { humanReadableDurationLong } from '@/utils/time'
 import {
   forwardRef,
@@ -48,18 +49,18 @@ const REVOCATION_DELAY_PRESETS = [
   { label: '30 days', seconds: 2592000 },
 ]
 
-const PROVIDER_LABELS: Record<string, string> = {
-  openai: 'OpenAI',
-  litellm: 'LiteLLM',
-}
-const providerLabel = (id: string | null | undefined) =>
-  (id && PROVIDER_LABELS[id]) || id || 'the provider'
-
 export const EditRotatingSecretDialog = forwardRef<
   EditRotatingSecretDialogRef,
   EditRotatingSecretDialogProps
 >(({ rotatingSecret, onClose }, ref) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
+  const { data: providersData } = useQuery(GetRotationProviders)
+  const providerName =
+    (providersData?.rotationProviders as RotationProviderType[] | undefined)?.find(
+      (p) => p.id === rotatingSecret.provider
+    )?.name ??
+    rotatingSecret.provider ??
+    'the provider'
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   useImperativeHandle(ref, () => ({
     openModal: () => dialogRef.current?.openModal(),
@@ -244,8 +245,8 @@ export const EditRotatingSecretDialog = forwardRef<
           </div>
           <div className="text-2xs text-neutral-500 mt-1 text-right">
             {revocationDelaySeconds === 0
-              ? `Revoke credentials on ${providerLabel(rotatingSecret.provider)} immediately upon expiry`
-              : `Wait ${humanReadableDurationLong(revocationDelaySeconds)} after expiry before revoking credentials on ${providerLabel(rotatingSecret.provider)}`}
+              ? `Revoke credentials on ${providerName} immediately upon expiry`
+              : `Wait ${humanReadableDurationLong(revocationDelaySeconds)} after expiry before revoking credentials on ${providerName}`}
           </div>
           {revocationDelaySeconds >= intervalSeconds && (
             <div className="text-2xs text-red-500 mt-1">

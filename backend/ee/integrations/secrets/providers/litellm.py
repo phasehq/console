@@ -11,6 +11,7 @@ from .base import (
     CredentialSchemaField,
     MintResult,
     OutputSchemaField,
+    TemplateImportSpec,
 )
 from .exceptions import ProviderConfigError
 from .http import call_summary, request
@@ -19,6 +20,17 @@ from .http import call_summary, request
 class LiteLLMProvider(CredentialProvider):
     id = "litellm"
     name = "LiteLLM"
+    key_name_prefix = "LITE_LLM"
+    credential_id_label = "LiteLLM key ID"
+    template_import = TemplateImportSpec(
+        label="LiteLLM key ID or value",
+        help_text=(
+            "Configure a key in LiteLLM's UI with the options you want, then "
+            "paste its ID or value here to copy the full config, including "
+            "object fields like metadata, aliases and permissions that aren't "
+            "in the manual form."
+        ),
+    )
 
     credential_schema = [
         CredentialSchemaField(
