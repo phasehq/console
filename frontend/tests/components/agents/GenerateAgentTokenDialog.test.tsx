@@ -167,6 +167,9 @@ describe('MintAgentTokenDialog', () => {
     )!
     const nameInput = container.querySelector<HTMLInputElement>('#token-name')!
     expect(safetySubtitle.querySelector('svg')).toBeNull()
+    // A granted app Connection does let the token read that app's secrets.
+    expect(safetySubtitle.textContent).not.toContain('cannot read')
+    expect(safetySubtitle.textContent).toContain('only through an app Connection granted')
     expect(
       safetySubtitle.compareDocumentPosition(nameInput) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
