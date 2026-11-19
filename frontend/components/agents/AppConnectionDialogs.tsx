@@ -210,6 +210,8 @@ export function EditAppConnectionDialog({ connection }: { connection: AppConnect
   const current = () => (connection.environments ?? []).map((environment) => environment.id)
   const [name, setName] = useState(connection.name)
   const [environmentIds, setEnvironmentIds] = useState<string[]>(current)
+  // What the dialog opened with: a refetch meanwhile is not the member's edit.
+  const [opening, setOpening] = useState({ name: connection.name, environmentIds: current() })
   const [failure, setFailure] = useState('')
   // The Apps are read once the dialog has been opened, not for every row on the page.
   const [opened, setOpened] = useState(false)
@@ -224,9 +226,10 @@ export function EditAppConnectionDialog({ connection }: { connection: AppConnect
     connection.environments ??
     []
   const sameEnvironments =
-    environmentIds.length === current().length &&
-    environmentIds.every((environmentId) => current().includes(environmentId))
-  const changed = name.trim() !== connection.name || !sameEnvironments
+    environmentIds.length === opening.environmentIds.length &&
+    environmentIds.every((environmentId) => opening.environmentIds.includes(environmentId))
+  const nameChanged = name.trim() !== opening.name
+  const changed = nameChanged || !sameEnvironments
   const problem = !name.trim() ? 'Enter a name.' : environmentsProblem(environmentIds)
 
   const submit = async (event: FormEvent) => {
@@ -237,7 +240,7 @@ export function EditAppConnectionDialog({ connection }: { connection: AppConnect
       await save({
         variables: {
           connectionId: connection.id,
-          ...(name.trim() !== connection.name ? { name: name.trim() } : {}),
+          ...(nameChanged ? { name: name.trim() } : {}),
           ...(!sameEnvironments ? { environmentIds } : {}),
         },
         refetchQueries: REFETCH,
@@ -272,6 +275,7 @@ export function EditAppConnectionDialog({ connection }: { connection: AppConnect
         setOpened(true)
         setName(connection.name)
         setEnvironmentIds(current())
+        setOpening({ name: connection.name, environmentIds: current() })
         setFailure('')
       }}
     >
