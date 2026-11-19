@@ -27,6 +27,15 @@
   "credential_environment": [
     "SUPABASE_ACCESS_TOKEN"
   ],
+  "secret_guard": {
+    "paths": [
+      {
+        "method": "POST",
+        "pattern": "/v1/projects/*/api-keys",
+        "operation": "Supabase project API key"
+      }
+    ]
+  },
   "credential_fields": {
     "token": "access_token"
   }

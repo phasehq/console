@@ -1091,6 +1091,8 @@ def _validate_secret_guard(
                 names, _AWS_ACTION, f"{operations_location}.{service}"
             )
     if "paths" in guard:
+        # A path rule cannot see a call named in the request body, such as a
+        # GraphQL mutation (GitLab's /api/graphql).
         paths = _list(guard["paths"], f"{location}.paths")
         if not paths or len(paths) > _MAX_PROVIDER_RULES:
             raise ConfigRegistryError(
@@ -1555,6 +1557,8 @@ class ConfigRegistry:
     minting_operations: frozenset[str] = frozenset()
     # The services whose calls the client names by action.
     operation_service_types: frozenset[str] = frozenset()
+    # The services whose manifest gives the secret guard rules.
+    guarded_service_types: frozenset[str] = frozenset()
     # {credential provider: the service whose ``credential_fields`` read it}
     _token_services: Mapping[str, str] = MappingProxyType({})
 
@@ -1567,6 +1571,7 @@ class ConfigRegistry:
         host_owners: dict[tuple[Any, ...], str] = {}
         minting_operations: set[str] = set()
         operation_service_types: set[str] = set()
+        guarded_service_types: set[str] = set()
         token_services: dict[str, str] = {}
         for path, document in raw_services:
             checked = _validate_service(document, path)
@@ -1574,6 +1579,8 @@ class ConfigRegistry:
             if service_type in services:
                 raise ConfigRegistryError(f"Duplicate service type {service_type!r}")
             guard = checked.get("secret_guard", {})
+            if guard:
+                guarded_service_types.add(service_type)
             for aws_service, actions in guard.get("operations", {}).items():
                 minting_operations.update(
                     f"{aws_service}:{action}".lower() for action in actions
@@ -1634,6 +1641,7 @@ class ConfigRegistry:
             _capabilities=MappingProxyType(capabilities),
             minting_operations=frozenset(minting_operations),
             operation_service_types=frozenset(operation_service_types),
+            guarded_service_types=frozenset(guarded_service_types),
             _token_services=MappingProxyType(token_services),
         )
 

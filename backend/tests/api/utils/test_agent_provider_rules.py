@@ -58,7 +58,7 @@ def test_every_service_carries_the_rules_recorded_from_the_cli():
             assert service.get(key) == expected.get(key), (service_type, key)
 
 
-def test_only_aws_and_github_have_a_guard_and_only_aws_has_call_classes():
+def test_the_services_with_a_guard_are_known_and_only_aws_has_call_classes():
     guarded = {
         service_type
         for service_type, service in REGISTRY.services.items()
@@ -69,7 +69,8 @@ def test_only_aws_and_github_have_a_guard_and_only_aws_has_call_classes():
         for service_type, service in REGISTRY.services.items()
         if "action_classes" in service
     }
-    assert guarded == {"aws", "github"}
+    assert guarded == {"aws", "cloudflare", "github", "gitlab", "supabase", "vercel"}
+    assert guarded == REGISTRY.guarded_service_types
     assert classed == {"aws"}
 
 
@@ -118,19 +119,29 @@ _GUARDED_BY_PATH_ONLY = {
     "grafana:CreateWorkspaceApiKey",
     "emr-containers:GetManagedEndpointSessionCredentials",
 }
+# Added to the manifest's guard after both lists were recorded.
+_GUARDED_SINCE = {
+    "gamelift:GetComputeAuthToken",
+    "grafana:CreateWorkspaceServiceAccountToken",
+}
+_MINTING_OPERATIONS = (
+    _HAND_KEPT_MINTING_OPERATIONS | _GUARDED_BY_PATH_ONLY | _GUARDED_SINCE
+)
 
 
 def test_the_minting_list_is_the_manifests_guard():
     assert REGISTRY.minting_operations == {
-        operation.lower()
-        for operation in _HAND_KEPT_MINTING_OPERATIONS | _GUARDED_BY_PATH_ONLY
+        operation.lower() for operation in _MINTING_OPERATIONS
     }
-    for operation in _HAND_KEPT_MINTING_OPERATIONS | _GUARDED_BY_PATH_ONLY:
+    for operation in _MINTING_OPERATIONS:
         assert is_minting_operation(operation)
         with pytest.raises(PolicyError, match="secret guard"):
             validate_allow({"operation": operation}, operations=True)
-    # A GitHub path rule names no AWS action and adds nothing.
-    assert not any("github" in operation for operation in REGISTRY.minting_operations)
+    # A path rule of another service names no AWS action and adds nothing.
+    assert not any(
+        operation.startswith(("git", "cloudflare", "vercel", "supabase"))
+        for operation in REGISTRY.minting_operations
+    )
 
 
 def test_the_services_that_take_operations_are_the_ones_with_call_classes():
