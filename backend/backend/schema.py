@@ -833,6 +833,7 @@ class Query(graphene.ObjectType):
         workflow_id=graphene.ID(required=False),
         session_uid=graphene.String(required=False),
         proxy_decision=graphene.String(required=False),
+        event_type=graphene.String(required=False),
         provider=graphene.String(required=False),
         start=graphene.DateTime(required=False),
         end=graphene.DateTime(required=False),

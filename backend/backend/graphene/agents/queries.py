@@ -23,6 +23,7 @@ from api.utils.access.permissions import (
 )
 from api.utils.agent_access import end_lapsed_access
 from api.utils.agent_config import get_config_registry, list_presets
+from api.utils.agent_leak_events import preload_secret_locations
 from api.utils.agents import expire_overdue_requests
 from backend.graphene.agents.common import (
     organisation_for,
@@ -332,6 +333,7 @@ def resolve_agent_events(
     workflow_id=None,
     session_uid=None,
     proxy_decision=None,
+    event_type=None,
     provider=None,
     start=None,
     end=None,
@@ -367,6 +369,8 @@ def resolve_agent_events(
         if proxy_decision not in dict(AgentEvent.DECISION_CHOICES):
             raise GraphQLError("Unsupported Agent event proxy decision")
         queryset = queryset.filter(proxy_decision=proxy_decision)
+    if event_type:
+        queryset = queryset.filter(event_type=event_type)
     if provider:
         queryset = queryset.filter(provider=provider)
     if start is not None:
@@ -396,6 +400,7 @@ def resolve_agent_events(
         )
         page = list(queryset.order_by(*ordering)[: limit + 1])
         events = page[:limit]
+        preload_secret_locations(events, organisation.id)
         next_cursor = _format_event_time_cursor(events[-1]) if events else before or ""
         return AgentEventPageType(
             events=events, next_cursor=next_cursor, has_more=len(page) > limit
@@ -407,6 +412,7 @@ def resolve_agent_events(
     )
     has_more = len(page) > limit
     events = page[:limit]
+    preload_secret_locations(events, organisation.id)
     next_cursor = str(events[-1].ingest_seq) if events else str(after)
     return AgentEventPageType(
         events=events, next_cursor=next_cursor, has_more=has_more

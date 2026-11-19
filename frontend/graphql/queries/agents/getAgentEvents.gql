@@ -8,6 +8,7 @@ query GetAgentEvents(
   $workflowId: ID
   $sessionUid: String
   $proxyDecision: String
+  $eventType: String
   $provider: String
   $start: DateTime
   $end: DateTime
@@ -22,6 +23,7 @@ query GetAgentEvents(
     workflowId: $workflowId
     sessionUid: $sessionUid
     proxyDecision: $proxyDecision
+    eventType: $eventType
     provider: $provider
     start: $start
     end: $end

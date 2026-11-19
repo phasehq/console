@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { useApolloClient, useMutation, useQuery } from '@apollo/client'
 import clsx from 'clsx'
+import Link from 'next/link'
 import { FaArrowDown, FaArrowUp, FaCheck, FaChevronRight } from 'react-icons/fa'
 import { FiChevronsDown } from 'react-icons/fi'
 import { toast } from 'react-toastify'
@@ -43,7 +44,15 @@ import {
   type AgentEventRow,
   type AgentEventWorkflow,
 } from './AgentEventLogUtils'
+import {
+  LEAK_PROTECTION_EVENT,
+  describeLeakProtection,
+  leakSecretPath,
+  type LeakProtection,
+  type LeakTone,
+} from './AgentLeakProtection'
 import { AgentSelect } from './AgentSelect'
+import { Withheld } from './WithheldAsset'
 
 // The page size of the secret and SCIM logs.
 const PAGE_SIZE = 25
@@ -64,6 +73,17 @@ const PROXY_DECISIONS = [
 // Shown on a row, not offered as a filter: a call an access rule refused so the Agent can
 // file a Change Request for it. Amber, like every other state that needs attention.
 const ASK_DECISION = { value: 'ask', label: 'Ask', color: 'text-amber-500', tone: 'amber' } as const
+
+// Kinds of event the filter offers by name.
+const EVENT_TYPES = [{ value: LEAK_PROTECTION_EVENT, label: 'Leak protection' }] as const
+
+// A leak protection event's tone, in the colours the badges use.
+const LEAK_TONE_TEXT: Record<LeakTone, string> = {
+  danger: 'text-red-700 dark:text-red-400',
+  warning: 'text-amber-700 dark:text-amber-400',
+  neutral: '',
+}
+const LEAK_TONE_BADGE = { danger: 'red', warning: 'amber', neutral: 'neutral' } as const
 
 const proxyDecision = (value?: string | null) =>
   [...PROXY_DECISIONS, ASK_DECISION].find((decision) => decision.value === value?.toLowerCase())
@@ -87,6 +107,7 @@ type EventFilters = {
   workflowId: string
   sessionUid: string
   proxyDecision: string
+  eventType: string
   provider: string
   range: string
   start: string
@@ -97,6 +118,7 @@ const emptyFilters: EventFilters = {
   workflowId: '',
   sessionUid: '',
   proxyDecision: '',
+  eventType: '',
   provider: '',
   range: '',
   start: '',
@@ -173,7 +195,119 @@ function AllowHostAction({
   )
 }
 
+const requestLine = (event: AgentEventRow) =>
+  [event.method, `${agentEventAuthority(event)}${event.path || ''}`].filter(Boolean).join(' ')
+
+/** The Request cell of a leak protection event: what happened, then the tool and how its request was captured. */
+function LeakProtectionRequest({ event, leak }: { event: AgentEventRow; leak: LeakProtection }) {
+  return (
+    <>
+      <div className={LEAK_TONE_TEXT[leak.tone]} title={requestLine(event)}>
+        {leak.headline}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-2xs text-neutral-500">
+        {leak.severity && (
+          <AgentBadge tone={LEAK_TONE_BADGE[leak.severity.tone]}>{leak.severity.label}</AgentBadge>
+        )}
+        <span>{[leak.tool, leak.capture].filter(Boolean).join(' · ') || 'Leak protection'}</span>
+      </div>
+    </>
+  )
+}
+
+/** A leak protection event expanded: its words in place of the raw detail. */
+function LeakProtectionDetail({
+  event,
+  leak,
+  team,
+}: {
+  event: AgentEventRow
+  leak: LeakProtection
+  team: string
+}) {
+  return (
+    <>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <LogField label="Event ID">
+          <span className="break-all">{event.eventId}</span>
+        </LogField>
+        <LogField label="Session">
+          <span className="break-all">{event.session?.sessionUid || 'Unavailable'}</span>
+        </LogField>
+        {event.connection && <LogField label="Connection">{event.connection.name}</LogField>}
+        <LogField label="Timestamp">
+          <AgentTime value={event.proxyCreatedAt} />
+        </LogField>
+        <LogField label="Ingested">
+          <AgentTime value={event.ingestedAt} />
+        </LogField>
+        <LogField label="Request">
+          <span className="break-all">{requestLine(event)}</span>
+        </LogField>
+        <LogField label="Protocol">{event.protocol}</LogField>
+        {leak.rows.map((row) => (
+          <LogField key={row.label} label={row.label}>
+            {row.lines.map((line) => (
+              <div key={line}>{line}</div>
+            ))}
+          </LogField>
+        ))}
+        {leak.placeholders.length > 0 && (
+          <div className="md:col-span-3">
+            <LogField label="Placeholders">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                {leak.placeholders.map(({ text, secret }) => (
+                  // A placeholder that names its secret gets a line of its own.
+                  <span
+                    key={text}
+                    className={clsx(
+                      'inline-flex flex-wrap items-center gap-1.5',
+                      secret && 'w-full'
+                    )}
+                  >
+                    <AgentBadge>
+                      <code>{text}</code>
+                    </AgentBadge>
+                    {secret &&
+                      (secret.withheld ? (
+                        <Withheld>{secret.label}</Withheld>
+                      ) : secret.location ? (
+                        <Link
+                          href={leakSecretPath(team, secret.location)}
+                          title="Open this secret"
+                          className="hover:text-emerald-500"
+                        >
+                          {secret.label}
+                        </Link>
+                      ) : (
+                        secret.label
+                      ))}
+                  </span>
+                ))}
+                {leak.unlistedPlaceholders > 0 && (
+                  <span className="text-neutral-500">
+                    +{leak.unlistedPlaceholders} more not named in this event
+                  </span>
+                )}
+              </div>
+            </LogField>
+          </div>
+        )}
+      </div>
+      {Object.keys(leak.other).length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+            Detail
+          </h4>
+          <JsonBlock data={leak.other} />
+        </div>
+      )}
+    </>
+  )
+}
+
 export function AgentEventLog({
+  team,
   organisationId,
   agentId,
   workflows,
@@ -181,6 +315,7 @@ export function AgentEventLog({
   canRead,
   canAllowHosts,
 }: {
+  team: string
   organisationId: string
   agentId: string
   workflows: AgentEventWorkflow[]
@@ -214,6 +349,7 @@ export function AgentEventLog({
       workflowId: filters.workflowId || null,
       sessionUid: filters.sessionUid || null,
       proxyDecision: filters.proxyDecision || null,
+      eventType: filters.eventType || null,
       provider: filters.provider || null,
       start: filters.start || null,
       end: filters.end || null,
@@ -329,7 +465,7 @@ export function AgentEventLog({
   }
 
   // A second click on the selected option clears it.
-  const toggleFilter = (key: 'workflowId' | 'proxyDecision', value: string) =>
+  const toggleFilter = (key: 'workflowId' | 'proxyDecision' | 'eventType', value: string) =>
     setFilters((current) => ({ ...current, [key]: current[key] === value ? '' : value }))
 
   const toggleEvent = (key: string) => setExpandedEvent((current) => (current === key ? '' : key))
@@ -422,6 +558,19 @@ export function AgentEventLog({
                   onClick={() => toggleFilter('proxyDecision', decision.value)}
                 >
                   {decision.label}
+                </AgentFilterOption>
+              ))}
+            </div>
+          </AgentFilterSection>
+          <AgentFilterSection title="Event type">
+            <div className="flex flex-wrap gap-2">
+              {EVENT_TYPES.map((type) => (
+                <AgentFilterOption
+                  key={type.value}
+                  selected={filters.eventType === type.value}
+                  onClick={() => toggleFilter('eventType', type.value)}
+                >
+                  {type.label}
                 </AgentFilterOption>
               ))}
             </div>
@@ -567,6 +716,7 @@ export function AgentEventLog({
                     : undefined
                   const decision = proxyDecision(event.proxyDecision)
                   const policy = policyDecisionDetail(event)
+                  const leak = describeLeakProtection(event)
                   const pageIndex = pageStarts.indexOf(key)
                   return (
                     <Fragment key={key}>
@@ -619,17 +769,23 @@ export function AgentEventLog({
                           {event.workflow?.name || 'Unknown workflow'}
                         </td>
                         <td className="max-w-xs px-4 py-2 text-xs">
-                          <div className="truncate" title={`${endpoint}${event.path || ''}`}>
-                            <span className="font-medium">
-                              {event.method || humanizeAgentValue(event.eventType)}
-                            </span>{' '}
-                            {endpoint || 'Runtime'}
-                            {event.path || ''}
-                          </div>
-                          <div className="text-2xs text-neutral-500">
-                            {event.connection?.name ||
-                              (connection ? `Target: ${connection.name}` : 'No connection')}
-                          </div>
+                          {leak ? (
+                            <LeakProtectionRequest event={event} leak={leak} />
+                          ) : (
+                            <>
+                              <div className="truncate" title={`${endpoint}${event.path || ''}`}>
+                                <span className="font-medium">
+                                  {event.method || humanizeAgentValue(event.eventType)}
+                                </span>{' '}
+                                {endpoint || 'Runtime'}
+                                {event.path || ''}
+                              </div>
+                              <div className="text-2xs text-neutral-500">
+                                {event.connection?.name ||
+                                  (connection ? `Target: ${connection.name}` : 'No connection')}
+                              </div>
+                            </>
+                          )}
                         </td>
                         <td className="whitespace-nowrap px-4 py-2">
                           <AgentBadge tone={decision?.tone ?? 'neutral'}>
@@ -642,12 +798,30 @@ export function AgentEventLog({
                           )}
                         </td>
                         <td className="whitespace-nowrap px-4 py-2 text-xs text-neutral-500">
-                          {event.statusCode == null
-                            ? event.outcome || 'No status'
-                            : `HTTP ${event.statusCode}`}
-                          <div className="text-2xs">
-                            {event.latencyMs == null ? 'Latency unknown' : `${event.latencyMs} ms`}
-                          </div>
+                          {leak ? (
+                            <>
+                              {leak.outcome}
+                              <div className="text-2xs">
+                                {[
+                                  event.statusCode ? `HTTP ${event.statusCode}` : '',
+                                  event.latencyMs == null ? '' : `${event.latencyMs} ms`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              {event.statusCode == null
+                                ? event.outcome || 'No status'
+                                : `HTTP ${event.statusCode}`}
+                              <div className="text-2xs">
+                                {event.latencyMs == null
+                                  ? 'Latency unknown'
+                                  : `${event.latencyMs} ms`}
+                              </div>
+                            </>
+                          )}
                         </td>
                         {/* Stops row toggles, including clicks in the portalled confirmation dialog. */}
                         <td
@@ -680,55 +854,67 @@ export function AgentEventLog({
                             className="border-b border-l border-r border-neutral-500/20 border-l-emerald-500"
                           >
                             <div className="w-full space-y-4 bg-neutral-100 p-4 shadow-xl dark:bg-neutral-800">
-                              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                                <LogField label="Event ID">
-                                  <span className="break-all">{event.eventId}</span>
-                                </LogField>
-                                <LogField label="Session">
-                                  <span className="break-all">
-                                    {event.session?.sessionUid || 'Unavailable'}
-                                  </span>
-                                </LogField>
-                                <LogField label="Connection">
-                                  {event.connection?.name || 'None'}
-                                </LogField>
-                                <LogField label="Provider">
-                                  {event.provider ? humanizeAgentValue(event.provider) : 'Runtime'}
-                                </LogField>
-                                <LogField label="Timestamp">
-                                  <AgentTime value={event.proxyCreatedAt} />
-                                </LogField>
-                                <LogField label="Ingested">
-                                  <AgentTime value={event.ingestedAt} />
-                                </LogField>
-                                <LogField label="Protocol">{event.protocol}</LogField>
-                                <LogField label="Outcome">{event.outcome || 'Unknown'}</LogField>
-                                <LogField label="Bytes in / out">
-                                  {event.bytesIn ?? 0} / {event.bytesOut ?? 0}
-                                </LogField>
-                                <LogField label="Credential action">
-                                  {humanizeAgentValue(event.credentialAction)}
-                                </LogField>
-                                {policy?.callClass && (
-                                  <LogField label="Kind of call">{policy.callClass}</LogField>
-                                )}
-                                {policy?.rule && <LogField label="Rule">{policy.rule}</LogField>}
-                                <div className="md:col-span-3">
-                                  <LogField label="Reason">
-                                    <span className="whitespace-pre-wrap">
-                                      {event.reason || 'No reason recorded'}
-                                    </span>
-                                  </LogField>
-                                </div>
-                              </div>
-                              {/* Sent by the Agent's proxy, which redacts it, or by the server on credential errors. */}
-                              {Object.keys(event.detail || {}).length > 0 && (
-                                <div className="space-y-2">
-                                  <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
-                                    Detail
-                                  </h4>
-                                  <JsonBlock data={event.detail} />
-                                </div>
+                              {leak ? (
+                                <LeakProtectionDetail event={event} leak={leak} team={team} />
+                              ) : (
+                                <>
+                                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                                    <LogField label="Event ID">
+                                      <span className="break-all">{event.eventId}</span>
+                                    </LogField>
+                                    <LogField label="Session">
+                                      <span className="break-all">
+                                        {event.session?.sessionUid || 'Unavailable'}
+                                      </span>
+                                    </LogField>
+                                    <LogField label="Connection">
+                                      {event.connection?.name || 'None'}
+                                    </LogField>
+                                    <LogField label="Provider">
+                                      {event.provider
+                                        ? humanizeAgentValue(event.provider)
+                                        : 'Runtime'}
+                                    </LogField>
+                                    <LogField label="Timestamp">
+                                      <AgentTime value={event.proxyCreatedAt} />
+                                    </LogField>
+                                    <LogField label="Ingested">
+                                      <AgentTime value={event.ingestedAt} />
+                                    </LogField>
+                                    <LogField label="Protocol">{event.protocol}</LogField>
+                                    <LogField label="Outcome">
+                                      {event.outcome || 'Unknown'}
+                                    </LogField>
+                                    <LogField label="Bytes in / out">
+                                      {event.bytesIn ?? 0} / {event.bytesOut ?? 0}
+                                    </LogField>
+                                    <LogField label="Credential action">
+                                      {humanizeAgentValue(event.credentialAction)}
+                                    </LogField>
+                                    {policy?.callClass && (
+                                      <LogField label="Kind of call">{policy.callClass}</LogField>
+                                    )}
+                                    {policy?.rule && (
+                                      <LogField label="Rule">{policy.rule}</LogField>
+                                    )}
+                                    <div className="md:col-span-3">
+                                      <LogField label="Reason">
+                                        <span className="whitespace-pre-wrap">
+                                          {event.reason || 'No reason recorded'}
+                                        </span>
+                                      </LogField>
+                                    </div>
+                                  </div>
+                                  {/* Sent by the Agent's proxy, which redacts it, or by the server on credential errors. */}
+                                  {Object.keys(event.detail || {}).length > 0 && (
+                                    <div className="space-y-2">
+                                      <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider">
+                                        Detail
+                                      </h4>
+                                      <JsonBlock data={event.detail} />
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </div>
                           </td>
