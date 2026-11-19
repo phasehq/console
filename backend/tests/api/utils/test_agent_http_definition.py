@@ -400,6 +400,10 @@ def test_the_text_an_agent_can_read_is_listed_for_leak_checks():
         ("the decoy prefix of token", "sk-"),
         ("the value of username", "alice"),
         ("the prefix of the X-Api-Key header", "Bearer "),
+        ("a header name", "X-Api-Key"),
+        ("a query parameter name", "api_key"),
+        ("host 1", "api.example.com"),
+        ("the path of host 1", "/v1/*"),
     ]
 
 
