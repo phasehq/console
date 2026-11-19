@@ -18,6 +18,7 @@ import {
   repeatedKeyToFix,
   restoreAppSecretEntries,
   revertAppSecretEntries,
+  searchedFolders,
   selectionExport,
   selectionTraits,
   snapshotHasDeploy,
@@ -876,6 +877,42 @@ describe('selectionExport', () => {
     const { secrets, readIds } = selectionExport(rows, 'dev')
     expect(secrets.map((s) => s.key)).toEqual(['A', 'B'])
     expect(readIds).toEqual(['d2'])
+  })
+})
+
+describe('searchedFolders', () => {
+  const folder = (path: string, name: string) => ({ path, name })
+  const folders = [
+    folder('/', 'apps'),
+    folder('/apps', 'payments'),
+    folder('/apps/payments', 'eu'),
+    folder('/', 'workers'),
+    folder('/workers', 'queues'),
+  ]
+  const names = (found: { folders: { path: string; name: string }[] }) =>
+    found.folders.map((f) => `${f.path === '/' ? '' : f.path}/${f.name}`)
+
+  it('shows a nested folder named like the search, and opens the way to it', () => {
+    const found = searchedFolders(folders, [], ['payments'], '/')
+    expect(names(found)).toEqual(['/apps', '/apps/payments'])
+    expect([...found.open]).toEqual(['/apps'])
+  })
+
+  it('shows and opens the folders on the way to a matching row', () => {
+    const found = searchedFolders(folders, ['/workers/queues'], ['nothing-named-so'], '/')
+    expect(names(found)).toEqual(['/workers', '/workers/queues'])
+    expect([...found.open].sort()).toEqual(['/workers', '/workers/queues'])
+  })
+
+  it('searches no folder names when given none', () => {
+    expect(names(searchedFolders(folders, [], null, '/'))).toEqual([])
+  })
+
+  it('stops at the folder in view', () => {
+    const inApps = folders.filter((f) => f.path.startsWith('/apps'))
+    const found = searchedFolders(inApps, [], ['eu'], '/apps')
+    expect(names(found)).toEqual(['/apps/payments', '/apps/payments/eu'])
+    expect([...found.open]).toEqual(['/apps/payments'])
   })
 })
 

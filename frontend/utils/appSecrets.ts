@@ -785,6 +785,40 @@ export const selectionExport = (savedRows: (AppSecret | undefined)[], envId: str
   }
 }
 
+export const folderFullPath = (folder: { name: string; path: string }) =>
+  `${folder.path === '/' ? '' : folder.path}/${folder.name}`
+
+export const parentPath = (path: string) => path.slice(0, path.lastIndexOf('/')) || '/'
+
+/**
+ * The folders a search shows under `root`: those on the way to a match, opened, and those
+ * named like the search text, with the way to them opened too.
+ */
+export const searchedFolders = <F extends { name: string; path: string }>(
+  folders: F[],
+  matchPaths: string[],
+  nameTokens: string[] | null,
+  root: string
+): { folders: F[]; open: Set<string> } => {
+  const leading = new Set<string>()
+  const addAncestors = (path: string) => {
+    for (let p = path; p !== root && p !== '/'; p = parentPath(p)) leading.add(p)
+  }
+  matchPaths.forEach(addAncestors)
+  const named = new Set(
+    nameTokens
+      ? folders.filter((folder) =>
+          nameTokens.every((token) => folder.name.toLowerCase().includes(token))
+        )
+      : []
+  )
+  named.forEach((folder) => addAncestors(folder.path))
+  return {
+    folders: folders.filter((folder) => named.has(folder) || leading.has(folderFullPath(folder))),
+    open: leading,
+  }
+}
+
 export type RowListItem =
   | { kind: 'single'; secret: AppSecret }
   | { kind: 'group'; groupKey: string; rotatingSecretIds: string[]; appSecrets: AppSecret[] }

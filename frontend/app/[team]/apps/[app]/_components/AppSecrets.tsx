@@ -133,12 +133,15 @@ import {
   dirtyEnvIds,
   duplicateKeyRowIds,
   flattenAppSecrets,
+  folderFullPath,
   groupRotatingRows,
   ImportEnvOptions,
   mergeAppSecretsUpdate,
   mergeImportedRows,
   moveAppSecretRows,
+  parentPath,
   repeatedKeyToFix,
+  searchedFolders,
   selectionExport,
   selectionTraits,
   restoreAppSecretEntries,
@@ -292,11 +295,6 @@ type TreeItem =
 
 // One tree level indents 1rem, about two key characters wide
 const INDENT_CHARS = 2
-
-const folderFullPath = (folder: { name: string; path: string }) =>
-  `${folder.path === '/' ? '' : folder.path}/${folder.name}`
-
-const parentPath = (path: string) => path.slice(0, path.lastIndexOf('/')) || '/'
 
 const groupBy = <T,>(items: T[], keyOf: (item: T) => string) => {
   const groups = new Map<string, T[]>()
@@ -1166,21 +1164,16 @@ export const AppSecrets = ({
     let openPaths = expandedFolders
     if (searching) {
       // Folders on the way to a match (opened), plus folders whose name matches plain text
-      const leading = new Set<string>()
-      const addAncestors = (path: string) => {
-        for (let p = path; p !== secretPath && p !== '/'; p = parentPath(p)) leading.add(p)
-      }
-      rows.forEach((row) => addAncestors(row.path ?? '/'))
-      dynamics.forEach((ds) => addAncestors(ds.path))
       const plainText =
         !filterIsActive(filter) && !hasRegularOnlyFacet(parsedSearch) && !parsedSearch.dynamic
-      folders = visibleFolders.filter(
-        (folder) =>
-          leading.has(folderFullPath(folder)) ||
-          (plainText &&
-            parsedSearch.text.every((token) => folder.name.toLowerCase().includes(token)))
+      const found = searchedFolders(
+        visibleFolders,
+        [...rows.map((row) => row.path ?? '/'), ...dynamics.map((ds) => ds.path)],
+        plainText ? parsedSearch.text : null,
+        secretPath
       )
-      openPaths = new Set([...expandedFolders, ...leading])
+      folders = found.folders
+      openPaths = new Set([...expandedFolders, ...found.open])
     }
 
     const foldersByParent = groupBy(folders, (folder) => folder.path)
