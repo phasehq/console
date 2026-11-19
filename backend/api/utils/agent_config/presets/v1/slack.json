@@ -91,6 +91,12 @@
       },
       {
         "match": {
+          "path": "/api/files.getUploadURLExternal"
+        },
+        "class": "create"
+      },
+      {
+        "match": {
           "path": "/api/*.get*"
         },
         "class": "read"
