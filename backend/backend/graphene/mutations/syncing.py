@@ -237,6 +237,9 @@ def validate_credential_values(provider_id, credentials, organisation_id=None):
             ) from exc
         except ConfigRegistryError as exc:
             raise GraphQLError(str(exc)) from exc
+    if provider_id == Providers.GITLAB["id"]:
+        _reject_gitlab_host_userinfo(credentials)
+        return
     if provider_id != "datadog":
         return
     from api.services import DATADOG_SITES, normalize_datadog_site
@@ -253,6 +256,26 @@ def validate_credential_values(provider_id, credentials, organisation_id=None):
     if normalize_datadog_site(site) not in DATADOG_SITES:
         raise GraphQLError(
             "Unknown Datadog site. Choose one of the supported Datadog regions."
+        )
+
+
+def _reject_gitlab_host_userinfo(credentials):
+    """Refuse a GitLab host that carries a username or password: the host is
+    shown to everyone who can read the credential."""
+
+    try:
+        host = decrypt_credential_values(credentials, ["gitlab_host"]).get(
+            "gitlab_host"
+        )
+    except Exception:
+        raise GraphQLError("Could not read the GitLab host value")
+    # Everything before the path, whichever way a URL parser would split it.
+    host = re.sub(r"^[A-Za-z][A-Za-z0-9+.-]*://", "", (host or "").strip())
+    authority = re.split(r"[/?#]", host, maxsplit=1)[0]
+    if "@" in authority:
+        raise GraphQLError(
+            "The GitLab host must not include a username or password. Remove "
+            "them from the host and save again."
         )
 
 
