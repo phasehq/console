@@ -9,6 +9,7 @@ import {
   deployReferenceErrors,
   dirtyEnvIds,
   duplicateKeyRowIds,
+  dynamicKeyNames,
   envSecretsEqual,
   flattenAppSecrets,
   groupRotatingRows,
@@ -18,6 +19,7 @@ import {
   repeatedKeyToFix,
   restoreAppSecretEntries,
   revertAppSecretEntries,
+  rotationSourceByEnv,
   searchedFolders,
   selectionExport,
   selectionTraits,
@@ -938,6 +940,86 @@ describe('groupRotatingRows', () => {
   it('only follows rotation in the given envs', () => {
     const rows = [row('PASS', { prod: rotating('p3', 'PASS', 'rs-prod') })]
     expect(groupRotatingRows(rows, new Set(['dev']))[0].kind).toBe('single')
+  })
+
+  it("leaves a hidden env's rotation out of the group, but not out of where it is set up", () => {
+    const rows = [
+      row('USER', {
+        dev: rotating('d2', 'USER', 'rs-dev'),
+        prod: rotating('p2', 'USER', 'rs-prod'),
+      }),
+      row('PASS', {
+        dev: rotating('d3', 'PASS', 'rs-dev'),
+        prod: rotating('p3', 'PASS', 'rs-prod'),
+      }),
+    ]
+    // Production's column is hidden
+    const shown = new Set(['dev', 'staging'])
+    const [group] = groupRotatingRows(rows, shown)
+    if (group.kind !== 'group') throw new Error('expected a group')
+    expect(group.rotatingSecretIds).toEqual(['rs-dev'])
+
+    // Staging is the only env the rotation could still be set up in
+    const own = new Map([['dev', 'rs-dev']])
+    expect([...rotationSourceByEnv(own, group.appSecrets, shown)]).toEqual([
+      ['dev', 'rs-dev'],
+      ['prod', 'rs-prod'],
+    ])
+  })
+
+  it("counts a hidden env's rotation only once the group's own have loaded", () => {
+    const rows = [
+      row('PASS', {
+        dev: rotating('d3', 'PASS', 'rs-dev'),
+        staging: rotating('s3', 'PASS', 'rs-staging'),
+        prod: rotating('p3', 'PASS', 'rs-prod'),
+      }),
+    ]
+    // Production's column is hidden
+    const shown = new Set(['dev', 'staging'])
+
+    // Nothing loaded: Production alone would leave Development and Staging looking like gaps
+    expect(rotationSourceByEnv(new Map(), rows, shown).size).toBe(0)
+
+    // A shown env counts by its loaded rotation, never by what its secrets say
+    const own = new Map([['dev', 'rs-dev']])
+    expect([...rotationSourceByEnv(own, rows, shown)]).toEqual([
+      ['dev', 'rs-dev'],
+      ['prod', 'rs-prod'],
+    ])
+  })
+})
+
+describe('dynamicKeyNames', () => {
+  const keys = (...names: string[]) => ({ keyMap: names.map((keyName) => ({ keyName })) })
+  // Development's lease returns a user name; Production's a secret key instead
+  const inEnvs = [
+    { env: dev, dynamicSecret: keys('AWS_IAM_USERNAME', 'AWS_ACCESS_KEY_ID') },
+    { env: staging, dynamicSecret: null },
+    { env: prod, dynamicSecret: keys('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY') },
+  ]
+
+  it("lists an env's own keys when it alone is shown", () => {
+    expect(dynamicKeyNames(inEnvs, new Set(['prod']))).toEqual([
+      'AWS_ACCESS_KEY_ID',
+      'AWS_SECRET_ACCESS_KEY',
+    ])
+  })
+
+  it('lists every key the shown envs map, once each', () => {
+    expect(dynamicKeyNames(inEnvs, new Set(['dev', 'staging', 'prod']))).toEqual([
+      'AWS_IAM_USERNAME',
+      'AWS_ACCESS_KEY_ID',
+      'AWS_SECRET_ACCESS_KEY',
+    ])
+  })
+
+  it('still lists the keys where no shown env has the dynamic secret, to offer set-up there', () => {
+    expect(dynamicKeyNames(inEnvs, new Set(['staging']))).toEqual([
+      'AWS_IAM_USERNAME',
+      'AWS_ACCESS_KEY_ID',
+      'AWS_SECRET_ACCESS_KEY',
+    ])
   })
 })
 

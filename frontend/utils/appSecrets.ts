@@ -889,3 +889,45 @@ export const groupRotatingRows = (rows: AppSecret[], envIds: Set<string>): RowLi
   }
   return items
 }
+
+/**
+ * Where a rotating group is set up, by env: its own rotations (the shown envs', once loaded),
+ * then the rotation that owns its keys in each hidden env, which is no gap to set up either.
+ * Hidden envs wait for its own: alone, they would offer set-up where those are still loading.
+ */
+export const rotationSourceByEnv = (
+  own: ReadonlyMap<string, string>,
+  rows: AppSecret[],
+  shownEnvIds: ReadonlySet<string>
+): Map<string, string> => {
+  const byEnv = new Map(own)
+  if (own.size === 0) return byEnv
+  for (const row of rows)
+    for (const entry of row.envs) {
+      const envId = entry.env.id!
+      const id = entry.secret?.rotatingSecretId
+      if (id && !shownEnvIds.has(envId) && !byEnv.has(envId)) byEnv.set(envId, id)
+    }
+  return byEnv
+}
+
+type DynamicSecretInEnv = {
+  env: { id?: string | null }
+  dynamicSecret: { keyMap?: Array<{ keyName?: string | null } | null> | null } | null
+}
+
+/**
+ * The keys a dynamic secret's rows list: every name the given envs' own key maps hold.
+ * Each env names the keys its lease returns, so one env's map can't stand for another's.
+ * Set up in none of them, it lists what the others return: the rows are where set-up is offered.
+ */
+export const dynamicKeyNames = (envs: DynamicSecretInEnv[], envIds: ReadonlySet<string>) => {
+  const namesIn = (among: DynamicSecretInEnv[]) => {
+    const names = new Set<string>()
+    for (const { dynamicSecret } of among)
+      for (const key of dynamicSecret?.keyMap ?? []) if (key?.keyName) names.add(key.keyName)
+    return [...names]
+  }
+  const shown = namesIn(envs.filter(({ env }) => envIds.has(env.id!)))
+  return shown.length > 0 ? shown : namesIn(envs)
+}

@@ -135,6 +135,7 @@ import {
   deployReferenceErrors,
   dirtyEnvIds,
   duplicateKeyRowIds,
+  dynamicKeyNames,
   flattenAppSecrets,
   folderFullPath,
   groupRotatingRows,
@@ -149,6 +150,7 @@ import {
   selectionTraits,
   restoreAppSecretEntries,
   revertAppSecretEntries,
+  rotationSourceByEnv,
   RowListItem,
   snapshotHasDeploy,
   staleAppSecretEntries,
@@ -292,7 +294,7 @@ type TreeItem =
   | {
       kind: 'dynamicGroup'
       appDynamicSecret: AppDynamicSecret
-      keyMap: Array<{ id: string; keyName: string }>
+      keyNames: string[]
       depth: number
     }
 
@@ -1198,11 +1200,8 @@ export const AppSecrets = ({
       }
 
       for (const appDynamicSecret of dynamicsByPath.get(path) ?? []) {
-        const sourceDs = appDynamicSecret.envs.find((e) => e.dynamicSecret !== null)?.dynamicSecret
-        const keyMap = (
-          (sourceDs?.keyMap ?? []) as Array<{ id?: string | null; keyName?: string | null } | null>
-        ).flatMap((k) => (k && k.id && k.keyName ? [{ id: k.id, keyName: k.keyName }] : []))
-        items.push({ kind: 'dynamicGroup', appDynamicSecret, keyMap, depth })
+        const keyNames = dynamicKeyNames(appDynamicSecret.envs, checkedSet)
+        items.push({ kind: 'dynamicGroup', appDynamicSecret, keyNames, depth })
       }
 
       const levelRows = rowsByPath.get(path) ?? []
@@ -1257,8 +1256,8 @@ export const AppSecrets = ({
         item.appSecrets.forEach((row) => measureRow(row, item.depth))
         number(item.appSecrets[0]?.path, item.appSecrets.length)
       } else {
-        item.keyMap.forEach((k) => (keys = Math.max(keys, k.keyName.length + indent)))
-        number(item.appDynamicSecret.path, item.keyMap.length)
+        item.keyNames.forEach((name) => (keys = Math.max(keys, name.length + indent)))
+        number(item.appDynamicSecret.path, item.keyNames.length)
       }
     }
     return {
@@ -2258,7 +2257,7 @@ export const AppSecrets = ({
           item.kind === 'folder'
             ? 'f'
             : item.kind === 'dynamicGroup'
-              ? 'g' + 'd'.repeat(item.keyMap.length)
+              ? 'g' + 'd'.repeat(item.keyNames.length)
               : item.kind === 'group'
                 ? 'g' + 'r'.repeat(item.appSecrets.length)
                 : 's'
@@ -2418,12 +2417,12 @@ export const AppSecrets = ({
               )
             }}
           >
-            {item.keyMap.map((k) => (
+            {item.keyNames.map((keyName) => (
               <AppDynamicSecretKeyRow
-                key={`${appDynamicSecret.id}-${k.id}`}
+                key={`${appDynamicSecret.id}-${keyName}`}
                 index={nextIndex(appDynamicSecret.path)}
                 depth={item.depth}
-                keyName={k.keyName}
+                keyName={keyName}
                 envs={appDynamicSecret.envs}
                 columns={columns}
                 showEnv={handleToggleEnv}
@@ -2438,7 +2437,12 @@ export const AppSecrets = ({
       const rotatingByEnvId = new Map<string, RotatingSecretType>()
       for (const rs of groupRotatingSecrets)
         if (rs.environment?.id) rotatingByEnvId.set(rs.environment.id, rs)
-      const sourceByEnvId = new Map([...rotatingByEnvId].map(([envId, rs]) => [envId, rs.id]))
+      // A hidden env's rotation of these keys isn't one of the group's, yet is no gap to set up
+      const sourceByEnvId = rotationSourceByEnv(
+        new Map([...rotatingByEnvId].map(([envId, rs]) => [envId, rs.id])),
+        item.appSecrets,
+        checkedSet
+      )
       const headRs = groupRotatingSecrets[0]
       return (
         <AppSecretGroup

@@ -32,8 +32,8 @@ interface AppDynamicSecretKeyRowProps {
 
 /**
  * One key from a dynamic secret's key_map. Values are minted on lease, so
- * there's nothing to edit — each env column shows whether the dynamic secret
- * is set up there.
+ * there's nothing to edit — each env column shows whether a lease there
+ * returns this key: the dynamic secret is set up in it, and maps the key.
  */
 const AppDynamicSecretKeyRowBase = ({
   index,
@@ -44,7 +44,17 @@ const AppDynamicSecretKeyRowBase = ({
   showEnv,
 }: AppDynamicSecretKeyRowProps) => {
   const groupSetUp = useContext(GroupSetUpContext)
-  const presentByEnv = new Map(envs.map((entry) => [entry.env.id, Boolean(entry.dynamicSecret)]))
+  // Each env maps its own keys: set up there isn't enough for this one to be among them
+  const stateByEnv = new Map(
+    envs.map(({ env, dynamicSecret }) => [
+      env.id,
+      !dynamicSecret
+        ? ('none' as const)
+        : dynamicSecret.keyMap?.some((key) => key?.keyName === keyName)
+          ? ('mapped' as const)
+          : ('unmapped' as const),
+    ])
+  )
 
   return (
     <tr className="group bg-zinc-100 dark:bg-zinc-800">
@@ -67,21 +77,27 @@ const AppDynamicSecretKeyRowBase = ({
       </td>
       {columns.map((column) => {
         const { env } = column
-        const present = presentByEnv.get(env.id) ?? false
+        const state = stateByEnv.get(env.id) ?? 'none'
+        const present = state === 'mapped'
 
         if (!column.checked) {
-          if (!present && groupSetUp?.envIds.has(env.id))
+          if (state === 'none' && groupSetUp?.envIds.has(env.id))
             return (
               <td key={env.id} className={clsx(GRID_CELL_BASE, 'align-middle')}>
                 <SetUpCell setUp={groupSetUp} envId={env.id} envName={env.name} slim />
               </td>
             )
+          const status = present
+            ? `Set up in ${env.name}`
+            : state === 'unmapped'
+              ? `Not among ${env.name}'s keys`
+              : `Missing in ${env.name}`
           return (
             <td key={env.id} className={clsx(GRID_CELL_BASE, 'text-center align-middle')}>
               <button
                 type="button"
                 onClick={() => showEnv(env.id)}
-                title={`${present ? 'Set up' : 'Missing'} in ${env.name} — click to show ${env.name}`}
+                title={`${status} — click to show ${env.name}`}
                 className="flex h-full min-h-8 w-full items-center justify-center"
               >
                 {present ? (
@@ -94,7 +110,7 @@ const AppDynamicSecretKeyRowBase = ({
           )
         }
 
-        if (!present) {
+        if (state === 'none') {
           return (
             <td key={env.id} className={GRID_CELL_BASE}>
               {groupSetUp?.envIds.has(env.id) ? (
@@ -102,6 +118,14 @@ const AppDynamicSecretKeyRowBase = ({
               ) : (
                 <MissingCell title={`This dynamic secret isn't set up in ${env.name}`} />
               )}
+            </td>
+          )
+        }
+
+        if (state === 'unmapped') {
+          return (
+            <td key={env.id} className={GRID_CELL_BASE}>
+              <MissingCell title={`A lease in ${env.name} doesn't return ${keyName}`} />
             </td>
           )
         }
