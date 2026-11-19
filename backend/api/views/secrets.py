@@ -712,6 +712,25 @@ class PublicSecretsView(AgentSecretsMixin, APIView):
             context["hide_values"] = not account.can_read_environment(env.id)
         return context
 
+    def _written_response(self, request, env, secrets):
+        """What a write answers with: the secrets as they now are or, for an
+        Agent that may not read this environment, their ids alone. A key name,
+        path or tag it did not send is as unread to it as a value."""
+
+        account = self._reference_account(request)
+        is_agent = request.auth.get("auth_type") == "Agent"
+        if is_agent and not account.can_read_environment(env.id):
+            return Response(
+                [{"id": str(secret.id)} for secret in secrets],
+                status=status.HTTP_200_OK,
+            )
+        serializer = SecretSerializer(
+            secrets,
+            many=True,
+            context=self._serializer_context(request, env, account),
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     def _log_events(self, request, secrets, event_type, ip_address, user_agent):
         auth = request.auth
         log_secret_events_bulk(
@@ -1044,15 +1063,7 @@ class PublicSecretsView(AgentSecretsMixin, APIView):
             request, created_secrets, SecretEvent.CREATE, ip_address, user_agent
         )
 
-        account = self._reference_account(request)
-
-        serializer = SecretSerializer(
-            created_secrets,
-            many=True,
-            context=self._serializer_context(request, env, account),
-        )
-
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return self._written_response(request, env, created_secrets)
 
     def put(self, request, *args, **kwargs):
 
@@ -1241,15 +1252,7 @@ class PublicSecretsView(AgentSecretsMixin, APIView):
             request, updated_secrets, SecretEvent.UPDATE, ip_address, user_agent
         )
 
-        account = self._reference_account(request)
-
-        serializer = SecretSerializer(
-            updated_secrets,
-            many=True,
-            context=self._serializer_context(request, env, account),
-        )
-
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return self._written_response(request, env, updated_secrets)
 
     def delete(self, request, *args, **kwargs):
 
