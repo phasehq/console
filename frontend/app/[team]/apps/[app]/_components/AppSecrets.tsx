@@ -526,10 +526,11 @@ export const AppSecrets = ({
     [orderedEnvironments, selectedEnvIds, pendingEnvIds]
   )
   // A .env file dropped on the editor opens the import dialog on it
-  const fileDrop = useFileDrop(
-    (file) => importDialogRef.current?.importFile(file),
-    checkedEnvironments.length > 0
-  )
+  const fileDrop = useFileDrop((file) => {
+    // The deploy's snapshot replaces the rows, and would take an import staged meanwhile with it
+    if (savingAndFetching) toast.info('Drop the file again once the deploy has finished.')
+    else importDialogRef.current?.importFile(file)
+  }, checkedEnvironments.length > 0)
   const checkedKey = checkedEnvironments.map((env) => env.id).join(',')
   const checkedSet = useMemo(() => new Set(checkedKey ? checkedKey.split(',') : []), [checkedKey])
 
