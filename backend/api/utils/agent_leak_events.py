@@ -4,7 +4,9 @@ The Phase CLI replaces a known secret value in a request to a model provider
 with a placeholder, ``ph:<type>:<id>``, and reports the placeholders it used in
 an Agent event of type ``leak_protection``. For an Agent login ``<id>`` is the
 id of the Phase secret, so the Console can say which app and environment that
-secret is in. A secret's key and value are never read here: only its id, its
+secret is in. For any other login the CLI sends ``ph:<type>`` without an id,
+since the id would be the secret's key name; such a placeholder names no
+secret here. A secret's key and value are never read here: only its id, its
 folder and the names of its environment and app.
 """
 
@@ -67,8 +69,10 @@ def secret_locations(organisation_id, secret_ids):
 
 
 def preload_secret_locations(events, organisation_id):
-    """Look up every placeholder on a page of events at once, so a page costs
-    one query however many of its events name a secret."""
+    """Look up every placeholder on a page of events at once, so the secret
+    lookup is one query however many of its events name a secret. Access
+    checks are separate: for a member without global access they cost one
+    query for each distinct app and environment on the page."""
 
     secret_ids = {
         secret_id for event in events for _, secret_id in event_placeholders(event)
