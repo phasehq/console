@@ -1,7 +1,7 @@
 import re
 
 from api.auth import PhaseTokenAuthentication
-from api.models import Environment, EnvironmentKey
+from api.models import Environment, EnvironmentKey, RotatingSecret
 from api.serializers import EnvironmentSerializer
 from api.utils.access.permissions import (
     user_has_permission,
@@ -317,6 +317,20 @@ class PublicEnvironmentDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         self._check_env_access(request, env)
+
+        # As the deleteEnvironment mutation: deleting the environment deletes
+        # its rotating secrets and revokes their credentials.
+        if RotatingSecret.objects.filter(
+            environment=env, deleted_at__isnull=True
+        ).exists():
+            account, is_sa = get_request_principal(request)
+            if not user_has_permission(
+                account, "delete", "RotatingSecrets", org, True, is_sa, app=app
+            ):
+                raise PermissionDenied(
+                    "This environment contains rotating secrets. You need "
+                    "permission to delete rotating secrets to remove it."
+                )
 
         if env.env_type not in ("dev", "staging", "prod") and not can_use_custom_envs(org):
             return Response(

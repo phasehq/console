@@ -542,6 +542,86 @@ class TestPublicEnvironmentDetailViewDelete:
         }
         self.view = PublicEnvironmentDetailView.as_view()
         self.app = _make_app()
+        with patch("api.views.environments.RotatingSecret") as rotating_secret:
+            self.rotating_secrets = rotating_secret.objects.filter
+            self.rotating_secrets.return_value.exists.return_value = False
+            yield
+
+    def _delete(self, env, auth_type="User"):
+        request = _build_request(
+            "delete", f"/public/v1/environments/{env.id}/", self.app, auth_type=auth_type
+        )
+        with patch(
+            "api.views.environments.schedule_environment_deletion"
+        ) as schedule, patch(
+            "api.views.environments.deletion_scheduled_for",
+            return_value=datetime(2026, 1, 2, 3, 4, tzinfo=timezone.utc),
+        ), patch("api.views.environments.log_audit_event"):
+            response = self.view(request, env_id=env.id)
+        return response, schedule
+
+    @pytest.mark.parametrize("auth_type", ["User", "ServiceAccount"])
+    @patch("api.views.environments.service_account_can_access_environment", return_value=True)
+    @patch("api.views.environments.service_account_can_access_app", return_value=True)
+    @patch("api.views.environments.user_can_access_app", return_value=True)
+    @patch("api.views.environments.user_can_access_environment", return_value=True)
+    @patch("api.views.environments.Environment")
+    @patch("api.views.environments.can_use_custom_envs", return_value=True)
+    @patch("api.views.environments.user_has_permission")
+    @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
+    def test_delete_needs_permission_to_delete_its_rotating_secrets(
+        self,
+        _ip,
+        _throttle,
+        permission,
+        _custom,
+        mock_env_model,
+        _env_access,
+        _app_access,
+        _sa_app_access,
+        _sa_env_access,
+        auth_type,
+    ):
+        # As the deleteEnvironment mutation: the purge deletes the rotating
+        # secrets and revokes their credentials.
+        env = _make_env(app=self.app, name="test-env", env_type="custom", index=3)
+        mock_env_model.objects.select_related.return_value.get.return_value = env
+        self.rotating_secrets.return_value.exists.return_value = True
+        permission.side_effect = lambda *args, **kwargs: args[2] != "RotatingSecrets"
+
+        response, schedule = self._delete(env, auth_type)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "rotating secrets" in str(response.data)
+        schedule.assert_not_called()
+        self.rotating_secrets.assert_called_once_with(
+            environment=env, deleted_at__isnull=True
+        )
+        account, action, resource, organisation, is_app_resource, is_sa = (
+            permission.call_args.args
+        )
+        assert (action, resource, is_app_resource) == ("delete", "RotatingSecrets", True)
+        assert is_sa is (auth_type == "ServiceAccount")
+        assert permission.call_args.kwargs == {"app": self.app}
+
+    @patch("api.views.environments.user_can_access_environment", return_value=True)
+    @patch("api.views.environments.Environment")
+    @patch("api.views.environments.can_use_custom_envs", return_value=True)
+    @patch("api.views.environments.user_has_permission", return_value=True)
+    @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
+    def test_delete_with_rotating_secrets_and_the_permission(
+        self, _ip, _throttle, _perm, _custom, mock_env_model, _access
+    ):
+        env = _make_env(app=self.app, name="test-env", env_type="custom", index=3)
+        mock_env_model.objects.select_related.return_value.get.return_value = env
+        self.rotating_secrets.return_value.exists.return_value = True
+
+        response, schedule = self._delete(env)
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        schedule.assert_called_once_with(env)
 
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.Environment")

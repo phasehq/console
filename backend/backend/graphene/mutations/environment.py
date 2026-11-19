@@ -1,5 +1,7 @@
 import re
 from django.utils import timezone
+import logging
+
 from django.db import transaction
 from django.db.models import Max
 from api.utils.rest import get_resolver_request_meta
@@ -400,9 +402,15 @@ def _descendant_folder_ids(folder):
     return seen
 
 
-def _check_may_delete_environment(user, environment, include_deleted=False):
+logger = logging.getLogger(__name__)
+
+
+def _check_may_delete_environment(
+    user, environment, include_deleted=False, verb="delete"
+):
     """`include_deleted` reaches an environment that is already pending
-    deletion, to delete it now."""
+    deletion, to delete it now or to restore it: undoing a deletion takes what
+    asking for it takes. `verb` is the action, for the messages."""
     app = environment.app
     org = app.organisation
 
@@ -415,7 +423,7 @@ def _check_may_delete_environment(user, environment, include_deleted=False):
         app=app,
         include_deleted=include_deleted,
     ):
-        raise GraphQLError("You do not have permission to delete environments")
+        raise GraphQLError(f"You do not have permission to {verb} environments")
 
     if not user_can_access_environment(
         user.userId, environment.id, include_deleted=include_deleted
@@ -439,7 +447,8 @@ def _check_may_delete_environment(user, environment, include_deleted=False):
         ):
             raise GraphQLError(
                 "This environment contains rotating secrets. You need "
-                "permission to delete rotating secrets to remove it."
+                "permission to delete rotating secrets to "
+                f"{'restore' if verb == 'restore' else 'remove'} it."
             )
 
 
@@ -558,22 +567,30 @@ class RestoreEnvironmentMutation(graphene.Mutation):
         environment = Environment.all_objects.select_related("app__organisation").get(
             id=environment_id
         )
-        app = environment.app
-        org = app.organisation
+        org = environment.app.organisation
 
         # Whoever may delete an environment may undo the deletion.
-        if not user_has_permission(
-            user, "delete", "Environments", org, True, app=app, include_deleted=True
-        ):
-            raise GraphQLError("You do not have permission to restore environments")
-
-        if not user_can_access_environment(
-            user.userId, environment.id, include_deleted=True
-        ):
-            raise GraphQLError("You don't have access to this environment")
+        _check_may_delete_environment(
+            user, environment, include_deleted=True, verb="restore"
+        )
 
         try:
-            environment = restore_environment(environment.id)
+            # In one transaction with queuing its follow-up. If that can't be
+            # queued, the restore is rolled back and can be tried again,
+            # rather than left without its syncs and rotations.
+            with transaction.atomic():
+                environment = restore_environment(environment.id)
+                try:
+                    enqueue_environment_restored(environment.id)
+                except Exception:
+                    logger.exception(
+                        "Failed to queue the restore of environment %s",
+                        environment.id,
+                    )
+                    raise ResourceDeletionError(
+                        "This environment could not be restored right now. "
+                        "Try again in a few minutes."
+                    )
         except ResourceDeletionError as e:
             raise GraphQLError(str(e))
 
@@ -592,7 +609,6 @@ class RestoreEnvironmentMutation(graphene.Mutation):
             ip_address=ip_address,
             user_agent=user_agent,
         )
-        transaction.on_commit(lambda: enqueue_environment_restored(environment.id))
 
         return RestoreEnvironmentMutation(environment=environment)
 

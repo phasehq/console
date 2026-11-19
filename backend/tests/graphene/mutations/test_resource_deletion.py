@@ -39,6 +39,12 @@ def _common(stack, module):
         patch(f"{module}.user_has_permission", return_value=True)
     )
     m.transaction = stack.enter_context(patch(f"{module}.transaction"))
+    # As a real transaction: leaving the block commits, and lets errors out.
+    m.steps = []
+    m.transaction.atomic.return_value.__exit__.side_effect = (
+        lambda *exc_info: m.steps.append("rollback" if exc_info[0] else "commit")
+        and False
+    )
     stack.enter_context(
         patch(
             f"{module}.get_actor_info_from_graphql",
@@ -73,7 +79,9 @@ def app_mocks():
         m.app.name = "Billing"
         m.App.objects.get.return_value = m.app
         m.App.all_objects.get.return_value = m.app
-        m.restore.return_value = m.app
+        m.restore.side_effect = lambda app_id: m.steps.append("restore") or m.app
+        m.enqueue_restored.side_effect = lambda app_id: m.steps.append("enqueue")
+        m.audit.side_effect = lambda **kwargs: m.steps.append("audit")
         m.delete_now.side_effect = lambda app_id: _schedules(m.app, True)
         yield m
 
@@ -107,7 +115,9 @@ def env_mocks():
         m.env.name = "Staging"
         m.Environment.objects.get.return_value = m.env
         m.Environment.all_objects.select_related.return_value.get.return_value = m.env
-        m.restore.return_value = m.env
+        m.restore.side_effect = lambda env_id: m.steps.append("restore") or m.env
+        m.enqueue_restored.side_effect = lambda env_id: m.steps.append("enqueue")
+        m.audit.side_effect = lambda **kwargs: m.steps.append("audit")
         m.delete_now.side_effect = lambda environment_id: _schedules(m.env, True)
         yield m
 
@@ -244,6 +254,18 @@ class TestDeleteAppNow:
         assert app_mocks.permission.call_args.args[1:3] == ("delete", "Apps")
         app_mocks.delete_now.assert_not_called()
 
+    def test_a_team_role_for_the_app_is_enough(self, app_mocks):
+        # As the REST API checks a delete: whoever could schedule the deletion
+        # there may bring it forward here.
+        app_mocks.permission.side_effect = [False, True]
+
+        _delete_app_now()
+
+        by_org_role, by_app_role = app_mocks.permission.call_args_list
+        assert "app" not in by_org_role.kwargs
+        assert by_app_role.kwargs == {"app": app_mocks.app, "include_deleted": True}
+        app_mocks.delete_now.assert_called_once_with("app-1")
+
     def test_requires_access_to_the_app(self, app_mocks):
         app_mocks.access.return_value = False
 
@@ -281,9 +303,20 @@ class TestRestoreApp:
         assert audit["event_type"] == "U"
         assert audit["description"] == "Restored app 'Billing'"
 
-        app_mocks.enqueue_restored.assert_not_called()
-        app_mocks.transaction.on_commit.call_args.args[0]()
+        # Queued inside the restore's transaction, and audited after it.
         app_mocks.enqueue_restored.assert_called_once_with("app-1")
+        assert app_mocks.steps == ["restore", "enqueue", "commit", "audit"]
+
+    def test_a_restore_whose_follow_up_cant_be_queued_is_rolled_back(self, app_mocks):
+        # Otherwise the app would be live without its syncs and rotations,
+        # and a second restore would be refused.
+        app_mocks.enqueue_restored.side_effect = ConnectionError("redis is down")
+
+        with pytest.raises(GraphQLError, match="could not be restored right now"):
+            _restore_app()
+
+        assert app_mocks.steps == ["restore", "rollback"]
+        app_mocks.audit.assert_not_called()
 
     def test_requires_the_permission_that_deleting_needs(self, app_mocks):
         app_mocks.permission.return_value = False
@@ -293,6 +326,16 @@ class TestRestoreApp:
 
         assert app_mocks.permission.call_args.args[1:3] == ("delete", "Apps")
         app_mocks.restore.assert_not_called()
+
+    def test_a_team_role_for_the_app_is_enough(self, app_mocks):
+        app_mocks.permission.side_effect = [False, True]
+
+        _restore_app()
+
+        by_org_role, by_app_role = app_mocks.permission.call_args_list
+        assert "app" not in by_org_role.kwargs
+        assert by_app_role.kwargs == {"app": app_mocks.app, "include_deleted": True}
+        app_mocks.restore.assert_called_once_with("app-1")
 
     def test_requires_access_to_the_app(self, app_mocks):
         app_mocks.access.return_value = False
@@ -312,7 +355,7 @@ class TestRestoreApp:
             _restore_app()
 
         app_mocks.audit.assert_not_called()
-        app_mocks.transaction.on_commit.assert_not_called()
+        app_mocks.enqueue_restored.assert_not_called()
 
 
 class TestDeleteEnvironment:
@@ -441,8 +484,33 @@ class TestRestoreEnvironment:
         assert audit["event_type"] == "U"
         assert audit["description"] == "Restored environment 'Staging'"
 
-        env_mocks.transaction.on_commit.call_args.args[0]()
+        # Queued inside the restore's transaction, and audited after it.
         env_mocks.enqueue_restored.assert_called_once_with("env-1")
+        assert env_mocks.steps == ["restore", "enqueue", "commit", "audit"]
+
+    def test_a_restore_whose_follow_up_cant_be_queued_is_rolled_back(self, env_mocks):
+        env_mocks.enqueue_restored.side_effect = ConnectionError("redis is down")
+
+        with pytest.raises(GraphQLError, match="could not be restored right now"):
+            _restore_env()
+
+        assert env_mocks.steps == ["restore", "rollback"]
+        env_mocks.audit.assert_not_called()
+
+    def test_requires_permission_to_delete_its_rotating_secrets(self, env_mocks):
+        # Undoing a deletion takes what asking for it takes.
+        env_mocks.RotatingSecret.objects.filter.return_value.exists.return_value = True
+        env_mocks.permission.side_effect = lambda *args, **kwargs: (
+            args[2] != "RotatingSecrets"
+        )
+
+        with pytest.raises(GraphQLError, match="rotating secrets to restore it"):
+            _restore_env()
+
+        rotating = env_mocks.permission.call_args
+        assert rotating.args[1:3] == ("delete", "RotatingSecrets")
+        assert rotating.kwargs["include_deleted"] is True
+        env_mocks.restore.assert_not_called()
 
     def test_requires_the_permission_that_deleting_needs(self, env_mocks):
         env_mocks.permission.return_value = False
@@ -468,7 +536,7 @@ class TestRestoreEnvironment:
             _restore_env()
 
         env_mocks.audit.assert_not_called()
-        env_mocks.transaction.on_commit.assert_not_called()
+        env_mocks.enqueue_restored.assert_not_called()
 
 
 class TestEnvironmentNamesStayReserved:

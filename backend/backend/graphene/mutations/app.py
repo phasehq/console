@@ -33,6 +33,8 @@ from api.utils.resource_deletion import (
 )
 from api.tasks.resource_deletion import enqueue_app_purge, enqueue_app_restored
 from api.utils.rest import get_resolver_request_meta
+import logging
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -232,6 +234,22 @@ class UpdateAppInfoMutation(graphene.Mutation):
         return UpdateAppInfoMutation(app=app)
 
 
+logger = logging.getLogger(__name__)
+
+
+def _may_delete_app(user, app):
+    """Whether `user` may undo or bring forward the deletion of `app`: by
+    their organisation role, as deleteApp checks it, or by their role for
+    this app, as the REST API does. Whoever could have asked for the deletion
+    through either may follow it up."""
+    organisation = app.organisation
+    return user_has_permission(
+        user, "delete", "Apps", organisation
+    ) or user_has_permission(
+        user, "delete", "Apps", organisation, app=app, include_deleted=True
+    )
+
+
 def _log_app_deletion_requested(info, app):
     """Audit a delete request. The purge is later logged as this actor's."""
     if app.skip_grace_period:
@@ -322,7 +340,7 @@ class DeleteAppNowMutation(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id, include_deleted=True):
             raise GraphQLError("You don't have access to this app")
 
-        if not user_has_permission(user, "delete", "Apps", app.organisation):
+        if not _may_delete_app(user, app):
             raise GraphQLError("You don't have permission to delete Apps")
 
         try:
@@ -357,11 +375,23 @@ class RestoreAppMutation(graphene.Mutation):
             raise GraphQLError("You don't have access to this app")
 
         # Whoever may delete an app may undo the deletion.
-        if not user_has_permission(user, "delete", "Apps", app.organisation):
+        if not _may_delete_app(user, app):
             raise GraphQLError("You don't have permission to restore Apps")
 
         try:
-            app = restore_app(app.id)
+            # In one transaction with queuing its follow-up. If that can't be
+            # queued, the restore is rolled back and can be tried again,
+            # rather than left without its syncs and rotations.
+            with transaction.atomic():
+                app = restore_app(app.id)
+                try:
+                    enqueue_app_restored(app.id)
+                except Exception:
+                    logger.exception("Failed to queue the restore of app %s", app.id)
+                    raise ResourceDeletionError(
+                        "This app could not be restored right now. Try again "
+                        "in a few minutes."
+                    )
         except ResourceDeletionError as e:
             raise GraphQLError(str(e))
 
@@ -382,7 +412,6 @@ class RestoreAppMutation(graphene.Mutation):
             ip_address=ip_address,
             user_agent=user_agent,
         )
-        transaction.on_commit(lambda: enqueue_app_restored(app.id))
 
         return RestoreAppMutation(app=app)
 
