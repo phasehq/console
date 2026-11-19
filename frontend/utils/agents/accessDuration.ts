@@ -1,6 +1,6 @@
 /**
  * How long access lasts: the choices a member sees and how an expiry is worded. Bounds
- * mirror the backend's (300 seconds to 30 days).
+ * mirror the backend's: an Agent may ask for 300 seconds to 30 days.
  */
 
 export const MIN_DURATION_SECONDS = 300
@@ -8,6 +8,9 @@ export const MAX_DURATION_SECONDS = 2592000
 
 const HOUR = 3600
 const DAY = 86400
+
+/** The longest a member may grant when approving, as the backend allows. */
+export const MAX_GRANTED_SECONDS = 10 * 365 * DAY
 
 export const DURATION_CHOICES = [
   { value: '1h', label: '1 hour', seconds: HOUR },
@@ -181,11 +184,11 @@ export const grantDurationResult = (
       seconds,
       problem: `Access lasts at least ${describeDuration(MIN_DURATION_SECONDS)}.`,
     }
-  if (seconds > MAX_DURATION_SECONDS)
+  if (seconds > MAX_GRANTED_SECONDS)
     return {
       args: null,
       seconds,
-      problem: `Access lasts at most ${describeDuration(MAX_DURATION_SECONDS)}. Choose until revoked for longer.`,
+      problem: `Access lasts at most ${describeDuration(MAX_GRANTED_SECONDS)}. Choose until revoked for longer.`,
     }
   if (options.maximumSeconds && seconds > options.maximumSeconds)
     return {

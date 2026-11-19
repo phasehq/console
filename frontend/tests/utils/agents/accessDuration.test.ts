@@ -125,9 +125,13 @@ describe('the duration an approval grants', () => {
     expect(
       grantDurationResult(custom('4', 'minutes'), 3600, { allowUntilRevoked: true }).problem
     ).toMatch(/at least 5 minutes/)
+    // The 30-day cap is on what an Agent may ask for; a member may grant longer.
     expect(
-      grantDurationResult(custom('31', 'days'), 3600, { allowUntilRevoked: true }).problem
-    ).toMatch(/at most 30 days/)
+      grantDurationResult(custom('90', 'days'), 3600, { allowUntilRevoked: true }).args
+    ).toEqual({ durationSeconds: 90 * 86400 })
+    expect(
+      grantDurationResult(custom('3651', 'days'), 3600, { allowUntilRevoked: true }).problem
+    ).toMatch(/at most 3650 days/)
     expect(
       grantDurationResult(custom('', 'days'), 3600, { allowUntilRevoked: true }).problem
     ).toMatch(/whole number/)
