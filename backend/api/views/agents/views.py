@@ -10,7 +10,6 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from djangorestframework_camel_case.parser import CamelCaseJSONParser
 from djangorestframework_camel_case.render import CamelCaseJSONRenderer
 from djangorestframework_camel_case.util import camelize
@@ -27,6 +26,7 @@ from api.models import (
     AgentRequest,
     AgentSession,
     AgentWorkflow,
+    AgentWorkflowGrant,
     ProviderCredentials,
 )
 from api.throttling import PlanBasedRateThrottle
@@ -224,19 +224,19 @@ def _same_request_target(
         agent_request.kind,
         agent_request.related_request_id,
         agent_request.service_type,
-        agent_request.credential_provider,
-        agent_request.credential_name,
     ]
-    requested = [
-        kind,
-        related_request_id,
-        service_type,
-        credential_provider,
-        credential_name,
-    ]
+    requested = [kind, related_request_id, service_type]
     if kind != AgentRequest.SETUP:
-        stored += [agent_request.connection_id, agent_request.credential_id]
-        requested += [getattr(connection, "id", None), credential_id]
+        stored.append(agent_request.connection_id)
+        requested.append(getattr(connection, "id", None))
+    if agent_request.status != AgentRequest.APPROVED:
+        # Fulfilling a request replaces these with the credential a member
+        # chose, so they say what was asked only until then.
+        stored += [agent_request.credential_provider, agent_request.credential_name]
+        requested += [credential_provider, credential_name]
+        if kind != AgentRequest.SETUP:
+            stored.append(agent_request.credential_id)
+            requested.append(credential_id)
     return [str(value or "") for value in stored] == [
         str(value or "") for value in requested
     ]
@@ -252,13 +252,15 @@ def _answers_repeated_ask(agent_request, now):
             # An action changes something a member can undo, so once carried
             # out it answers nothing: the same ask reaches a member again.
             return False
-        # Access that was granted for a time and has run out no longer
-        # answers: the same ask has to reach a member again.
-        granted_until = ((agent_request.applied_action or {}).get("access") or {}).get(
-            "expiresAt"
+        # An approval answers only while the access it gave is in force. Once
+        # that expires or a member takes it away, the same ask has to reach a
+        # member again.
+        return bool(
+            agent_request.grant_id
+            and AgentWorkflowGrant.objects.active(now)
+            .filter(id=agent_request.grant_id)
+            .exists()
         )
-        expires_at = parse_datetime(granted_until) if granted_until else None
-        return expires_at is None or expires_at > now
     return bool(
         agent_request.status == AgentRequest.DENIED
         and agent_request.resolved_at
