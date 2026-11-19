@@ -80,6 +80,22 @@ describe('granting a Connection to a Workflow', () => {
     return grant.mock.calls[0][0].variables
   }
 
+  test('a chosen Connection that disappears is cleared, not swapped for another', async () => {
+    await render()
+    await choose('workflow-grant-connection', 'connection-2')
+    await choose('workflow-grant-ends', '8h')
+    await act(async () =>
+      root.render(<GrantWorkflowDialog workflowId="workflow-1" connections={[github]} />)
+    )
+    expect(buttonNamed(container, 'Grant access')!.disabled).toBe(true)
+    // A later refresh of the list does not fill it in either.
+    await act(async () =>
+      root.render(<GrantWorkflowDialog workflowId="workflow-1" connections={[github]} />)
+    )
+    expect(buttonNamed(container, 'Grant access')!.disabled).toBe(true)
+    expect(grant).not.toHaveBeenCalled()
+  })
+
   test('access lasts until revoked unless something else is picked', async () => {
     await render()
     expect(

@@ -656,8 +656,8 @@ export function MintAgentTokenDialog({
             Generate agent token
           </h3>
           <p className="mt-1 max-w-md text-2xs leading-4 text-neutral-500">
-            Agent tokens only authorize the Phase AI runtime for the selected Workflow. They cannot
-            read your application secrets.
+            Agent tokens only authorize the Phase AI runtime for the selected Workflow. They read an
+            app's secrets only through an app Connection granted to that Workflow.
           </p>
         </div>
       }
@@ -676,8 +676,8 @@ export function MintAgentTokenDialog({
             onCopied={() => setTokenCopied(true)}
             footer={
               <p className="text-xs text-neutral-500">
-                This token can use only the Phase AI runtime endpoints for its assigned Workflow. It
-                cannot read application secrets through standard Phase APIs.
+                This token can use only the Phase AI runtime endpoints for its assigned Workflow,
+                and the secrets of apps whose Connections are granted to that Workflow.
               </p>
             }
           />
@@ -914,11 +914,15 @@ export function GrantWorkflowDialog({
   const [connectionId, setConnectionId] = useState(startId)
   const [ends, setEnds] = useState<AccessEnds>(UNTIL_REVOKED)
   const [grant, { loading }] = useMutation(GrantAgentWorkflowOp)
+  // A chosen Connection that disappears is cleared, never swapped for another: the expiry
+  // was picked for it. Until then, an empty choice follows the first Connection to load.
+  const cleared = useRef(false)
   useEffect(() => {
-    setConnectionId((current) =>
-      connections.some((connection) => connection.id === current) ? current : startId
-    )
-  }, [connections, startId])
+    if (connectionId && !connections.some((connection) => connection.id === connectionId)) {
+      cleared.current = true
+      setConnectionId('')
+    } else if (!connectionId && !cleared.current && startId) setConnectionId(startId)
+  }, [connections, connectionId, startId])
   const problem = accessEndsValue(ends).problem
   const reset = () => setEnds(UNTIL_REVOKED)
   const submit = async (event: FormEvent) => {
@@ -951,7 +955,8 @@ export function GrantWorkflowDialog({
       buttonProps={{ icon: FaPlus, disabled: !connections.length }}
       onOpen={() => {
         reset()
-        if (initialConnectionId) setConnectionId(startId)
+        cleared.current = false
+        if (initialConnectionId || !connectionId) setConnectionId(startId)
       }}
     >
       <form onSubmit={submit} className="space-y-4 pt-4">
