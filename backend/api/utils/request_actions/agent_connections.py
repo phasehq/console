@@ -163,6 +163,30 @@ def _point_at(request, grant):
         "baseline_grant_id": str(grant.id),
         "baseline_definition": _digest(connection.config),
     }
+    if is_app_service(connection.service_type):
+        # What the Connection covered when the request was made.
+        request.progress["baseline_environments"] = _environment_ids(connection)
+
+
+def _environment_ids(connection):
+    return sorted(
+        str(value)
+        for value in connection.app_environments.values_list(
+            "environment_id", flat=True
+        )
+    )
+
+
+def _refuse_added_environments(request, connection):
+    """An approval covers the environments the request was made for. One added
+    to the Connection since then needs a request of its own."""
+
+    asked = (request.progress or {}).get("baseline_environments")
+    if not isinstance(asked, list) or set(_environment_ids(connection)) - set(asked):
+        raise ActionError(
+            "This Connection covers environments it did not when this request "
+            "was made; start a new request"
+        )
 
 
 def _app_asset(request):
@@ -278,12 +302,23 @@ def _locked_target(request):
 
 
 def _custom_target(request):
+    """Lock the custom Connection a filed request targets, and check it is
+    still as it was when the request was made: a reviewer approves the
+    definition they were shown."""
+
     connection = _locked_target(request)
     if (
         not is_custom_service(connection.service_type)
         or connection.state != AgentConnection.ACTIVE
     ):
         raise ActionError("The Agent Connection changed; start a new request")
+    if _digest(connection.config) != (request.progress or {}).get(
+        "baseline_definition"
+    ):
+        raise ActionError(
+            "The Connection changed after this request was made; start a "
+            "new request"
+        )
     return connection
 
 
@@ -465,13 +500,6 @@ class UpdateConnection(ActionHandler):
         _require(member, "update")
         values = _inputs(inputs, optional=("sealedValue",))
         connection = _custom_target(request)
-        if _digest(connection.config) != (request.progress or {}).get(
-            "baseline_definition"
-        ):
-            raise ActionError(
-                "The Connection changed after this request was made; start a "
-                "new request"
-            )
         with _connection_errors():
             changes = update_custom_connection(
                 connection,
