@@ -246,13 +246,60 @@ def test_cli_events_are_stored_once_and_listed_in_the_console(runtime):
         None,
         {},
         {"aws_sigv4_failure": "signature_mismatch"},
-        {"attempt": 2, "retried": True, "ratio": 0.5, "note": None},
+        {"scrubbed_values": 2, "placeholders_capped": True, "mode": "censor"},
     ],
 )
 def test_detail_accepts_a_flat_object_of_short_values(detail):
     _, events = validate_event_batch(_parsed_batch(_sts_event(detail=detail)))
 
     assert events[0]["detail"] == (detail or {})
+
+
+def test_detail_keeps_only_the_members_the_cli_sends():
+    detail = {
+        "connectionId": "c-1",
+        "class": "delete",
+        "rule": "default",
+        "scrubbedValues": 3,
+        # Not members of the contract, or not the kind of value theirs is.
+        "authorization": "Bearer something",
+        "attempt": 2,
+        "note": None,
+        "mode": 7,
+        "scrubbedValues2": 1,
+        "placeholdersCapped": False,
+        "windowSeconds": True,
+    }
+
+    _, events = validate_event_batch(_parsed_batch(_sts_event(detail=detail)))
+
+    assert events[0]["detail"] == {
+        "connection_id": "c-1",
+        "class": "delete",
+        "rule": "default",
+        "scrubbed_values": 3,
+    }
+
+
+def test_a_path_is_stored_without_its_query_string():
+    _, events = validate_event_batch(
+        _parsed_batch(
+            _sts_event(
+                path="/repos/acme/x?access_token=abc", detail={"path": "/x?token=abc"}
+            )
+        )
+    )
+
+    assert events[0]["path"] == "/repos/acme/x"
+    assert events[0]["detail"] == {"path": "/x"}
+
+
+@pytest.mark.parametrize("event_type", ["app_secrets", "credential_resolution_error"])
+def test_an_event_type_only_the_console_records_is_refused(event_type):
+    with pytest.raises(AgentRuntimeError) as refused:
+        validate_event_batch(_parsed_batch(_sts_event(eventType=event_type)))
+
+    assert refused.value.details == {"event_index": 0, "field": "event_type"}
 
 
 @pytest.mark.parametrize(
