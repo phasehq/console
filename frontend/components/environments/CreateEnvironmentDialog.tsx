@@ -192,16 +192,26 @@ export const CreateEnvironmentDialog = forwardRef<
     variables: { appId },
   })
 
-  const { data: membersData } = useQuery(GetAppMembers, {
+  const {
+    data: membersData,
+    loading: membersLoading,
+    error: membersError,
+  } = useQuery(GetAppMembers, {
     variables: { appId },
     skip: !opened || !canAssignMembers,
     fetchPolicy: 'cache-and-network',
   })
-  const { data: serviceAccountsData } = useQuery(GetAppServiceAccounts, {
+  const {
+    data: serviceAccountsData,
+    loading: serviceAccountsLoading,
+    error: serviceAccountsError,
+  } = useQuery(GetAppServiceAccounts, {
     variables: { appId },
     skip: !opened || !canAssignServiceAccounts,
     fetchPolicy: 'cache-and-network',
   })
+  const accountsLoading = membersLoading || serviceAccountsLoading
+  const accountsUnread = Boolean(membersError || serviceAccountsError)
 
   const isLoading = orgAdminsDataLoading || appDataLoading
 
@@ -247,7 +257,7 @@ export const CreateEnvironmentDialog = forwardRef<
   const inputRef = useRef(null)
   const pendingOptionsRef = useRef<CreateEnvironmentOptions | undefined>(undefined)
   // Once the picker has been used, changing what to copy leaves the choice alone
-  const accessTouchedRef = useRef(false)
+  const [accessTouched, setAccessTouched] = useState(false)
   const grantsRef = useRef(new Map<string, Promise<EnvGrants>>())
 
   const environments = useMemo(
@@ -286,7 +296,7 @@ export const CreateEnvironmentDialog = forwardRef<
     setOnlySecretIds(only)
     setSourceId(options?.cloneFromId ?? firstHolding?.id ?? null)
     setSelectedIds(new Set())
-    accessTouchedRef.current = false
+    setAccessTouched(false)
     grantsRef.current = new Map()
     setOpenings((count) => count + 1)
   }
@@ -348,30 +358,56 @@ export const CreateEnvironmentDialog = forwardRef<
   )
 
   // A copy starts with the access its source has
-  const [prefilling, setPrefilling] = useState(false)
+  const prefillKey =
+    sourceId && !accessTouched
+      ? `${openings}:${sourceId}:${assignable.map((account) => account.id).join(' ')}`
+      : null
+  // What the selection was last worked out for, and whether the source's access could be read
+  const [prefilled, setPrefilled] = useState<{ key: string; unread: boolean } | null>(null)
   useEffect(() => {
-    if (openings === 0 || accessTouchedRef.current) return
-    if (!sourceId) {
+    if (openings === 0 || accessTouched) return
+    if (!sourceId || prefillKey === null) {
       setSelectedIds(new Set())
       return
     }
+    if (accountsLoading) return
+    if (accountsUnread) {
+      setSelectedIds(new Set())
+      setPrefilled({ key: prefillKey, unread: true })
+      return
+    }
     let cancelled = false
-    setPrefilling(true)
     Promise.all(assignable.map(async (account) => [account.id, await loadGrants(account)] as const))
       .then((grants) => {
-        if (cancelled || accessTouchedRef.current) return
+        if (cancelled) return
         setSelectedIds(
           new Set(grants.filter(([, granted]) => hasEnvAccess(granted, sourceId)).map(([id]) => id))
         )
+        setPrefilled({ key: prefillKey, unread: false })
       })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setPrefilling(false)
+      .catch(() => {
+        if (cancelled) return
+        // Nobody rather than the selection another source left behind
+        setSelectedIds(new Set())
+        setPrefilled({ key: prefillKey, unread: true })
       })
     return () => {
       cancelled = true
     }
-  }, [openings, sourceId, assignable, loadGrants])
+  }, [
+    openings,
+    sourceId,
+    assignable,
+    loadGrants,
+    accessTouched,
+    prefillKey,
+    accountsLoading,
+    accountsUnread,
+  ])
+  const prefilling = prefillKey !== null && prefilled?.key !== prefillKey
+  // A copy made before its accounts and their access are read would leave them all out
+  const accessPending = Boolean(sourceId) && (accountsLoading || prefilling)
+  const accessUnread = prefillKey !== null && prefilled?.key === prefillKey && prefilled.unread
 
   const source = environments.find((env) => env.id === sourceId)
   const contents = sourceId && contentsOf ? contentsOf(sourceId) : null
@@ -459,7 +495,7 @@ export const CreateEnvironmentDialog = forwardRef<
 
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
-    if (busyRef.current || sourceLoading || !keyring) return
+    if (busyRef.current || sourceLoading || accessPending || !keyring) return
 
     busyRef.current = true
     setStage('Creating the Environment…')
@@ -501,6 +537,10 @@ export const CreateEnvironmentDialog = forwardRef<
       const refused = await grant(env, envSecrets)
       if (refused.length > 0)
         problems.push(`${listNames(refused.map(accountName))} couldn't be given access`)
+      if (accessUnread)
+        problems.push(
+          `who has access to ${source?.name ?? 'the source'} couldn't be loaded, so nobody was given access`
+        )
 
       // A refresh that fails leaves the grid to pick the environment up on its next poll
       await client
@@ -634,11 +674,17 @@ export const CreateEnvironmentDialog = forwardRef<
 
         <div className="space-y-2 border-t border-neutral-500/20 pt-4">
           <h3 className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-            Access {prefilling && <Spinner size="xs" />}
+            Access {accessPending && <Spinner size="xs" />}
           </h3>
           <Alert variant="info" icon={true} size="sm">
             All Organisation Admins will have access to this Environment.
           </Alert>
+          {accessUnread && (
+            <Alert variant="warning" icon={true} size="sm">
+              Couldn&apos;t load who has access to {source?.name ?? 'the source'}. Choose the
+              accounts yourself, or close this and try again.
+            </Alert>
+          )}
           {showAccess && (
             <EnvAccessPicker
               members={members}
@@ -646,7 +692,7 @@ export const CreateEnvironmentDialog = forwardRef<
               selectedIds={selectedIds}
               lockedReasons={lockedReasons}
               onChange={(ids) => {
-                accessTouchedRef.current = true
+                setAccessTouched(true)
                 setSelectedIds(ids)
               }}
             />
@@ -655,7 +701,12 @@ export const CreateEnvironmentDialog = forwardRef<
 
         <div className="flex items-center justify-end gap-3">
           {stage && <span className="text-xs text-neutral-500">{stage}</span>}
-          <Button type="submit" variant="primary" isLoading={stage !== null} disabled={sourceLoading}>
+          <Button
+            type="submit"
+            variant="primary"
+            isLoading={stage !== null}
+            disabled={sourceLoading || accessPending}
+          >
             Create
           </Button>
         </div>
