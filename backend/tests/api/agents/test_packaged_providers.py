@@ -69,7 +69,12 @@ PROVIDERS = {
         "header": BEARER,
         # The GitHub CLI presents its token under the "token" scheme.
         "formats": ["token {value}"],
-        "env": ["GITHUB_TOKEN", "GH_TOKEN"],
+        "env": [
+            "GITHUB_TOKEN",
+            "GH_TOKEN",
+            "GH_ENTERPRISE_TOKEN",
+            "GITHUB_ENTERPRISE_TOKEN",
+        ],
         "decoy": r"ghp_[A-Za-z0-9]{36}",
         "executable": "gh",
         "classes": [

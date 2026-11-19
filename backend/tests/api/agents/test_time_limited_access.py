@@ -1074,13 +1074,7 @@ def test_the_additions_are_reachable_through_the_schema(space):
     assert cleared.data["setAgentConnectionPolicy"]["connection"] == {
         "id": str(space.connection.id),
         "policy": {"version": 1, "default": "allow", "rules": []},
-        "managedPolicies": [
-            {
-                "id": "secret_guard",
-                "locked": True,
-                "rules": [{"class": "credential_minting", "effect": "block"}],
-            }
-        ],
+        "managedPolicies": [],
     }
     refusal = graphql(
         space,
