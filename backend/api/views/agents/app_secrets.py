@@ -6,6 +6,7 @@ never a key or value.
 
 import json
 import logging
+import re
 from uuid import uuid4
 
 from django.utils import timezone
@@ -17,7 +18,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api.auth import SecretsAPIAuthentication
-from api.models import AgentEvent, App, Environment
+from api.models import AgentEvent, App, Environment, Secret
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
 from api.utils.agent_app_access import (
@@ -32,8 +33,16 @@ from api.utils.agent_app_access import (
     renew_request,
 )
 from api.utils.agent_config import APP_SERVICE_TYPE
+from api.utils.crypto import decrypt_asymmetric
 from api.utils.rest import get_token_type
-from api.utils.secrets import reference_target_environments
+from api.utils.secrets import (
+    decompose_path_and_key,
+    get_environment_keys,
+    get_or_compute_crypto_context,
+    normalize_path_string,
+    reference_target_environments,
+    resolve_secret_value,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -45,6 +54,9 @@ INVALID_TOKEN_MESSAGE = (
 DYNAMIC_UNSUPPORTED_MESSAGE = "Dynamic secrets are not available to Agents yet."
 # Query parameters of the secrets API that ask for dynamic secrets or leases.
 _DYNAMIC_PARAMETERS = ("dynamic", "include_dynamic", "lease", "lease_ttl")
+# One ${...} with no brace inside, as the resolver's own scan reads a value. It
+# cannot backtrack, so it is safe on a value an Agent supplies.
+_REFERENCE_BODY = re.compile(r"\$\{([^{}]+)\}")
 
 
 class AgentSecretsRefusal(Exception):
@@ -125,20 +137,102 @@ def _body_has_override(request):
     return any("override" in secret for secret in _body_secrets(request))
 
 
-def _refers_outside_readable(request, workflow, environment):
-    """Whether a submitted value refers to a secret in an environment the
-    Workflow cannot read. Other readers of this environment, such as a sync,
-    resolve references without an account check, so such a reference would
-    carry that secret where the Agent might see it."""
+class _ReferenceReader(AgentSecretsReader):
+    """Notes when resolving a reference reaches an environment the Workflow
+    cannot read."""
 
-    reader = AgentSecretsReader(workflow)
-    for secret in _body_secrets(request):
-        value = secret.get("value")
-        if not isinstance(value, str):
+    refused = False
+
+    def can_read_environment(self, environment_id):
+        readable = super().can_read_environment(environment_id)
+        if not readable:
+            self.refused = True
+        return readable
+
+
+def _referenced_key(body):
+    """The path and key a reference names, from the text between its braces."""
+
+    if "." not in body:
+        return body
+    separator = body.find("::", 1)
+    return body[body.find(".", separator + 3 if separator != -1 else 0) + 1 :]
+
+
+def _leads_outside_readable(reader, environment, composed_key, contexts):
+    """Whether the secret a reference names resolves, at any step, through an
+    environment the Workflow cannot read. The resolver ends a cycle or a chain
+    that is too deep, so this always finishes."""
+
+    try:
+        path, key_name = decompose_path_and_key(composed_key)
+        resolve_secret_value(
+            environment,
+            path,
+            key_name,
+            crypto_context=get_or_compute_crypto_context(environment, contexts),
+            account=reader,
+            context_cache=contexts,
+        )
+    except Secret.DoesNotExist:
+        # Nothing is there to follow.
+        return False
+    except Exception:
+        # A target that cannot be followed to its end is not written.
+        return True
+    return reader.refused
+
+
+def _moved_values(secrets, environment):
+    """The stored values of the secrets an update moves to another path, where
+    a sync of that path would start to read them."""
+
+    moved = []
+    for secret in secrets:
+        try:
+            path = normalize_path_string(secret["path"])
+            # Found the way the view finds it, whatever form the id takes.
+            stored = Secret.objects.filter(
+                id=secret["id"], environment=environment, deleted_at__isnull=True
+            ).first()
+        except Exception:
+            # No usable id or path: the view answers it, and nothing moves.
             continue
-        for target in reference_target_environments(value, environment):
-            if target is None or not reader.can_read_environment(target.id):
-                return True
+        if stored is not None and stored.path != path:
+            moved.append(stored)
+    if not moved:
+        return []
+    public_key, private_key = get_environment_keys(environment.id)
+    return [
+        decrypt_asymmetric(secret.value, private_key, public_key) for secret in moved
+    ]
+
+
+def _refers_outside_readable(request, workflow, environment):
+    """Whether a value this call writes, or moves to another path, refers to a
+    secret in an environment the Workflow cannot read, directly or through the
+    references of the secret it names. Other readers of this environment, such
+    as a sync, resolve references without an account check, so such a reference
+    would carry that secret where the Agent might see it. A reference keeps
+    resolving after the access that wrote it ends, as it does for members."""
+
+    reader = _ReferenceReader(workflow)
+    secrets = _body_secrets(request)
+    values = [
+        secret["value"] for secret in secrets if isinstance(secret.get("value"), str)
+    ]
+    if request.method == "PUT":
+        values += _moved_values(secrets, environment)
+    contexts = {}
+    for value in values:
+        for body in dict.fromkeys(_REFERENCE_BODY.findall(value)):
+            for target in reference_target_environments(f"${{{body}}}", environment):
+                if target is None or not reader.can_read_environment(target.id):
+                    return True
+                if _leads_outside_readable(
+                    reader, target, _referenced_key(body), contexts
+                ):
+                    return True
     return False
 
 
