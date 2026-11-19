@@ -210,6 +210,51 @@ describe('access policy drafts', () => {
     )
     expect(allows.map((allow) => allow.id)).toEqual(['soon', 'late'])
   })
+
+  test('a class row equal to the default keeps its rule when a path rule is weaker', () => {
+    const draft = draftFromPolicy({
+      version: 1,
+      default: 'block',
+      rules: [
+        { class: 'delete', effect: 'block' },
+        { match: { path: '/jobs/*' }, effect: 'allow' },
+      ],
+    })
+    const saved = policyFromDraft({ ...draft, classes: { ...draft.classes, read: 'allow' } })
+    // The proxy applies the strongest matching rule: without these, DELETE /jobs/* is allowed.
+    expect(saved?.rules).toContainEqual({ class: 'delete', effect: 'block' })
+    expect(saved?.rules).toContainEqual({ class: 'admin', effect: 'block' })
+    expect(saved?.rules).toContainEqual({ class: 'read', effect: 'allow' })
+    expect(saved?.rules).toContainEqual({ match: { path: '/jobs/*' }, effect: 'allow' })
+    expect(policySummary(saved)).toBe('the rest blocked')
+  })
+
+  test('switching the default keeps a row that shows Block when a path rule allows', () => {
+    const draft = draftFromPolicy({
+      version: 1,
+      default: 'allow',
+      rules: [
+        { class: 'delete', effect: 'block' },
+        { match: { path: '/jobs/*' }, effect: 'allow' },
+      ],
+    })
+    const next = withDefault(draft, 'block')
+    expect(next.classes.delete).toBe('block')
+    expect(policyFromDraft(next)?.rules).toContainEqual({ class: 'delete', effect: 'block' })
+  })
+
+  test('a stronger path rule needs no class rules for rows equal to the default', () => {
+    const draft = draftFromPolicy({
+      version: 1,
+      default: 'ask',
+      rules: [{ match: { path: '/jobs/*' }, effect: 'block' }],
+    })
+    expect(policyFromDraft(draft)).toEqual({
+      version: 1,
+      default: 'ask',
+      rules: [{ match: { path: '/jobs/*' }, effect: 'block' }],
+    })
+  })
 })
 
 describe('rules and allows by AWS action', () => {
