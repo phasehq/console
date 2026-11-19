@@ -94,6 +94,16 @@ def _viewer_visibility(info, organisation_id):
     return asset_visibility(_member_in(info, organisation_id))
 
 
+def _viewer_may_read(info, organisation_id, resource):
+    """Whether the viewer's role may read a resource. For fields nested under
+    a type whose own query does not ask for that permission."""
+
+    member = _member_in(info, organisation_id)
+    return bool(
+        member is not None and role_has_permission(member.role, "read", resource)
+    )
+
+
 def _connection_view(connection, info):
     """The app Connection's app and environments as the viewer may see them;
     None for any other Connection."""
@@ -758,6 +768,18 @@ class AgentRequestType(DjangoObjectType):
     def resolve_agent(self, info):
         return self.workflow.agent
 
+    # The Workflow was checked by whoever returned the request; its Connection
+    # and grant also need what the agentConnections query needs.
+    def resolve_connection(self, info):
+        if not _viewer_may_read(info, self.organisation_id, "AgentConnections"):
+            return None
+        return self.connection
+
+    def resolve_grant(self, info):
+        if not _viewer_may_read(info, self.organisation_id, "AgentConnections"):
+            return None
+        return self.grant
+
     def resolve_action(self, info):
         return self.action or None
 
@@ -814,6 +836,17 @@ class AgentEventType(DjangoObjectType):
     class Meta:
         model = AgentEvent
         fields = "__all__"
+
+    # The log needs only Logs; these need what their own queries need.
+    def resolve_connection(self, info):
+        if not _viewer_may_read(info, self.organisation_id, "AgentConnections"):
+            return None
+        return self.connection
+
+    def resolve_session(self, info):
+        if not _viewer_may_read(info, self.organisation_id, "AgentSessions"):
+            return None
+        return self.session
 
     def resolve_detail(self, info):
         detail = dict(self.detail or {})
