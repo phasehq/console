@@ -529,9 +529,16 @@ class AgentSessionConfigView(AgentRuntimeAPIView):
         update = {"config_generation": F("config_generation") + 1}
         if next_expiry > session.expires_at:
             update["expires_at"] = next_expiry
-        AgentSession.objects.filter(pk=session.pk, revoked_at__isnull=True).update(
-            **update
-        )
+        live = AgentSession.objects.filter(
+            pk=session.pk, revoked_at__isnull=True
+        ).update(**update)
+        if not live:
+            # Revoked while its config was being built: nothing is released.
+            raise AgentRuntimeError(
+                "agent_session_revoked",
+                "The Agent session has been revoked.",
+                status.HTTP_401_UNAUTHORIZED,
+            )
         session.refresh_from_db()
         return Response(_session_response(request, session, config))
 

@@ -53,6 +53,9 @@ class ResolvedCredential:
     revision: str = ""
     sealed_material: dict | None = None
     wrapped_key_share: str = ""
+    # The Workflow Grant as it was when the release was checked, with its
+    # Connection, for whatever else the session is sent beside the material.
+    grant: object = None
 
 
 class CredentialResolutionError(ValueError):
@@ -301,9 +304,10 @@ def resolve_agent_credential(authentication, session, *, grant=None):
         raise CredentialResolutionError("Credential resolution requires a Workflow Grant")
 
     # STS is called after the authorizing transaction releases its row locks.
-    authentication, connection_config, material = _authorized_material(
+    authentication, locked_grant, material = _authorized_material(
         authentication, session, grant
     )
+    connection_config = locked_grant.connection.config or {}
 
     if authentication.provider == "aws":
         required = ("access_key_id", "secret_access_key", "region")
@@ -312,6 +316,7 @@ def resolve_agent_credential(authentication, session, *, grant=None):
         return ResolvedCredential(
             material={field: str(material[field]) for field in required},
             generation=str(authentication.revision),
+            grant=locked_grant,
         )
 
     if authentication.provider == "aws_assume_role":
@@ -327,11 +332,15 @@ def resolve_agent_credential(authentication, session, *, grant=None):
             }
         except Exception as exc:
             raise CredentialResolutionError("AWS role could not be assumed") from exc
+        # The call to AWS ran outside the locks, and access may have ended
+        # while it did.
+        locked_grant = _recheck_release(authentication, session, grant)
         # The runtime reprovisions the session before these keys lapse.
         return ResolvedCredential(
             material=resolved,
             expires_at=assumed.get("Expiration"),
             generation=str(authentication.revision),
+            grant=locked_grant,
         )
 
     if authentication.provider == "postgres":
@@ -343,6 +352,7 @@ def resolve_agent_credential(authentication, session, *, grant=None):
         return ResolvedCredential(
             material=resolved,
             generation=str(authentication.revision),
+            grant=locked_grant,
         )
 
     token_service = get_config_registry().token_service(authentication.provider)
@@ -358,6 +368,7 @@ def resolve_agent_credential(authentication, session, *, grant=None):
         return ResolvedCredential(
             material=resolved,
             generation=str(authentication.revision),
+            grant=locked_grant,
         )
 
     raise CredentialResolutionError(
@@ -544,12 +555,14 @@ def resolve_custom_connection(session, grant, definition, *, sealed):
         wrapped_key_share=(
             locked_token.wrapped_key_share if sealed_material is not None else ""
         ),
+        grant=locked_grant,
     )
 
 
 @transaction.atomic
-def _authorized_material(authentication, session, grant):
-    """Recheck every binding under row locks and decrypt the stored material."""
+def _recheck_release(authentication, session, grant):
+    """Recheck every binding of a release under row locks, and return the
+    Workflow Grant as it is now."""
 
     locked_token, locked_session, locked_grant = _recheck_bindings(
         session,
@@ -563,10 +576,18 @@ def _authorized_material(authentication, session, grant):
     if str(authentication.organisation_id) != str(locked_session.organisation_id):
         raise CredentialResolutionError("Credential and session organisation mismatch")
     _recheck_membership(locked_token, locked_session)
+    return locked_grant
 
+
+@transaction.atomic
+def _authorized_material(authentication, session, grant):
+    """Recheck every binding under row locks and decrypt the stored material."""
+
+    locked_grant = _recheck_release(authentication, session, grant)
+    authentication = locked_grant.connection.authentication
     try:
         material = get_credentials(authentication.id)
     except Exception as exc:
         raise CredentialResolutionError("Credential material could not be decrypted") from exc
 
-    return authentication, (locked_grant.connection.config or {}), material
+    return authentication, locked_grant, material

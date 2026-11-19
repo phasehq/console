@@ -208,18 +208,23 @@ def client_can_enforce(client, item):
 
     service = item["service"]
     required = required_client_features(item)
-    if not required:
-        return True
     try:
+        protocols = set(_client_strings(client, "protocols", "protocols"))
         features = set(_client_strings(client, "features", "features"))
         actions = set(
             _client_strings(client, "injection_actions", "injectionActions")
         )
     except (AgentRuntimeError, AttributeError):
         return False
-    return set(required) <= features and {
-        injection["action"] for injection in _service_injections(service)
-    } <= actions
+    # The protocols and injection actions a client listed when its session
+    # opened hold for a grant made since, as they did for the grants it opened
+    # with.
+    if protocols and service["protocol"] not in protocols:
+        return False
+    needed = {injection["action"] for injection in _service_injections(service)}
+    if (required or actions) and not needed <= actions:
+        return False
+    return set(required) <= features
 
 
 def negotiate_client(client, prepared_grants):
@@ -756,9 +761,12 @@ def _connection_payload(
         payload["operation_classes"] = deepcopy(service["operation_classes"])
     if service["protocol"] == "http":
         # The rules are the Connection's, the same for every Workflow granted
-        # it; the temporary allows are this Workflow's own.
+        # it; the temporary allows are this Workflow's own. Both are read from
+        # the grant as the release checked it, so a rule or an allow changed
+        # since this session's grants were listed is not sent with the secret.
+        checked = getattr(resolved, "grant", None) or grant
         payload["policy"] = compile_policy(
-            connection.policy, grant.temporary_allows, timezone.now()
+            checked.connection.policy, checked.temporary_allows, timezone.now()
         )
     if grant.expires_at is not None:
         payload["grant_expires_at"] = grant.expires_at
