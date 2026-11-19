@@ -367,6 +367,23 @@ describe('the access blocks in the details of a Connection', () => {
     expect(guard.querySelector('button, input, [role="radiogroup"]')).toBeNull()
   })
 
+  test('says credential-minting calls are blocked only when the server lists that rule', async () => {
+    await render({
+      connection: {
+        ...connection(null),
+        takesPolicy: true,
+        managedPolicies: [{ id: 'secret_guard', locked: true, rules: [] }],
+      },
+    })
+    const guard = container.querySelector('[data-managed-policy="secret_guard"]')!
+    expect(guard.textContent).toContain('Secret guard')
+    expect(guard.textContent).not.toContain('mint')
+
+    await render({ connection: { ...connection(null), takesPolicy: true, managedPolicies: [] } })
+    expect(container.textContent).not.toContain('mint')
+    expect(container.textContent).not.toContain('Managed by Phase')
+  })
+
   test('a Connection that takes no rules shows neither block', async () => {
     await render({
       connection: { ...connection(null), takesPolicy: false, managedPolicies: [] },
