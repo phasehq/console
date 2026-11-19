@@ -2025,6 +2025,7 @@ class RevokeAgentWorkflowGrantMutation(graphene.Mutation):
             raise GraphQLError("Agent Workflow Grant not found") from exc
         member = organisation_member(info, grant.organisation_id)
         require_workflow(member, grant.workflow, "update")
+        require_role(member, "read", "AgentConnections")
         workflow = grant.workflow
         with transaction.atomic():
             if not end_connection_access(
