@@ -70,6 +70,7 @@ jest.mock('@/contexts/organisationContext', () => {
         permissions: {
           AgentConnections: ['read', 'update', 'delete'],
           IntegrationCredentials: ['read'],
+          AgentRequests: ['read'],
         },
         app_permissions: {},
         agent_permissions: {},
@@ -265,6 +266,13 @@ describe('Agent Connections', () => {
     expect(summary.textContent).toBe('Credentials needed')
     expect(identity.textContent).toBe('pending')
     expect(cells('paused')[1].textContent).toBe('pausedDisabled')
+  })
+
+  test('a Connection waiting for its setup request links to Requests instead of offering Edit', () => {
+    const actions = cells('pending')[4]
+    expect(button(actions, 'Edit')).toBeUndefined()
+    expect(actions.querySelector('a')?.getAttribute('href')).toBe('/acme/requests')
+    expect(button(cells('built-in')[4], 'Edit')).toBeDefined()
   })
 
   test('opens and closes a row from its chevron, which names and controls the details', async () => {

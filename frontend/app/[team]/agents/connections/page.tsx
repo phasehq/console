@@ -9,6 +9,7 @@ import Link from 'next/link'
 import clsx from 'clsx'
 import { useMutation, useQuery } from '@apollo/client'
 import {
+  FaArrowRight,
   FaCheck,
   FaCheckCircle,
   FaChevronRight,
@@ -23,6 +24,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { toastUnhandledError } from '@/utils/errors'
 import { integrationCredentialHref } from '@/utils/integrationCredentials'
+import { requestsPath } from '@/utils/agents/routes'
 import { GetAgentAssets } from '@/graphql/queries/agents/getAgentAssets.gql'
 import {
   ApproveAgentConnectionHostRulesOp,
@@ -112,6 +114,8 @@ export default function AgentConnectionsPage() {
   const canUpdate =
     !!organisation &&
     userHasPermission(organisation.role?.permissions, 'AgentConnections', 'update')
+  const canReadRequests =
+    !!organisation && userHasPermission(organisation.role?.permissions, 'AgentRequests', 'read')
   const { data, loading, error, refetch } = useQuery(GetAgentAssets, {
     variables: {
       organisationId: organisation?.id,
@@ -280,6 +284,7 @@ export default function AgentConnectionsPage() {
                   const hosts = connectionHosts(connection)
                   const credential = connection.authentication
                   const active = connection.state?.toLowerCase() === 'active'
+                  const pendingSetup = connection.state?.toLowerCase() === 'pending_credentials'
                   const version = String(connection.hostRulesVersion).slice(0, 8)
                   const expanded = expandedRows.has(connection.id)
                   const detailsId = `connection-${connection.id}-details`
@@ -421,7 +426,26 @@ export default function AgentConnectionsPage() {
                               !hiddenEnvironments && (
                                 <EditAppConnectionDialog connection={connection} />
                               )}
-                            {canUpdate && !custom && !appSecrets && (
+                            {/* Its credentials are added by approving the setup request. */}
+                            {!custom &&
+                              !appSecrets &&
+                              pendingSetup &&
+                              canReadRequests &&
+                              organisation && (
+                                <Link
+                                  href={requestsPath(organisation.name)}
+                                  title="Add its credentials by approving its setup request"
+                                >
+                                  <Button
+                                    variant="textWarning"
+                                    icon={FaArrowRight}
+                                    iconPosition="right"
+                                  >
+                                    Requests
+                                  </Button>
+                                </Link>
+                              )}
+                            {canUpdate && !custom && !appSecrets && !pendingSetup && (
                               <UpdateConnectionDialog
                                 connection={connection}
                                 services={services}
