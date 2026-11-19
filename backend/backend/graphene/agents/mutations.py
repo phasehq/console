@@ -91,7 +91,7 @@ from api.utils.agents import (
     retire_unused_setup_connection,
 )
 from api.utils.audit_logging import get_actor_info_from_graphql, log_audit_event
-from api.utils.request_actions import ActionError, action_handler
+from api.utils.request_actions import CREDENTIAL_TEXT, ActionError, action_handler
 from api.utils.request_actions.agent_workflows import (
     set_workflow_context,
     validate_workflow_context,
@@ -143,6 +143,18 @@ def _text(value, label, *, maximum=255, allow_empty=False):
     if (not allow_empty and not result) or len(result) > maximum:
         raise GraphQLError(f"{label} must contain at most {maximum} characters")
     return result
+
+
+def _resolution_note(value):
+    """A reviewer's note. The Agent reads it, so it may not hold a credential."""
+
+    note = _text(value or "", "resolutionNote", maximum=20000, allow_empty=True)
+    if CREDENTIAL_TEXT.search(note):
+        raise GraphQLError(
+            "The note looks like it contains a credential, and the Agent can "
+            "read the note. Remove the credential from the note and try again."
+        )
+    return note
 
 
 def _clean_save(instance, update_fields=None):
@@ -2222,6 +2234,7 @@ class ResolveAgentRequestMutation(graphene.Mutation):
                 "Approve setup or credential updates with fulfillAgentRequest"
             )
         member, organisation_id = _request_management_member(info, request_id)
+        note = _resolution_note(resolution_note)
         checked_at = timezone.now()
         if _expire_pending_request(request_id, organisation_id, checked_at):
             raise GraphQLError("Agent request has expired")
@@ -2233,10 +2246,7 @@ class ResolveAgentRequestMutation(graphene.Mutation):
                 checked_at=checked_at,
             )
             agent_request.status = AgentRequest.DENIED
-            agent_request.resolution_note = _text(
-                resolution_note or "", "resolutionNote", maximum=20000,
-                allow_empty=True,
-            )
+            agent_request.resolution_note = note
             agent_request.resolved_by = member
             agent_request.resolved_at = timezone.now()
             agent_request.progress = {**(agent_request.progress or {}), "stage": "denied"}
@@ -2282,6 +2292,7 @@ class FulfillAgentRequestMutation(graphene.Mutation):
         member, organisation_id = _request_management_member(
             info, request_id, credentials=True
         )
+        note = _resolution_note(resolution_note)
         checked_at = timezone.now()
         if _expire_pending_request(request_id, organisation_id, checked_at):
             raise GraphQLError("Agent request has expired")
@@ -2456,10 +2467,7 @@ class FulfillAgentRequestMutation(graphene.Mutation):
             agent_request.grant = grant
             agent_request.approval = dict(_SESSION_APPROVAL)
             agent_request.status = AgentRequest.APPROVED
-            agent_request.resolution_note = _text(
-                resolution_note or "", "resolutionNote", maximum=20000,
-                allow_empty=True,
-            )
+            agent_request.resolution_note = note
             agent_request.resolved_by = member
             agent_request.resolved_at = timezone.now()
             agent_request.progress = {
@@ -2534,6 +2542,7 @@ class ApproveAgentRequestActionMutation(graphene.Mutation):
                inputs=None, resolution_note="", duration_seconds=None,
                until_revoked=None):
         member, organisation_id = _request_management_member(info, request_id)
+        note = _resolution_note(resolution_note)
         if inputs is not None and not isinstance(inputs, Mapping):
             raise GraphQLError("inputs must be an object")
         # The handler reads the granted duration beside its other inputs.
@@ -2578,10 +2587,7 @@ class ApproveAgentRequestActionMutation(graphene.Mutation):
             agent_request.applied_action = applied.action
             agent_request.approval = dict(_SESSION_APPROVAL)
             agent_request.status = AgentRequest.APPROVED
-            agent_request.resolution_note = _text(
-                resolution_note or "", "resolutionNote", maximum=20000,
-                allow_empty=True,
-            )
+            agent_request.resolution_note = note
             agent_request.resolved_by = member
             agent_request.resolved_at = timezone.now()
             agent_request.progress = {"stage": "complete", **applied.references}
