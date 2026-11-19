@@ -1,18 +1,15 @@
 'use client'
 
 import { useMutation, useQuery } from '@apollo/client'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'react-toastify'
 import { DeletedEnvironmentType } from '@/apollo/graphql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetDeletedEnvironments } from '@/graphql/queries/secrets/getDeletedEnvironments.gql'
 import { RestoreEnvironmentOp } from '@/graphql/mutations/environments/restoreEnvironment.gql'
 import { DeleteEnvironmentNowOp } from '@/graphql/mutations/environments/deleteEnvironmentNow.gql'
-import {
-  isBeingDeleted,
-  PendingDeletion,
-  PendingDeletionList,
-} from '@/components/common/PendingDeletionList'
+import { PendingDeletion, PendingDeletionList } from '@/components/common/PendingDeletionList'
+import { usePendingDeletionRefresh } from '@/hooks/usePendingDeletionRefresh'
 import { DELETION_GRACE_PERIOD } from '@/constants'
 
 /** The app's environments that are scheduled for deletion. Each can be restored, or deleted now. */
@@ -23,7 +20,7 @@ export const DeletedEnvironments = ({
   appId: string
   allowRestore: boolean
 }) => {
-  const { data, startPolling, stopPolling } = useQuery(GetDeletedEnvironments, {
+  const { data, refetch, startPolling, stopPolling } = useQuery(GetDeletedEnvironments, {
     variables: { appId },
     fetchPolicy: 'cache-and-network',
   })
@@ -32,14 +29,7 @@ export const DeletedEnvironments = ({
   const [restoringId, setRestoringId] = useState<string | null>(null)
 
   const environments = (data?.deletedEnvironments as DeletedEnvironmentType[]) ?? []
-
-  // A background job finishes the deletion, so watch for it to leave the list.
-  const deleting = environments.some(isBeingDeleted)
-  useEffect(() => {
-    if (!deleting) return
-    startPolling(5000)
-    return () => stopPolling()
-  }, [deleting, startPolling, stopPolling])
+  usePendingDeletionRefresh(environments, { refetch, startPolling, stopPolling })
 
   const handleRestore = async (environment: PendingDeletion) => {
     setRestoringId(environment.id)

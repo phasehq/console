@@ -1,18 +1,15 @@
 'use client'
 
 import { useMutation, useQuery } from '@apollo/client'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'react-toastify'
 import { DeletedAppType } from '@/apollo/graphql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetDeletedApps } from '@/graphql/queries/apps/getDeletedApps.gql'
 import { RestoreAppOp } from '@/graphql/mutations/apps/restoreApp.gql'
 import { DeleteAppNowOp } from '@/graphql/mutations/apps/deleteAppNow.gql'
-import {
-  isBeingDeleted,
-  PendingDeletion,
-  PendingDeletionList,
-} from '@/components/common/PendingDeletionList'
+import { PendingDeletion, PendingDeletionList } from '@/components/common/PendingDeletionList'
+import { usePendingDeletionRefresh } from '@/hooks/usePendingDeletionRefresh'
 import { DELETION_GRACE_PERIOD } from '@/constants'
 
 /** The organisation's apps that are scheduled for deletion. Each can be restored, or deleted now. */
@@ -23,7 +20,7 @@ export const DeletedApps = ({
   organisationId: string
   allowRestore: boolean
 }) => {
-  const { data, startPolling, stopPolling } = useQuery(GetDeletedApps, {
+  const { data, refetch, startPolling, stopPolling } = useQuery(GetDeletedApps, {
     variables: { organisationId },
     fetchPolicy: 'cache-and-network',
   })
@@ -32,14 +29,7 @@ export const DeletedApps = ({
   const [restoringId, setRestoringId] = useState<string | null>(null)
 
   const apps = (data?.deletedApps as DeletedAppType[]) ?? []
-
-  // A background job finishes the deletion, so watch for it to leave the list.
-  const deleting = apps.some(isBeingDeleted)
-  useEffect(() => {
-    if (!deleting) return
-    startPolling(5000)
-    return () => stopPolling()
-  }, [deleting, startPolling, stopPolling])
+  usePendingDeletionRefresh(apps, { refetch, startPolling, stopPolling })
 
   const handleRestore = async (app: PendingDeletion) => {
     setRestoringId(app.id)
