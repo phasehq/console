@@ -417,6 +417,25 @@ def _request_response(agent_request, *, cooldown=False):
     return payload
 
 
+def _request_reply(session, agent_request, *, cooldown=False):
+    """The request, for a caller who may read requests. Any other caller gets
+    its id and status alone: being allowed to file or cancel a request does
+    not read one."""
+
+    try:
+        require_session_workflow_permission(session, "read", "AgentRequests")
+    except AgentRuntimeError:
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "id": str(agent_request.id),
+            "status": agent_request.status,
+        }
+        if cooldown:
+            payload["cooldown"] = True
+        return payload
+    return _request_response(agent_request, cooldown=cooldown)
+
+
 class AgentSessionCollectionView(AgentRuntimeAPIView):
     renderer_classes = [ProviderRulesJSONRenderer]
 
@@ -843,6 +862,14 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     details={"field": "durationSeconds"},
                 )
 
+        def refuse_credential_name(value):
+            # The name becomes the request's title and its Connection's name.
+            if _CREDENTIAL_TEXT.search(value):
+                raise AgentRuntimeError(
+                    "credential_in_request_name",
+                    "credentialName must not contain credential-shaped values.",
+                )
+
         service_type = request.data.get("service_type")
         credential_provider = request.data.get("credential_provider")
         credential_name = request.data.get("credential_name", "")
@@ -903,6 +930,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     "credentialName must contain 1-64 characters.",
                 )
             credential_name = credential_name.strip()
+            refuse_credential_name(credential_name)
             duration_seconds = requested(request.data.get("duration_seconds"))
         elif action is None:
             refuse_duration()
@@ -966,12 +994,15 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                     "credential_provider_not_supported",
                     "credentialProvider is incompatible with this Connection.",
                 )
-            if credential_name is None or credential_name == "":
+            named = credential_name not in (None, "")
+            if not named:
                 credential_name = connection.authentication.name
             if not isinstance(credential_name, str) or len(credential_name) > 64:
                 raise AgentRuntimeError(
                     "invalid_credential_name", "credentialName is too long."
                 )
+            if named:
+                refuse_credential_name(credential_name)
             if credential_id is not None:
                 requested_credential = ProviderCredentials.objects.filter(
                     id=credential_id,
@@ -1104,7 +1135,7 @@ class AgentRequestCollectionView(AgentRuntimeAPIView):
                         "dedupKey is already in use for a different request target.",
                         status.HTTP_409_CONFLICT,
                     )
-                return Response(_request_response(existing, cooldown=True))
+                return Response(_request_reply(session, existing, cooldown=True))
 
             pending_count = scoped_requests.filter(
                 status=AgentRequest.PENDING
@@ -1257,5 +1288,5 @@ class AgentRequestCancelView(AgentRuntimeAPIView):
                     AgentRequest.EXPIRED if expired else AgentRequest.CANCELLED,
                     now,
                 )
-            payload = _request_response(agent_request)
+            payload = _request_reply(session, agent_request)
         return Response(payload)
