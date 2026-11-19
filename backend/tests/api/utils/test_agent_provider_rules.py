@@ -1,9 +1,7 @@
-"""Provider rules in the service manifests: the credential environment, the
-secret guard and the AWS call classes the CLI once compiled in, and the token
-credential fields the Console once kept in code.
+"""Provider rules in the service manifests, with shape guards.
 
-Like ``test_agent_config``, the shape tests corrupt copies of the real
-packaged files, so a check that stops rejecting bad input fails here.
+Like ``test_agent_config``, these corrupt copies of the real packaged files, so a check that
+stops rejecting bad input fails here.
 """
 
 import json

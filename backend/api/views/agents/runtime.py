@@ -73,8 +73,7 @@ def _material_value(material, field):
 def connection_authorization(grant, *, custom=False):
     """Return the authorization block the proxy receives for one Grant.
 
-    A custom Connection is ready once it holds a sealed value; a packaged one
-    needs a live integration credential.
+    A custom Connection is ready once it holds a sealed value; a packaged one needs a live credential.
     """
 
     connection = grant.connection
@@ -125,8 +124,7 @@ def connection_host_rules_are_approved(connection, service):
 def _workflow_config_env(connections):
     """Settings such as AWS_REGION from services with a single Connection.
 
-    With several Connections for one service, each command picks one, so no
-    workflow-wide default exists.
+    With several Connections for one service no workflow-wide default exists, so none is set.
     """
 
     counts = Counter(connection["service_type"] for connection in connections)
@@ -185,11 +183,7 @@ def _required_material_fields(service):
 def required_client_features(item):
     """What a client must list in ``client.features`` to be sent this grant.
 
-    A custom Connection needs its injection features, and a packaged service
-    that attaches its credential to a request carrying none needs a client
-    that does so. A Connection whose policy can stop a call needs a client
-    that enforces policies. A service whose manifest carries a secret guard or
-    call classes needs a client that enforces them from the manifest.
+    Each feature is needed by part of the grant: injection, policies or the secret guard.
     """
 
     service = item["service"]
@@ -209,10 +203,7 @@ def required_client_features(item):
 def client_can_enforce(client, item):
     """Whether a session's client listed what this grant needs.
 
-    Protocols and injection actions are negotiated once, when the session
-    opens. A Connection that needs a client feature can be granted to a
-    Workflow afterwards, and a policy can be set on any HTTP Connection; a
-    client that cannot enforce either must not receive the Connection.
+    Grants can come after session open, so a client that cannot enforce a feature gets no Connection.
     """
 
     service = item["service"]
@@ -784,11 +775,9 @@ def _connection_payload(
 
 
 def provider_rules(service):
-    """A Connection's provider rules from its manifest, in the runtime API's
-    spelling: the variables its tools read credentials from, and its secret
-    guard and call classes where it has them. A custom Connection's variables
-    are the ones its own fields are exported under; it has no guard or
-    classes.
+    """A Connection's provider rules from its manifest, in the runtime API's spelling.
+
+    A custom Connection exports its own fields' variables and has no guard or call classes.
     """
 
     rules = {"credential_environment": list(service["credential_environment"])}
@@ -912,8 +901,7 @@ def resolve_runtime_capabilities(session):
 def compose_context(session, *, service_type=None):
     """Markdown the agent reads about its Connections.
 
-    Built from the registry and the non-secret identifiers saved when the
-    session opened; never from credential material.
+    Built from the registry and saved non-secret identifiers, never credential material.
     """
 
     prepared = _session_grants(session, service_type=service_type)

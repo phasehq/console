@@ -1,10 +1,7 @@
-"""The provider rules each packaged manifest carries, as recorded when they
-moved out of the CLI, and their wire form.
+"""Provider rules each packaged manifest carries, and their wire form.
 
-``rest/golden/provider_rules/<service>.json`` is the CLI's compiled-in data in
-manifest form (snake_case). ``wire`` converts it with the documented key table
-only, so the keys of the data maps (``cognito-identity``, ``kms:CreateGrant``,
-``publicAccessBlock``) stay exactly as written.
+``wire`` converts only the documented key table, so data map keys such as
+``kms:CreateGrant`` stay as written.
 """
 
 import json

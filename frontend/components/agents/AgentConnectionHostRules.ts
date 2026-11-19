@@ -1,8 +1,6 @@
 /**
- * Where a service's hosts come from. Only `optional_override` lets a member
- * add one; `required_endpoint` (PostgreSQL) and `credential_endpoint` (GitHub,
- * GitLab) take theirs from the credential, and `fixed` services have none to
- * configure.
+ * Where a service's hosts come from. Only `optional_override` lets a member add one;
+ * the other modes take them from the credential or the service.
  */
 export type AgentHostRulesMode =
   | 'required_endpoint'

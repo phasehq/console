@@ -569,12 +569,9 @@ _REFERENCE_BODY_PATTERN = re.compile(r"\$\{([^{}]+)\}")
 
 def split_references(value):
     """
-    The references in a plaintext value, as CROSS_APP_ENV_PATTERN,
-    CROSS_ENV_PATTERN and LOCAL_REF_PATTERN find them, in time linear in the
-    length of the value.
+    Return the references in a plaintext value, in time linear in its length.
 
-    Returns:
-        tuple: ([(app, env)], [env], has_local_reference)
+    Returns ([(app, env)], [env], has_local_reference).
     """
     cross_app, cross_env, has_local = [], [], False
     for body in _REFERENCE_BODY_PATTERN.findall(value):
@@ -597,16 +594,9 @@ def split_references(value):
 
 def reference_target_environments(value, environment):
     """
-    The environment each reference in a plaintext value points at, found the
-    way decrypt_secret_value finds it for a secret stored in `environment`:
-    cross-app, cross-env (same app) and local references.
+    Return the environment each reference in a plaintext value points at.
 
-    A reference whose app or environment cannot be told apart (no match, or
-    more than one) yields None.
-
-    Returns:
-        list[Environment | None]: One entry per cross-app or cross-env
-        reference, and `environment` once if the value has a local reference.
+    An ambiguous reference (no match, or more than one) gives None.
     """
     Environment = apps.get_model("api", "Environment")
     App = apps.get_model("api", "App")

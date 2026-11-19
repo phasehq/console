@@ -145,8 +145,7 @@ def can_add_environments(organisation, count):
 def can_add_agent(organisation):
     """Check if a new Agent can be added to the organisation.
 
-    Unlike apps, a license does not lift Agent limits on its own: it sets the
-    organisation's plan, and self-hosted Pro is limited like Cloud Pro.
+    A license does not lift Agent limits on its own; it only sets the plan.
     """
 
     Agent = apps.get_model("api", "Agent")

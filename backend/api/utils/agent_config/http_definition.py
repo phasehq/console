@@ -1,14 +1,7 @@
 """User-defined HTTP Connections ("custom Connections").
 
-A custom Connection targets an HTTP service Phase has no packaged definition
-for. Its versioned definition is stored in ``AgentConnection.config``. This
-module validates a definition on every write, upgrades a stored one in memory
-on every read, and compiles it into the service-shaped data the registry
-provides for packaged services, so the runtime builds every Connection payload
-through one path.
-
-A definition never carries a secret. Secret fields name where their value comes
-from; identifier fields carry a non-secret value the Agent may see.
+A definition never carries a secret: secret fields name their source, and
+identifier fields hold a value the Agent may see.
 """
 
 from __future__ import annotations
@@ -497,8 +490,7 @@ def _validate_hosts(value, location):
 def validate_definition(definition: Any) -> dict[str, Any]:
     """Validate a definition and return it canonical, in the latest version.
 
-    Every write goes through here: a member's mutation and an Agent's request
-    alike. The result is what gets stored.
+    Every write goes through here, including Agent requests, and the result is what gets stored.
     """
 
     definition = upgrade_definition(definition)
@@ -555,8 +547,7 @@ def load_definition(config: Any) -> dict[str, Any]:
 def reduce_hosts(hosts: Any) -> list[dict[str, Any]]:
     """Host rules reduced to what a sealed value binds: match, value and port.
 
-    Paths are deliberately not bound. The result is deduplicated and sorted by
-    (value, match, port), with an unset port first.
+    Paths are not bound. The result is sorted and deduplicated.
     """
 
     reduced = {}
@@ -592,8 +583,7 @@ def identifier_values(definition: Mapping[str, Any]) -> dict[str, str]:
 def agent_visible_texts(definition: Mapping[str, Any]) -> list[tuple[str, str]]:
     """The free text of a definition that reaches the Agent, with a label each.
 
-    A secret must never occur inside any of it: the proxy treats a live value
-    found in an Agent-visible value as a leak.
+    No secret may occur in any of it: the proxy treats a live value found there as a leak.
     """
 
     texts = []

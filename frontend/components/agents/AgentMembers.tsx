@@ -525,9 +525,8 @@ function EditAgentMemberDialog({
 }
 
 /**
- * Owners and admins reach every Workflow through their role and have no
- * membership row, so they are read from the organisation. The Members tab
- * lists them and counts them.
+ * Owners and admins reach every Workflow through their role, with no membership row, so
+ * they are read from the organisation.
  */
 export function useAgentGlobalAccessMembers(organisationId: string | undefined, enabled: boolean) {
   const { data, loading } = useQuery(GetAgentGlobalAccessMembers, {

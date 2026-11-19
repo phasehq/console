@@ -10,9 +10,7 @@ const resolverName = (member: NonNullable<Resolver>) =>
   member.fullName || member.email || 'Unknown member'
 
 /**
- * The member who approved or denied a request: avatar and name, cut short
- * with an ellipsis so a long name cannot widen the row. `detailed` adds the
- * email beneath the name. A member since removed shows nothing.
+ * The member who approved or denied a request. A member since removed shows nothing.
  */
 export function AgentRequestResolver({
   member,

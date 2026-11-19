@@ -1,8 +1,6 @@
 /**
- * The typed action a change request can carry, as the Console reads it.
- *
- * Everything on a request is data an Agent wrote or the server derived from
- * it, so each reader here checks shapes instead of trusting them.
+ * The typed action a change request can carry. Everything on a request is data an Agent
+ * wrote or the server derived, so each reader checks shapes.
  */
 
 import { parseHttpDefinition, type HttpDefinition } from '@/utils/agents/httpDefinition'
@@ -369,9 +367,8 @@ export const editedContextAction = (
     : null
 
 /**
- * The action a reviewer approves after editing the request. It keeps the
- * type and the Connection the request named; only the name and definition
- * are the reviewer's.
+ * The action a reviewer approves after editing the request. The type and Connection stay as
+ * requested; only the name and definition are the reviewer's.
  */
 export const editedRequestAction = (
   original: unknown,

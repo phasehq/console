@@ -1,8 +1,6 @@
 /**
- * Provider presets: well-known services that pre-fill the custom HTTP form.
- *
- * A preset carries a complete definition without any secret. It pre-fills the
- * form only; the member still names the Connection and enters the secrets.
+ * Provider presets that pre-fill the custom HTTP form. A preset holds no secret; the
+ * member still names the Connection and enters the secrets.
  */
 
 import {
@@ -101,9 +99,8 @@ export const groupPresets = (
 const PLACEHOLDER_HOST = { match: 'exact' as const, value: 'host.example.com', port: 443 }
 
 /**
- * The form a preset pre-fills. The Connection name is the member's to choose,
- * so it starts from `name`. Returns null when the form cannot express the
- * preset exactly, in which case the member starts from scratch.
+ * The form a preset pre-fills. The name is the member's to choose, so it starts from `name`.
+ * Returns null when the form cannot express the preset exactly.
  */
 export const presetForm = (preset: ConnectionPreset, name: string): CustomConnectionForm | null => {
   const needsHost = preset.definition.hosts.length === 0

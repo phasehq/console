@@ -156,9 +156,7 @@ class AgentRuntimeAPIView(APIView):
 class ProviderRulesJSONRenderer(CamelCaseJSONRenderer):
     """Leaves the keys of a manifest's data maps as written.
 
-    Their keys are names from the provider (``cognito-identity``,
-    ``kms:CreateGrant``, ``publicAccessBlock``), not schema keys, and the
-    client looks them up exactly.
+    They are provider names, not schema keys, and the client looks them up exactly.
     """
 
     json_underscoreize = {

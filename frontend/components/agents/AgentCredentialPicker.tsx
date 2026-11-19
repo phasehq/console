@@ -13,10 +13,8 @@ export type AgentCredentialChoice = {
 }
 
 /**
- * The credentials drop-down of the sync dialogs (ProviderCredentialPicker),
- * for a list the caller already holds: a key icon per credential and Add
- * integration as the last row. With no credentials it says so, and the list
- * still opens so one can be added.
+ * The credentials drop-down of the sync dialogs, for a list the caller already holds.
+ * It stays open with no credentials so one can be added.
  */
 export function AgentCredentialPicker({
   id,

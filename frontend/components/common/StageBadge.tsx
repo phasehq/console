@@ -1,11 +1,8 @@
 import clsx from 'clsx'
 
 /**
- * Release-stage pill, e.g. Beta.
- *
- * Kept as a separate element rather than baked into a name string: navigation
- * labels are reused as tab labels, tooltips and aria-labels, and a suffix in
- * the string degrades all of them at once.
+ * Release-stage pill. Kept out of name strings, since labels are reused as tab labels,
+ * tooltips and aria-labels, and a suffix would degrade all of them.
  */
 export const StageBadge = ({ stage, className }: { stage: string; className?: string }) => (
   <span

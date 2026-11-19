@@ -56,9 +56,7 @@ def decrypt_credential_values(credentials, keys):
 def get_sealed_credential_keys(credential):
     """Names of the sealed fields that hold a value on this credential.
 
-    Sealed fields are every declared field not listed as non-sensitive. Their
-    values are write-only: they are decrypted here only to skip empty ones and
-    never leave the server.
+    Sealed fields are decrypted only to skip empty ones, and never leave the server.
     """
     provider = Providers.get_provider_config(credential.provider)
     sealed = [

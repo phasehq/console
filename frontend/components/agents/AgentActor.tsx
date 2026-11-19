@@ -11,9 +11,8 @@ export type SecretEventAgent = {
 }
 
 /**
- * An Agent as the actor of a secret event: its harness mark and name,
- * linking to the Agent. A deleted Agent keeps its name, struck through,
- * with no link, as a deleted service account does.
+ * An Agent as the actor of a secret event. A deleted Agent keeps its name, struck through
+ * and unlinked, as a deleted service account does.
  */
 export function AgentActor({
   agent,

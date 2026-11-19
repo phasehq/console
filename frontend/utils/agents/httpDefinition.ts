@@ -1,9 +1,7 @@
 /**
- * The definition of a custom HTTP Connection, as the backend stores it.
- *
- * The backend validator (`api/utils/agent_config/http_definition.py`) is the
- * authority; the limits and rules here mirror it so the form can say what is
- * wrong before a round trip. A definition never carries a secret.
+ * The definition of a custom HTTP Connection, as the backend stores it. The backend
+ * validator is the authority; the limits here mirror it so the form can report errors
+ * early. A definition never carries a secret.
  */
 
 export const HTTP_SERVICE_TYPE = 'http'
@@ -101,9 +99,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value)
 
 /**
- * Read a definition that arrived as untyped JSON. Returns null for anything
- * that is not shaped like one, so callers render a fallback instead of
- * throwing on data they did not write.
+ * Read a definition that arrived as untyped JSON. Returns null for anything not shaped like
+ * one, so callers never throw on data they did not write.
  */
 export const parseHttpDefinition = (value: unknown): HttpDefinition | null => {
   if (!isRecord(value)) return null
@@ -136,9 +133,8 @@ export const parseHttpDefinition = (value: unknown): HttpDefinition | null => {
 }
 
 /**
- * Host rules reduced to what a sealed value binds: match, value and port.
- * Paths are not bound. Deduplicated and sorted by (value, match, port), with
- * an unset port first. Mirrors `reduce_hosts` on the backend.
+ * Host rules reduced to what a sealed value binds: match, value and port. Paths are not
+ * bound. Mirrors `reduce_hosts` on the backend.
  */
 export const boundHosts = (
   hosts: readonly HttpHostRule[]

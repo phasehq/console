@@ -30,11 +30,8 @@ import {
 import { secretRequirement, secretsProblem } from '@/utils/agents/customConnectionSealing'
 
 /**
- * State for one custom Connection being created, edited or reviewed.
- *
- * `current` is the stored definition an edit starts from, or null when the
- * Connection does not exist yet. Secrets live here only until the submit that
- * seals them, and `reset` drops them.
+ * State for one custom Connection being created, edited or reviewed. Secrets live here
+ * only until the submit that seals them; `reset` drops them.
  */
 export function useCustomConnectionEditor(
   current: HttpDefinition | null,
@@ -122,9 +119,8 @@ const SectionLabel = ({ children }: { children: React.ReactNode }) => (
 export const STORED_SECRET_MASK = '•'.repeat(40)
 
 /**
- * A write-only input for one secret. It never holds the stored value: `stored`
- * shows masking dots in its place, and leaving the input empty keeps the
- * stored secret. What is typed stays in the caller's state.
+ * A write-only input for one secret. It never holds the stored value: an empty input keeps
+ * the stored secret.
  */
 export function SecretInput({
   id,
@@ -166,9 +162,8 @@ export function SecretInput({
 }
 
 /**
- * One write-only input per secret field of a definition, keyed by field name.
- * Used where the definition itself is not being edited. `stored` shows each
- * one as a stored value that an empty input keeps.
+ * One write-only input per secret field, keyed by field name. Used where the definition is
+ * not being edited.
  */
 export function SecretFieldInputs({
   idPrefix,
@@ -209,12 +204,7 @@ export function SecretFieldInputs({
 }
 
 /**
- * The custom Connection form: name, secret type, allowed hosts, where each
- * secret goes, advanced settings and a preview of a request.
- *
- * `askSecrets` shows the secret inputs. On an edit, `secretsStored` shows them
- * as stored values that an empty input keeps, `secretReason` says why every
- * secret is asked for again, and `secretHint` is a short note about them.
+ * The custom Connection form. On an edit, an empty secret input keeps the stored value.
  */
 export function CustomConnectionFields({
   idPrefix,

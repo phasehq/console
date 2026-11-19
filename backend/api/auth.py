@@ -448,9 +448,7 @@ class AgentAPIAuthentication(PhaseTokenAuthentication):
 class SecretsAPIAuthentication(PhaseTokenAuthentication):
     """The public secrets endpoints, which also take an Agent token.
 
-    An Agent token is authenticated here and nothing more: the view decides
-    each call from the token's Workflow grants of app Connections, and every
-    other endpoint keeps refusing it.
+    The token is authenticated here and nothing more. Every other endpoint keeps refusing it.
     """
 
     token_types = ("User", "ServiceAccount", "Agent")

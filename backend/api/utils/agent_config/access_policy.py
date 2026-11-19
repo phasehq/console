@@ -1,15 +1,7 @@
-"""Access policies on a Connection.
+"""Access policies on a Connection: allow, ask or block each call.
 
-A policy says which calls through a Connection are allowed, need a member's
-approval, or are blocked. It is stored on the Connection, apart from its
-definition, applies to every Workflow granted the Connection, and can only
-narrow what the Connection allows. A temporary allow is an approved exception
-to an ``ask`` and belongs to one Workflow's grant. This module validates a
-policy on every write and compiles the block the proxy enforces.
-
-The secret guard is not part of any stored policy: it is a managed entry added
-to every compiled policy, and no rule or temporary allow can name its class or
-an AWS action that mints credentials.
+The managed secret guard is added to every compiled policy, and no rule or
+temporary allow can remove it.
 """
 
 from __future__ import annotations
@@ -169,8 +161,7 @@ def same_operation(first: str, second: str) -> bool:
 def is_minting_operation(value: Any) -> bool:
     """Whether an operation mints credentials or assumes another identity.
 
-    The proxy enforces the manifests' secret guards; this only refuses to store
-    a rule or file an allow that could never apply.
+    The proxy enforces the secret guards; this refuses rules or allows that could never apply.
     """
 
     return isinstance(value, str) and value.lower() in _registry().minting_operations
@@ -219,9 +210,7 @@ def _target(value, location, operations):
 def validate_policy(policy: Any, *, operations: bool = False) -> dict[str, Any]:
     """Validate a policy and return it as it is stored.
 
-    An absent or empty policy, and one that allows by default and has no
-    rules, are all stored as ``{}``. ``operations`` is true for a Connection
-    whose rules may name an AWS action.
+    Absent, empty and allow-by-default-without-rules policies are all stored as ``{}``.
     """
 
     if policy is None or policy == {}:
@@ -387,11 +376,7 @@ def _match_covers(rule_match, allow_match):
 def allow_is_blocked(stored: Any, allow: Mapping[str, Any], *, operation_classes=None):
     """Whether a block rule covers everything an allow would let through.
 
-    A temporary allow never changes a block, so approving such an allow could
-    not help. ``operation_classes`` is given for a Connection whose calls are
-    classified by method and path, which the Console can do; an AWS call is
-    classified by the proxy alone, so an allow for an AWS action is held only
-    against the rules that name that action.
+    A temporary allow never changes a block. AWS actions are classified only by the proxy.
     """
 
     blocks = [

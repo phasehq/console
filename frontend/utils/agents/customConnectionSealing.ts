@@ -1,9 +1,6 @@
 /**
- * Sealing a custom Connection's secret in the browser.
- *
- * The value is stored once, sealed to the Connection's own public key, and
- * bound to the hosts it may be sent to. Nothing here logs or keeps a secret:
- * callers pass the values in and get ciphertext back.
+ * Seals a custom Connection's secret in the browser, bound to its hosts. Nothing here
+ * keeps a secret: callers pass values in and get ciphertext back.
  */
 
 import { encryptAsymmetric, randomFormattedKeyPair } from '@/utils/crypto/general'
@@ -18,11 +15,7 @@ export const SEALED_VALUE_VERSION = 1
 
 /**
  * The exact plaintext that gets sealed: `{"v":1,"hosts":[…],"fields":{…}}`.
- *
- * `hosts` is the definition's host list reduced to match, value and port,
- * deduplicated and sorted; paths are not bound. `fields` holds exactly the
- * definition's secret fields. The proxy decodes this strictly, so it carries
- * no other member.
+ * `hosts` binds host and port only. The proxy decodes it strictly.
  */
 export const sealedValuePlaintext = (
   definition: Pick<HttpDefinition, 'hosts' | 'fields'>,
@@ -114,10 +107,8 @@ const PLAIN_HTTP_REASON =
   'Plain HTTP was turned on, so the secret may now be sent unencrypted. Enter the secret again to confirm it.'
 
 /**
- * Whether a change to a definition needs the secret entered again. It does
- * when the bound hosts (match, value, port) or the set of secret fields
- * change, or plain HTTP is turned on; paths, injections, names, environment
- * names and turning plain HTTP off do not.
+ * Whether a definition change needs the secret entered again: when the bound hosts or the
+ * secret field set change, or plain HTTP is turned on.
  */
 export const secretRequirement = (
   current: RequirementShape | null | undefined,

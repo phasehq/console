@@ -1,7 +1,6 @@
 /**
- * How long access lasts: the choices a member sees, what each one sends,
- * and how an expiry is worded. The bounds mirror the backend's
- * (`agentSettings`: 300 seconds to 30 days).
+ * How long access lasts: the choices a member sees and how an expiry is worded. Bounds
+ * mirror the backend's (300 seconds to 30 days).
  */
 
 export const MIN_DURATION_SECONDS = 300
@@ -113,11 +112,8 @@ export const splitDuration = (seconds: number): { amount: number; unit: Duration
 }
 
 /**
- * What the control starts at: the duration the request asked for. One of the
- * standard choices when it is one, otherwise "As requested". A request with
- * no duration starts at the organisation default (`fallbackSeconds`): a
- * standard choice when it is one, otherwise a custom amount. With no default
- * either it starts at until revoked, or at one hour where that is refused.
+ * Starting value: the requested duration, or the organisation default when none was
+ * asked. Falls back to until revoked, or one hour where that is refused.
  */
 export const initialGrantDuration = (
   requestedSeconds: number | null | undefined,
@@ -160,9 +156,8 @@ export type GrantDurationResult = {
 }
 
 /**
- * What the approver's choice sends. `maximumSeconds` is the organisation
- * maximum, which only an allow request is held to: any other grant takes any
- * duration within the backend's bounds.
+ * What the approver's choice sends. `maximumSeconds` caps only allow requests; other grants
+ * take any duration within the backend's bounds.
  */
 export const grantDurationResult = (
   value: GrantDuration,

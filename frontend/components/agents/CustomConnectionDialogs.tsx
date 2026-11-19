@@ -248,10 +248,8 @@ const ALL_SECRETS_HINT =
   'The secrets of this Connection are stored together and cannot be read back. To change one, enter all of them.'
 
 /**
- * Edit a custom Connection: its name, its definition and its secret.
- *
- * The stored secret is never read back. Each secret input stands for the
- * stored value until something is typed in it; an untouched one keeps it.
+ * Edit a custom Connection's name, definition and secret. The stored secret is never
+ * read back; an untouched secret input keeps it.
  */
 export function EditCustomConnectionDialog({
   connection,

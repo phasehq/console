@@ -3,20 +3,8 @@
 import { useEffect } from 'react'
 
 /**
- * Own `document.title` from the client.
- *
- * Titles here are computed from client context (org, app and environment names
- * that the route segments alone do not carry), so they cannot come from Next
- * `metadata` exports. Next still renders each route's metadata inside its own
- * streamed MetadataBoundary, which commits *after* React's passive effects and
- * overwrites whatever we set — with the root layout's bare "Phase Console" for
- * any route that declares no metadata of its own. `htmlLimitedBots` in
- * next.config.js only makes the *initial document* block on metadata, which is
- * why a hard refresh looks right while every client-side navigation is
- * clobbered.
- *
- * So rather than set the title once and hope we ran last, re-assert it whenever
- * something else changes it.
+ * Set `document.title` from the client. Next's streamed metadata overwrites
+ * client-set titles on navigation, so the title is re-asserted on every change.
  */
 export function usePageTitle(title: string) {
   useEffect(() => {

@@ -2451,11 +2451,8 @@ class AgentConnection(models.Model):
     # it, for every Workflow granted this Connection. Empty means every call
     # the Connection allows is allowed. HTTP and app Connections only.
     policy = models.JSONField(default=dict, blank=True)
-    # App Connections ("phase_app") only: the SSE app whose secrets the
-    # Console serves to the Workflows granted this Connection, for the
-    # environments listed in AgentConnectionEnvironment. Apps are hard
-    # deleted and grants hold their Connection, so a deleted app leaves the
-    # Connection covering nothing rather than taking it with it.
+    # App Connections ("phase_app") only: the app whose secrets are served for the listed environments.
+    # Apps are hard deleted, so the Connection then covers nothing rather than being removed.
     app = models.ForeignKey(
         App,
         on_delete=models.SET_NULL,

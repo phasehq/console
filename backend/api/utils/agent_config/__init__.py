@@ -1,9 +1,7 @@
 """Declarative service configuration for AI Agents.
 
-The registry is the single source of truth for which third-party services an
-Agent Connection may target, how the proxy injects credentials into their
-traffic, and what environment the CLI prepares for the Agent process. It lives
-outside ``ee/`` because ``api.models`` validates Connections against it.
+The registry says which services a Connection may target and how the proxy injects
+credentials. It sits outside ``ee/`` because ``api.models`` validates against it.
 """
 
 from .http_definition import (

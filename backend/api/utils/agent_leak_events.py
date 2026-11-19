@@ -1,13 +1,7 @@
 """Which secrets a leak protection event names.
 
-The Phase CLI replaces a known secret value in a request to a model provider
-with a placeholder, ``ph:<type>:<id>``, and reports the placeholders it used in
-an Agent event of type ``leak_protection``. For an Agent login ``<id>`` is the
-id of the Phase secret, so the Console can say which app and environment that
-secret is in. For any other login the CLI sends ``ph:<type>`` without an id,
-since the id would be the secret's key name; such a placeholder names no
-secret here. A secret's key and value are never read here: only its id, its
-folder and the names of its environment and app.
+Only an Agent login sends a secret id in its placeholder, so only those name a secret.
+The key and value are never read here.
 """
 
 from collections import namedtuple
@@ -83,11 +77,9 @@ def preload_secret_locations(events, organisation_id):
 
 
 def placeholder_secrets(event, visibility):
-    """The event's placeholders that stand for a secret, as one member may see
-    them: ``[{placeholder, secret_id, path, app_id, app_name, environment_id,
-    environment_name}]``. A member who cannot access the app gets only
-    ``app_restricted``; one who cannot access the environment gets the app and
-    ``environment_restricted``.
+    """The placeholders in an event that stand for a secret, as one member may see them.
+
+    A member who cannot access the app gets ``app_restricted``; the environment, ``environment_restricted``.
     """
 
     placeholders = event_placeholders(event)

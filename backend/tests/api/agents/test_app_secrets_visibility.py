@@ -1,9 +1,7 @@
-"""A member sees an app's name, and each environment's, only when they can
-access it themselves.
+"""A member sees an app's name only when they can access it themselves.
 
-The Connection or request stays listed with the name withheld, so a reviewer
-knows something is there that they cannot act on. Approving and granting stay
-refused for them as before.
+The Connection or request stays listed with the name withheld. Approving and granting
+stay refused.
 """
 
 import json

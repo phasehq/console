@@ -1,10 +1,7 @@
-"""App secrets for Agent tokens: what a Workflow may use, and the decision
-the public secrets API takes on each call an Agent token makes there.
+"""App secrets for Agent tokens on the public secrets API.
 
-Errors here use the public API's shape, ``{"error": <sentence>, "code":
-<code>}``, plus a ready-to-send ``request`` where a member can open the way.
-Every call by an Agent token, allowed or not, also leaves one Agent event,
-which names the app, the environment and the class, never a key or a value.
+Every call an Agent token makes leaves one event naming the app, environment and class,
+never a key or value.
 """
 
 import json
@@ -148,10 +145,7 @@ def _refers_outside_readable(request, workflow, environment):
 def authorize_agent_secrets_call(request):
     """Decide a call to the public secrets API made with an Agent token.
 
-    The environment is named by ``app_id`` and ``env``. The call is allowed
-    when an active grant of an app Connection of the token's Workflow covers
-    that environment and its policy, with any temporary allow, lets the class
-    through. On success ``request.auth`` carries the environment.
+    Allowed only under an active grant covering the environment, whose policy lets the class through.
     """
 
     auth = request.auth

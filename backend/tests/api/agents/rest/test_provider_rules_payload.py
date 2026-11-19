@@ -1,7 +1,6 @@
-"""Each Connection in a session payload carries its provider's rules from the
-manifest: ``credentialEnvironment`` always, ``secretGuard`` and
-``actionClasses`` where the service has them. A custom HTTP Connection lists
-its own fields' variables and has neither of the others.
+"""Each Connection's payload carries its manifest's provider rules.
+
+Custom HTTP Connections list only their own fields' variables.
 """
 
 import json

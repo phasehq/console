@@ -1,7 +1,6 @@
 """Plan limits on Agents and on Workflows per Agent.
 
-Free Cloud: 3 Agents. Free self-hosted: unlimited Agents. Pro and Enterprise
-(Cloud or self-hosted): unlimited Agents. Workflows per Agent: Free 3, Pro 10,
+Free Cloud allows 3 Agents; other plans are unlimited. Workflows per Agent: Free 3, Pro 10,
 Enterprise unlimited.
 """
 

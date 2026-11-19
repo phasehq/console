@@ -1,10 +1,7 @@
 """Typed actions a request can carry.
 
-A request asks for one action. The handler registered for the action's type
-checks a request, describes it for the member reviewing it, and carries it out
-once approved. A handler owns its target: this registry is handed the request
-and the member acting on it, and knows nothing about what an action changes or
-who requested it.
+The registry only dispatches. Each action's handler owns its target, so this module
+knows nothing about what an action changes.
 """
 
 from collections.abc import Mapping
@@ -64,11 +61,7 @@ class ActionHandler:
     def validate(self, request, action, member):
         """Return the action in canonical form, or raise ``ActionError``.
 
-        Called for a request before its request is saved, and again for the
-        action a reviewer is about to approve, which they may have edited.
-        ``member`` is who the request is made by or on behalf of, then the
-        reviewer; it may be None. On an unsaved request the handler may set
-        the columns that point at its target.
+        Called again on the action a reviewer approves, since they may have edited it.
         """
 
         raise NotImplementedError
@@ -76,10 +69,8 @@ class ActionHandler:
     def describe(self, request, action, member, view=None):
         """Return what a reviewer needs to judge the action.
 
-        Always a ``title``. A handler adds the current and requested state of
-        its target where that makes sense. ``view`` is how the member reading
-        it may see the asset ``asset`` names (an ``AppView``); None describes
-        it in full, as a stored title or an audit entry needs.
+        Always includes a ``title``. ``view`` limits the asset names shown to the reader; None
+        gives the full description that a stored title or audit entry needs.
         """
 
         raise NotImplementedError
@@ -93,10 +84,8 @@ class ActionHandler:
     def apply(self, request, action, member, inputs):
         """Carry out an approved action and return an ``AppliedAction``.
 
-        Runs inside the approving transaction with the request row locked.
-        ``inputs`` is what the reviewer supplied beyond the action, such as
-        material sealed in their browser; it is never stored on the request.
-        The handler checks that ``member`` may change its target.
+        Runs in the approving transaction with the request row locked. The handler checks that
+        ``member`` may change its target. ``inputs`` is never stored on the request.
         """
 
         raise NotImplementedError

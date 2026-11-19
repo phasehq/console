@@ -60,11 +60,9 @@ def _keyed_digest(value: str) -> bytes:
 
 
 def mint_session_credential(idempotency_key=None):
-    """Mint a URL-safe >=256-bit session capability.
+    """Mint a URL-safe session capability of at least 256 bits.
 
-    When an idempotency key is supplied, the server deterministically derives
-    the same capability. This lets a proxy safely retry a lost POST /sessions
-    response without storing #1 in plaintext.
+    A retry with the same idempotency key derives the same capability, so the token is never stored in plaintext.
     """
     if idempotency_key:
         digest = _keyed_digest(f"agent-session:{idempotency_key}")

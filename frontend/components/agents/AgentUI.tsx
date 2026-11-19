@@ -105,13 +105,8 @@ export const agentRowActions = {
 }
 
 /**
- * The card surface of the Agents screens: the fill and thin outline of the
- * shared `Card`. The outline is a border, not an inset ring, so a table inside
- * the card cannot paint over it.
- *
- * `selected` marks a linked card; `attention`, one with work waiting on the
- * user. `opaque` gives the card a solid fill (the page background in dark
- * mode), for cards that lines are drawn behind and must not show through.
+ * The Agents card surface. The outline is a border, not an inset ring, so a table
+ * inside the card cannot paint over it.
  */
 export const agentCardSurface = (
   highlight: false | 'selected' | 'attention' = false,
@@ -404,12 +399,8 @@ export function AgentEmpty({
 }
 
 /**
- * Section header, rendered in every state so the page never jumps between
- * loading, restricted, empty and populated.
- *
- * `action` is the top-right primary action and belongs there only once there
- * is content to act on. While a section is empty the same action moves into
- * the centre of the empty state -- see `agentPrimaryAction`.
+ * Section header, rendered in every state so the page does not jump.
+ * The primary action sits top-right only with content; when empty it moves to the empty state.
  */
 export function AgentPageHeader({
   title,
@@ -432,11 +423,8 @@ export function AgentPageHeader({
 }
 
 /**
- * Place a section's primary action for the current state.
- *
- * Returns the node for whichever slot should own it, so a caller renders the
- * action once and cannot end up with a button in both the header and the
- * empty state.
+ * Return the node for the slot that owns a section's primary action. A caller renders
+ * it once, so it cannot appear in both the header and the empty state.
  */
 export function agentPrimaryAction(action: ReactNode, hasContent: boolean) {
   return {

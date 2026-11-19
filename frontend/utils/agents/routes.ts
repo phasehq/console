@@ -27,9 +27,8 @@ export function agentRequestSetupPath(team: string, requestId: string): string {
 }
 
 /**
- * Where a link to the old Agents Requests tab goes now. Approval URLs handed
- * to Agents still point at the old path, so the query string is kept whole,
- * repeated parameters included.
+ * Where a link to the old Agents Requests tab goes now. Old links keep their query string
+ * whole, repeated parameters included.
  */
 export function requestsRedirectPath(
   team: string,
