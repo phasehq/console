@@ -182,6 +182,26 @@ const EnvValueCellBase = ({
     wasNewRef.current = isNew
   }, [isNew, isConfig, isBoolean, envRevealed])
 
+  // A value saved elsewhere that reaches a cell with none is masked, as on a fresh load: the cell
+  // was open only because it was empty. While an unsaved edit covers it, that waits for the edit.
+  const savedValue = serverSecret?.value ?? ''
+  const savedId = serverSecret?.id
+  const prevSavedValueRef = useRef(savedValue)
+  const prevValueRef = useRef(value)
+  const arrivedUnseenRef = useRef(false)
+  useEffect(() => {
+    const typedHere = prevValueRef.current === value
+    prevValueRef.current = value
+    if (prevSavedValueRef.current === '' && savedValue !== '') arrivedUnseenRef.current = true
+    prevSavedValueRef.current = savedValue
+    if (!arrivedUnseenRef.current || value !== savedValue) return
+    arrivedUnseenRef.current = false
+    if (isSealedAndSaved) return
+    setIsRevealed(isConfig || isBoolean || envRevealed)
+    // Shown at once in a revealed env: that is a read, unless it is what was typed in this cell
+    if (envRevealed && !typedHere && savedId) logReads([savedId])
+  }, [savedValue, savedId, value, isConfig, isBoolean, envRevealed, isSealedAndSaved, logReads])
+
   // Type toggles: config reveals, anything else masks (booleans stay revealed)
   const prevTypeRef = useRef(secret?.type)
   useEffect(() => {
