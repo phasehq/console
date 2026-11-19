@@ -578,6 +578,19 @@ class UpdateProviderCredentials(graphene.Mutation):
                 }
             _reject_undeclared_credential_keys(credential.provider, credentials)
 
+            # An optional value left out keeps what is stored, so replacing only
+            # the secret cannot move the endpoint. A blank one clears it.
+            provider_config = Providers.get_provider_config(credential.provider)
+            credentials = {
+                **{
+                    key: credential.credentials[key]
+                    for key in provider_config["optional_credentials"]
+                    if key in provider_config["non_sensitive_credentials"]
+                    and key in credential.credentials
+                },
+                **credentials,
+            }
+
             # Sealed values never reach the client, so omitting one keeps the
             # stored value. Moving an endpoint requires re-entering them, or an
             # editor could point a stored secret at a server they control.
