@@ -437,6 +437,8 @@ export const AppSecrets = ({
   const upsellDialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const [upsellPlan, setUpsellPlan] = useState(ApiOrganisationPlanChoices.En)
   const [refWarnings, setRefWarnings] = useState<ReferenceValidationError[]>([])
+  // Tells whoever waits on a deploy held at that warning how it was answered
+  const refDecisionRef = useRef<((deployed: boolean) => void) | null>(null)
 
   // Staged deletes are flags on the client copy; this is the list a deploy sends
   const secretsToDelete = useMemo(
@@ -1868,16 +1870,27 @@ export const AppSecrets = ({
     if (refErrors.length > 0) {
       setRefWarnings(refErrors)
       refWarningDialogRef.current?.openModal()
-      return false
+      // Deploy and leave carries on from here once the warning is answered with a deploy
+      refDecisionRef.current?.(false)
+      return new Promise<boolean>((resolve) => (refDecisionRef.current = resolve))
     }
 
     await deployAndToast()
   }
 
   const handleSaveWithBrokenRefs = async () => {
+    // Taken before the dialog closes, which answers anyone still waiting with "turned back"
+    const decided = refDecisionRef.current
+    refDecisionRef.current = null
     refWarningDialogRef.current?.closeModal()
     setRefWarnings([])
-    await deployAndToast()
+    try {
+      await deployAndToast()
+      decided?.(true)
+    } catch (error) {
+      decided?.(false)
+      throw error
+    }
   }
 
   // Flattened views of the app secrets, used for the deploy preview
@@ -2693,6 +2706,10 @@ export const AppSecrets = ({
           ref={refWarningDialogRef}
           warnings={refWarnings}
           onSaveAnyway={handleSaveWithBrokenRefs}
+          onClose={() => {
+            refDecisionRef.current?.(false)
+            refDecisionRef.current = null
+          }}
         />
 
         {(hasContent || (loadingGrid && skeletonShape.rows !== '')) && (
