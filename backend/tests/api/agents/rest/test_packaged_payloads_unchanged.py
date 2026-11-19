@@ -232,6 +232,9 @@ def _without_later_additions(text):
     assert body.pop("expiredConnections") == []
     # App Connections are listed apart; this Workflow has none.
     assert body.pop("appConnections") == []
+    # The session's own ids; test_session_identity checks their values.
+    assert set(body.pop("organisation")) == {"id"}
+    assert body.pop("principal")["type"] in {"agent", "user"}
     for connection in body["connections"]:
         if connection["protocol"] == "http":
             assert connection.pop("policy") == _UNRESTRICTED_POLICY
