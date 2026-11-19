@@ -281,15 +281,27 @@ const advancedRule = (rule: AdvancedRuleDraft): PolicyRule | null => {
 }
 
 /**
- * The policy a draft stands for, or null when it is the default: allow, no
- * rules. A class row that equals "Everything else" needs no rule.
+ * The class rows that need a rule. A row equal to "Everything else" still needs one
+ * when a path or action rule is weaker: the proxy applies the strongest matching
+ * rule, so without it that weaker rule would decide the class's calls.
  */
+const classRuleNames = (draft: PolicyDraft): OperationClass[] => {
+  const weakest = [...draft.advanced, ...draft.operations].reduce<number | null>(
+    (lowest, rule) =>
+      lowest === null ? STRENGTH[rule.effect] : Math.min(lowest, STRENGTH[rule.effect]),
+    null
+  )
+  return OPERATION_CLASSES.filter(
+    (name) =>
+      draft.classes[name] !== draft.default ||
+      (weakest !== null && weakest < STRENGTH[draft.classes[name]])
+  )
+}
+
+/** The policy a draft stands for, or null when it is the default: allow, no rules. */
 export const policyFromDraft = (draft: PolicyDraft): AccessPolicy | null => {
   const rules: PolicyRule[] = []
-  for (const name of OPERATION_CLASSES) {
-    if (draft.classes[name] !== draft.default)
-      rules.push({ class: name, effect: draft.classes[name] })
-  }
+  for (const name of classRuleNames(draft)) rules.push({ class: name, effect: draft.classes[name] })
   for (const rule of draft.advanced) {
     const built = advancedRule(rule)
     if (built) rules.push(built)
@@ -306,7 +318,7 @@ const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/
 
 /** Why the draft cannot be saved, or ''. */
 export const policyProblem = (draft: PolicyDraft): string => {
-  const classRules = OPERATION_CLASSES.filter((name) => draft.classes[name] !== draft.default)
+  const classRules = classRuleNames(draft)
   if (classRules.length + draft.advanced.length + draft.operations.length > POLICY_LIMITS.rules)
     return `Use at most ${POLICY_LIMITS.rules} rules.`
   for (const [index, rule] of draft.advanced.entries()) {
@@ -343,8 +355,10 @@ export const policyPayload = (draft: PolicyDraft): AccessPolicy | null => policy
  */
 export const policySummary = (value: unknown): string => {
   const policy = readPolicy(value)
-  const blocked = policy.rules.filter((rule) => rule.effect === 'block').length
-  const asked = policy.rules.filter((rule) => rule.effect === 'ask').length
+  // A class rule equal to the default is counted by "the rest".
+  const rules = policy.rules.filter((rule) => !('class' in rule) || rule.effect !== policy.default)
+  const blocked = rules.filter((rule) => rule.effect === 'block').length
+  const asked = rules.filter((rule) => rule.effect === 'ask').length
   const parts: string[] = []
   if (blocked > 0) parts.push(`${blocked} blocked`)
   if (asked > 0) parts.push(`${asked} ask`)
