@@ -7,6 +7,7 @@ import re
 from uuid import uuid4
 
 from django.db import transaction
+from django.db.models import F, Q
 from django.utils import timezone
 
 from api.models import AgentRequest, AgentWorkflowGrant
@@ -59,6 +60,7 @@ from .agent_connections import (
     _members,
     _point_at,
     _references,
+    _refuse_added_environments,
     _refuse_credential_text,
     _require,
 )
@@ -341,6 +343,7 @@ class AllowCall(ActionHandler):
             from .agent_app_access import merge_temporary_allows, write_expiry
 
             classes = _allow_classes(action["allow"])
+            _refuse_added_environments(request, connection)
             _require_app_release(member, connection, classes)
             # One entry per class, all ending together and never after the
             # grant.
@@ -446,6 +449,21 @@ class RenewAccess(ActionHandler):
                 "The Agent Connection changed; start a new request"
             ) from exc
         renewed = self._target(request, action["connectionId"])
+        # A grant a member took away after this was asked stays away: only a
+        # request made since then can give it back.
+        if (
+            AgentWorkflowGrant.objects.filter(
+                workflow_id=request.workflow_id,
+                connection_id=connection.id,
+                deleted_at__gt=request.created_at,
+            )
+            .filter(Q(expires_at__isnull=True) | Q(deleted_at__lt=F("expires_at")))
+            .exists()
+        ):
+            raise ActionError(
+                "A member removed this access after this request was made; "
+                "start a new request"
+            )
         if is_app_service(connection.service_type):
             # Renewing gives back what the policy allows and any temporary
             # allow still running.
