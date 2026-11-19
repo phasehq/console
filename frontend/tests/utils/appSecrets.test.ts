@@ -89,6 +89,21 @@ describe('buildAppSecretRows', () => {
     expect(rows[0].envs.map((e) => e.secret?.id ?? null)).toEqual(['d1', 's1'])
     expect(rows[1].envs.map((e) => e.secret?.id ?? null)).toEqual(['d2', null])
   })
+
+  it('keeps a key that ends in #2 apart from the second copy of a duplicated key', () => {
+    const rows = buildAppSecretRows('app', [
+      {
+        env: dev,
+        secrets: [secret('d1', 'A', '1'), secret('d2', 'A', '2'), secret('d3', 'A#2', '3')],
+      },
+    ])
+
+    expect(rows.map((r) => [r.key, r.envs[0].secret?.id])).toEqual([
+      ['A', 'd1'],
+      ['A', 'd2'],
+      ['A#2', 'd3'],
+    ])
+  })
 })
 
 describe('buildAppSecretRows with folders', () => {
@@ -106,6 +121,24 @@ describe('buildAppSecretRows with folders', () => {
       ['app:/backend:A', '/backend'],
     ])
     expect(rows[1].envs.map((e) => e.secret?.id ?? null)).toEqual(['d2', 's1'])
+  })
+
+  it('keeps a key with a colon apart from a key in a folder whose name has one', () => {
+    const rows = buildAppSecretRows('app', [
+      {
+        env: dev,
+        secrets: [
+          secret('d1', 'Y:Z', '1', { path: '/x' }),
+          secret('d2', 'Z', '2', { path: '/x:Y' }),
+        ],
+      },
+      { env: staging, secrets: [secret('s1', 'Z', '3', { path: '/x:Y' })] },
+    ])
+
+    expect(rows.map((r) => [r.key, r.path, r.envs.map((e) => e.secret?.id ?? null)])).toEqual([
+      ['Y:Z', '/x', ['d1', null]],
+      ['Z', '/x:Y', ['d2', 's1']],
+    ])
   })
 })
 

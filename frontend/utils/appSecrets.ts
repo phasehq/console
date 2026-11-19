@@ -565,6 +565,9 @@ export const carryRowKeys = (
   return carried
 }
 
+// `:` and `#` shape a row id, so a folder or key that holds one is written escaped
+const idPart = (part: string) => part.replace(/[%:#]/g, encodeURIComponent)
+
 /**
  * Builds one row per (folder path, key) across environments. A key that
  * appears more than once at a path in one env gets extra rows (`<id>#2`, ...)
@@ -583,7 +586,7 @@ export const buildAppSecretRows = (
       const slot = `${path}\u0000${secret.key}`
       const n = (occurrences.get(slot) ?? 0) + 1
       occurrences.set(slot, n)
-      const base = `${appId}:${path}:${secret.key}`
+      const base = `${appId}:${idPart(path)}:${idPart(secret.key)}`
       const id = n === 1 ? base : `${base}#${n}`
 
       let row = rows.get(id)
