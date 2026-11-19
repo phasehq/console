@@ -20,10 +20,10 @@ import {
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
-import { Input } from '@/components/common/Input'
 import { Alert } from '@/components/common/Alert'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
 import { CoolifyIcon } from './CoolifyIcon'
+import { SyncPathInput } from '@/components/syncing/SyncPathInput'
 
 export const CreateCoolifySync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -175,7 +175,7 @@ export const CreateCoolifySync = (props: { appId: string; closeModal: () => void
                 </div>
               </RadioGroup>
 
-              <Input value={path} setValue={setPath} label="Path" />
+              <SyncPathInput appId={appId} env={phaseEnv} path={path} setPath={setPath} />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-8">

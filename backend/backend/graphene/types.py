@@ -518,6 +518,11 @@ class SecretFolderType(DjangoObjectType):
         )
 
 
+class SecretPathCountType(ObjectType):
+    path = graphene.String(required=True)
+    secret_count = graphene.Int(required=True)
+
+
 class SecretEventType(DjangoObjectType):
     actor_deleted = graphene.Boolean()
 
