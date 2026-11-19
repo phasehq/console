@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from copy import deepcopy
-from fnmatch import fnmatchcase
+from fnmatch import fnmatchcase, translate
+from functools import lru_cache
 import re
 from typing import Any
 
@@ -54,6 +55,9 @@ _METHOD_CLASSES = {
 _CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _PERCENT_ESCAPE = re.compile(r"%[0-9A-Fa-f]{2}")
 _GLOB_CHARACTERS = frozenset("*?[")
+# A glob character in brackets stands for itself, which is how an exact path
+# that holds one is written.
+_BRACKETED_GLOB_CHARACTER = re.compile(r"\[([*?\[])\]")
 
 
 class PolicyError(ConfigRegistryError):
@@ -384,6 +388,42 @@ def glob_match(pattern: str, value: str) -> bool:
     return fnmatchcase(value, pattern)
 
 
+@lru_cache(maxsize=256)
+def _folded_glob(pattern):
+    return re.compile(translate(pattern), re.IGNORECASE)
+
+
+def _without_path_parameters(value):
+    segment = value.rfind("/") + 1
+    parameters = value.find(";", segment)
+    return value if parameters < 0 else value[:parameters]
+
+
+def loose_glob_match(pattern: str, value: str) -> bool:
+    """Match a path the way the proxy matches a rule that stops a call.
+
+    Letter case, one trailing slash and a ";params" tail on the last segment
+    are also left out, so a respelled path does not get past the rule.
+    """
+
+    if glob_match(pattern, value):
+        return True
+    if len(pattern) > 1:
+        pattern = pattern.removesuffix("/")
+    value = _without_path_parameters(value)
+    if len(value) > 1 and value.endswith("/"):
+        value = _without_path_parameters(value[:-1])
+    return _folded_glob(pattern).match(value) is not None
+
+
+def _literal_path(pattern):
+    """The one path a glob names, or None when it has a wildcard."""
+
+    if _GLOB_CHARACTERS & set(_BRACKETED_GLOB_CHARACTER.sub("", pattern)):
+        return None
+    return _BRACKETED_GLOB_CHARACTER.sub(r"\1", pattern)
+
+
 def _match_applies(match, method, path):
     methods = match.get("methods")
     if methods is not None and method not in methods:
@@ -401,32 +441,57 @@ def classify_http_call(operation_classes: Any, method: str, path: str) -> str:
     return _METHOD_CLASSES.get(method, "update")
 
 
+def _loose_pattern(pattern):
+    """A path glob without what a rule that stops a call leaves out of it."""
+
+    if len(pattern) > 1:
+        pattern = pattern.removesuffix("/")
+    return pattern.casefold()
+
+
+def _path_covers(rule_path, allow_path):
+    """Whether a block rule's path takes in every path an allow's does."""
+
+    literal = _literal_path(allow_path)
+    if literal is not None:
+        return loose_glob_match(rule_path, literal)
+    # Two patterns. One covers itself; another is known to be at least as wide
+    # only when "*" is its sole wildcard, since "*" takes in whatever the
+    # allow's own wildcards stand for and "?" or a set might not.
+    if _loose_pattern(rule_path) == _loose_pattern(allow_path):
+        return True
+    return not {"?", "["} & set(rule_path) and loose_glob_match(rule_path, allow_path)
+
+
 def _match_covers(rule_match, allow_match):
-    """Whether every call ``allow_match`` describes also fits ``rule_match``."""
+    """Whether a block rule's match takes in every call ``allow_match`` describes."""
 
     rule_methods = rule_match.get("methods")
     if rule_methods is not None:
         allowed_methods = allow_match.get("methods")
         if allowed_methods is None or not set(allowed_methods) <= set(rule_methods):
             return False
-    if "path" in rule_match:
-        # The allow's own text stands in for the calls it covers: exact for a
-        # literal path, and a pattern is covered only by one at least as wide.
-        return "path" in allow_match and glob_match(
-            rule_match["path"], allow_match["path"]
-        )
-    return True
+    if "path" not in rule_match:
+        return True
+    return "path" in allow_match and _path_covers(
+        rule_match["path"], allow_match["path"]
+    )
 
 
-def allow_is_blocked(stored: Any, allow: Mapping[str, Any], *, operation_classes=None):
-    """Whether a block rule covers everything an allow would let through.
+def _match_classes(match, operation_classes):
+    """The classes of the calls a match names, or None when the Console cannot
+    tell: it needs methods, one exact path and a service it classifies."""
 
-    A temporary allow never changes a block. AWS actions are classified only by the proxy.
-    """
+    methods = match.get("methods")
+    path = _literal_path(match["path"]) if "path" in match else None
+    if operation_classes is None or not methods or path is None:
+        return None
+    return {classify_http_call(operation_classes, method, path) for method in methods}
 
-    blocks = [
-        rule for rule in full_policy(stored)["rules"] if rule["effect"] == "block"
-    ]
+
+def _blocks_cover(blocks, allow, operation_classes):
+    """Whether block rules take in everything an allow would let through."""
+
     blocked_classes = {rule["class"] for rule in blocks if "class" in rule}
     if "class" in allow:
         return allow["class"] in blocked_classes
@@ -439,16 +504,71 @@ def allow_is_blocked(stored: Any, allow: Mapping[str, Any], *, operation_classes
     match = allow["match"]
     if any("match" in rule and _match_covers(rule["match"], match) for rule in blocks):
         return True
-    methods = match.get("methods")
-    path = match.get("path")
+    classes = _match_classes(match, operation_classes)
+    return classes is not None and classes <= blocked_classes
+
+
+def _matches_overlap(rule, allow_match):
+    """Whether one call could fit both a rule's match and an allow's."""
+
+    rule_match = rule["match"]
+    methods, allowed_methods = rule_match.get("methods"), allow_match.get("methods")
     if (
-        operation_classes is None
-        or not methods
-        or path is None
-        or _GLOB_CHARACTERS & set(path)
+        methods is not None
+        and allowed_methods is not None
+        and not set(methods) & set(allowed_methods)
     ):
         return False
-    return all(
-        classify_http_call(operation_classes, method, path) in blocked_classes
-        for method in methods
+    if "path" not in rule_match or "path" not in allow_match:
+        return True
+    literal = _literal_path(allow_match["path"])
+    if literal is None:
+        return True
+    # The proxy reads an allow rule's path exactly and an ask rule's loosely.
+    compare = glob_match if rule["effect"] == "allow" else loose_glob_match
+    return compare(rule_match["path"], literal)
+
+
+def _may_apply(rule, allow, operation_classes):
+    """Whether a rule could answer some call an allow covers.
+
+    Only what the Console can tell apart is ruled out.
+    """
+
+    if "operation" in rule:
+        return "operation" not in allow or same_operation(
+            rule["operation"], allow["operation"]
+        )
+    if "operation" in allow:
+        return True
+    if "class" in rule:
+        classes = (
+            {allow["class"]}
+            if "class" in allow
+            else _match_classes(allow["match"], operation_classes)
+        )
+        return classes is None or rule["class"] in classes
+    if "class" in allow:
+        classes = _match_classes(rule["match"], operation_classes)
+        return classes is None or allow["class"] in classes
+    return _matches_overlap(rule, allow["match"])
+
+
+def allow_is_blocked(stored: Any, allow: Mapping[str, Any], *, operation_classes=None):
+    """Whether the policy answers every call an allow covers with a block.
+
+    A temporary allow turns an ask into an allow and never changes a block.
+    AWS actions are classified only by the proxy.
+    """
+
+    policy = full_policy(stored)
+    rules = policy["rules"]
+    blocks = [rule for rule in rules if rule["effect"] == "block"]
+    if _blocks_cover(blocks, allow, operation_classes):
+        return True
+    # A call no rule answers gets the default, so a default of block stops
+    # whatever no allow or ask rule could apply to.
+    return policy["default"] == "block" and not any(
+        rule["effect"] != "block" and _may_apply(rule, allow, operation_classes)
+        for rule in rules
     )
