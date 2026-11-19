@@ -42,6 +42,11 @@
         "method": "POST",
         "pattern": "/app/installations/*/access_tokens",
         "operation": "GitHub App installation access token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/app/installations/*/access_tokens",
+        "operation": "GitHub App installation access token"
       }
     ]
   },

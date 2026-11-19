@@ -1,7 +1,7 @@
 """Access policies on a Connection: allow, ask or block each call.
 
-The managed secret guard is added to every compiled policy, and no rule or
-temporary allow can remove it.
+The managed secret guard is added to the compiled policy of a service whose
+manifest gives it rules, and no rule or temporary allow can remove it.
 """
 
 from __future__ import annotations
@@ -59,9 +59,18 @@ class PolicyError(ConfigRegistryError):
     """An access policy, operation class list or allow is invalid."""
 
 
-def managed_policies() -> list[dict[str, Any]]:
-    """The always-on entries every HTTP grant carries; none can be edited."""
+def managed_policies(service_type: Any = None) -> list[dict[str, Any]]:
+    """The always-on entries a Connection carries; none can be edited.
 
+    Given its service, the secret guard is listed only when that service's
+    manifest has guard rules.
+    """
+
+    if (
+        service_type is not None
+        and service_type not in _registry().guarded_service_types
+    ):
+        return []
     return [deepcopy(_SECRET_GUARD)]
 
 
@@ -313,8 +322,13 @@ def live_temporary_allows(entries: Any, now) -> list[dict[str, Any]]:
     return live
 
 
-def compile_policy(stored: Any, temporary_allows: Any, now) -> dict[str, Any]:
-    """The policy block of a session payload, in the runtime API's spelling."""
+def compile_policy(
+    stored: Any, temporary_allows: Any, now, *, service_type: Any = None
+) -> dict[str, Any]:
+    """The policy block of a session payload, in the runtime API's spelling.
+
+    ``service_type`` decides the managed entries, as it does for ``managed_policies``.
+    """
 
     compiled = full_policy(stored)
     compiled["temporary_allows"] = [
@@ -329,7 +343,7 @@ def compile_policy(stored: Any, temporary_allows: Any, now) -> dict[str, Any]:
         }
         for entry in live_temporary_allows(temporary_allows, now)
     ]
-    compiled["managed"] = managed_policies()
+    compiled["managed"] = managed_policies(service_type)
     return compiled
 
 

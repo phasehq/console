@@ -28,6 +28,35 @@
   "credential_environment": [
     "CLOUDFLARE_API_TOKEN"
   ],
+  "secret_guard": {
+    "paths": [
+      {
+        "method": "POST",
+        "pattern": "/client/v4/user/tokens",
+        "operation": "Cloudflare user API token"
+      },
+      {
+        "method": "PUT",
+        "pattern": "/client/v4/user/tokens/*/value",
+        "operation": "Cloudflare user API token roll"
+      },
+      {
+        "method": "POST",
+        "pattern": "/client/v4/accounts/*/tokens",
+        "operation": "Cloudflare account API token"
+      },
+      {
+        "method": "PUT",
+        "pattern": "/client/v4/accounts/*/tokens/*/value",
+        "operation": "Cloudflare account API token roll"
+      },
+      {
+        "method": "POST",
+        "pattern": "/client/v4/accounts/*/r2/temp-access-credentials",
+        "operation": "Cloudflare R2 temporary access credentials"
+      }
+    ]
+  },
   "credential_fields": {
     "token": "access_token",
     "account_id": "account_id"

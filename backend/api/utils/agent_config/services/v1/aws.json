@@ -88,6 +88,9 @@
       "elasticmapreduce": [
         "GetClusterSessionCredentials"
       ],
+      "gamelift": [
+        "GetComputeAuthToken"
+      ],
       "iam": [
         "CreateAccessKey",
         "CreateLoginProfile",
@@ -182,6 +185,14 @@
       },
       {
         "method": "POST",
+        "pattern": "/workspaces/*/serviceaccounts/*/tokens",
+        "operation": "grafana:CreateWorkspaceServiceAccountToken",
+        "services": [
+          "grafana"
+        ]
+      },
+      {
+        "method": "POST",
         "pattern": "/virtualclusters/*/endpoints/*/credentials",
         "operation": "emr-containers:GetManagedEndpointSessionCredentials",
         "services": [
@@ -262,6 +273,7 @@
       "ec2:ReplaceIamInstanceProfileAssociation": "admin",
       "ecr:DeleteLifecyclePolicy": "delete",
       "ecr:PutLifecyclePolicy": "update",
+      "gamelift:GetComputeAuthToken": "admin",
       "kms:CreateGrant": "admin",
       "kms:RetireGrant": "admin",
       "kms:RevokeGrant": "admin",
