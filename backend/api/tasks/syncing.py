@@ -121,7 +121,7 @@ def _sync_is_locked(env_sync):
 
 def _pause_if_locked(env_sync, sync_event=None):
     """Syncs pause while the org, the app or the environment is pending
-    deletion. Restoring it re-triggers every sync left cancelled here."""
+    deletion. Restoring it runs them again."""
     locked = _sync_is_locked(env_sync)
     if locked is None:
         return False

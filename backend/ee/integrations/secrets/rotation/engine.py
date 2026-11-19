@@ -200,7 +200,9 @@ def _cancel_job(job_id: Optional[str]) -> None:
         logger.debug("Could not cancel scheduled job %s", job_id, exc_info=True)
 
 
-def _schedule_next_rotation(rotating_secret, *, delay: Optional[timedelta] = None):
+def _schedule_next_rotation(
+    rotating_secret, *, delay: Optional[timedelta] = None, trigger_syncs: bool = True
+):
     _cancel_job(rotating_secret.rotation_job_id)
     # bool(timedelta(0)) is False — explicit None check so a zero-remaining
     # resume fires immediately instead of waiting a full interval.
@@ -209,7 +211,21 @@ def _schedule_next_rotation(rotating_secret, *, delay: Optional[timedelta] = Non
     new_job = _scheduler().enqueue_at(when, perform_rotation, rotating_secret.id)
     rotating_secret.rotation_job_id = new_job.id
     rotating_secret.next_rotation_at = when
-    rotating_secret.save(update_fields=["rotation_job_id", "next_rotation_at", "updated_at"])
+    if trigger_syncs:
+        rotating_secret.save(
+            update_fields=["rotation_job_id", "next_rotation_at", "updated_at"]
+        )
+    else:
+        # update(), not save(): RotatingSecret.save() saves the environment,
+        # which re-runs its syncs and queues a scan of the organisation's
+        # references.
+        RotatingSecret = apps.get_model("api", "RotatingSecret")
+        rotating_secret.updated_at = timezone.now()
+        RotatingSecret.objects.filter(pk=rotating_secret.pk).update(
+            rotation_job_id=rotating_secret.rotation_job_id,
+            next_rotation_at=rotating_secret.next_rotation_at,
+            updated_at=rotating_secret.updated_at,
+        )
 
 
 def cancel_rotation_jobs(rotating_secret) -> None:
@@ -844,10 +860,12 @@ def resume(rotating_secret, *, actor_kwargs: Optional[dict] = None):
     record_event(rotating_secret, "resumed", **(actor_kwargs or {}))
 
 
-def reschedule(rotating_secret):
+def reschedule(rotating_secret, *, trigger_syncs: bool = True):
     """Re-arm the timer at the stored next rotation, or now if that has
     passed (e.g. rotations skipped while the org was pending deletion) or
-    the secret has no active credential (a blocked org purge revoked it)."""
+    the secret has no active credential (a blocked org purge revoked it).
+    `trigger_syncs=False` leaves the environment's syncs alone: for a caller
+    that re-arms many secrets and runs the syncs once itself."""
     RotatingSecretCredential = apps.get_model("api", "RotatingSecretCredential")
 
     delay = None
@@ -857,4 +875,4 @@ def reschedule(rotating_secret):
         status=RotatingSecretCredential.ACTIVE
     ).exists():
         delay = timedelta(0)
-    _schedule_next_rotation(rotating_secret, delay=delay)
+    _schedule_next_rotation(rotating_secret, delay=delay, trigger_syncs=trigger_syncs)

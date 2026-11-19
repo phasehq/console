@@ -13,7 +13,6 @@ purge has started on what can't be undone.
 """
 
 import logging
-import time
 from datetime import timedelta
 
 import django_rq
@@ -50,9 +49,6 @@ logger = logging.getLogger(__name__)
 SWEEP_JOB_ID = "resource-deletion-sweep"
 SWEEP_INTERVAL_SECONDS = 60 * 60
 PURGE_JOB_TIMEOUT = 6 * 60 * 60
-# The restore job is queued inside the restore's transaction, so it can start
-# before that commits. It waits this long for the commit.
-RESTORE_COMMIT_WAIT_SECONDS = 5
 # How often one run revokes what was minted while it ran, before leaving the
 # rest to the next sweep.
 FINAL_DELETE_ATTEMPTS = 2
@@ -84,23 +80,22 @@ def enqueue_environment_restored(environment_id):
     )
 
 
-def _once_live(queryset):
-    """The restored row, once the restore has committed. None if it is not
-    live after the wait: the restore was rolled back, or it was deleted
-    again."""
-    deadline = time.monotonic() + RESTORE_COMMIT_WAIT_SECONDS
-    while True:
-        resource = queryset.first()
-        if resource is not None or time.monotonic() >= deadline:
-            return resource
-        time.sleep(0.25)
+def _as_restored(queryset):
+    """The row as the restore left it, or None if it is gone. The job is
+    queued inside the restore's transaction and can start before that ends.
+    The restore holds the row locked until then, so reading it with a lock
+    waits for it, however long it takes."""
+    with transaction.atomic():
+        # no_key: waits for the restore, not for requests adding rows below.
+        return queryset.select_for_update(no_key=True, of=("self",)).first()
 
 
 def handle_app_restored(app_id):
     App = apps.get_model("api", "App")
-    app = _once_live(App.objects.filter(id=app_id))
-    if app is None:
-        return
+    # all_objects: until the restore commits, the app is still hidden.
+    app = _as_restored(App.all_objects.filter(id=app_id))
+    if app is None or app.deleted_at is not None:
+        return  # the restore was rolled back, or it was deleted again
 
     _resume({"app": app})
     _provision_team_keys(app)
@@ -109,11 +104,15 @@ def handle_app_restored(app_id):
 
 def handle_environment_restored(environment_id):
     Environment = apps.get_model("api", "Environment")
-    environment = _once_live(
-        Environment.objects.filter(id=environment_id).select_related("app")
+    environment = _as_restored(
+        Environment.all_objects.filter(id=environment_id).select_related("app")
     )
-    if environment is None:
-        return
+    if (
+        environment is None
+        or environment.deleted_at is not None
+        or environment.app.deleted_at is not None
+    ):
+        return  # the restore was rolled back, or it was deleted again
 
     _resume({"id": environment.id})
     _provision_team_keys(environment.app)
@@ -121,8 +120,8 @@ def handle_environment_restored(environment_id):
 
 
 def _resume(environments):
-    """Re-arm the rotations and re-run the syncs skipped while locked. Paused
-    secrets stay paused. An environment still pending deletion stays locked."""
+    """Re-arm the rotations and re-run the syncs. Paused secrets and syncs
+    stay paused. An environment still pending deletion stays locked."""
     RotatingSecret = apps.get_model("api", "RotatingSecret")
     EnvironmentSync = apps.get_model("api", "EnvironmentSync")
     from api.tasks.syncing import trigger_sync_tasks
@@ -137,11 +136,13 @@ def _resume(environments):
     }
 
     for rotating_secret in RotatingSecret.objects.filter(**scope, **unlocked):
-        reschedule(rotating_secret)
+        # The syncs run once, below: not once for each secret re-armed.
+        reschedule(rotating_secret, trigger_syncs=False)
 
-    for env_sync in EnvironmentSync.objects.filter(
-        status=EnvironmentSync.CANCELLED, **scope, **unlocked
-    ):
+    # Every sync, not only those cancelled while locked. One can be out of
+    # date without having been cancelled: the scan that follows a change to
+    # a secret it references skips a locked environment.
+    for env_sync in EnvironmentSync.objects.filter(**scope, **unlocked):
         trigger_sync_tasks(env_sync)
 
 

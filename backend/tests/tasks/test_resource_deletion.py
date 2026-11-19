@@ -1169,13 +1169,22 @@ def restore_steps():
         yield MagicMock(resume=resume, keys=keys, resync=resync)
 
 
+def _restored(model, row, related=False):
+    """Make `row` what the restore job reads for `model`."""
+    locked = model.all_objects.filter.return_value
+    if related:
+        locked = locked.select_related.return_value
+    locked.select_for_update.return_value.first.return_value = row
+    return locked
+
+
 class TestRestoreHandlers:
     def test_restored_app_resumes_everything_under_it(self, restore_steps):
-        app = MagicMock(id="app-1")
+        app = MagicMock(id="app-1", deleted_at=None)
         model = MagicMock()
-        model.objects.filter.return_value.first.return_value = app
+        _restored(model, app)
 
-        with _models(App=model):
+        with _models(App=model), patch.object(jobs, "transaction"):
             jobs.handle_app_restored("app-1")
 
         restore_steps.resume.assert_called_once_with({"app": app})
@@ -1187,47 +1196,96 @@ class TestRestoreHandlers:
         )
 
     def test_restored_environment_resumes(self, restore_steps):
-        environment = MagicMock(id="env-1")
+        environment = MagicMock(id="env-1", deleted_at=None)
+        environment.app.deleted_at = None
         model = MagicMock()
-        model.objects.filter.return_value.select_related.return_value.first.return_value = (
-            environment
-        )
+        _restored(model, environment, related=True)
 
-        with _models(Environment=model):
+        with _models(Environment=model), patch.object(jobs, "transaction"):
             jobs.handle_environment_restored("env-1")
 
+        model.all_objects.filter.return_value.select_related.assert_called_once_with(
+            "app"
+        )
         restore_steps.resume.assert_called_once_with({"id": "env-1"})
         restore_steps.keys.assert_called_once_with(environment.app)
         restore_steps.resync.assert_called_once_with(["env-1"])
 
-    def test_waits_for_the_restore_to_commit(self, restore_steps):
-        # Queued inside the restore's transaction, so it can start first.
-        app = MagicMock(id="app-1")
+    def test_waits_for_the_restore_to_commit_however_long_it_takes(
+        self, restore_steps
+    ):
+        # Queued inside the restore's transaction, so it can start first. The
+        # restore holds the row locked until it ends: a locking read waits
+        # for it, where a plain read would see the app still hidden.
+        app = MagicMock(id="app-1", deleted_at=None)
         model = MagicMock()
-        model.objects.filter.return_value.first.side_effect = [None, None, app]
+        locked = _restored(model, app)
+        events = []
 
-        with _models(App=model), patch.object(jobs.time, "sleep") as sleep:
+        def read():
+            events.append("read")
+            return app
+
+        def end(*exc):
+            events.append("end")
+            return False
+
+        locked.select_for_update.return_value.first.side_effect = read
+        restore_steps.resume.side_effect = lambda scope: events.append("resume")
+
+        with _models(App=model), patch.object(jobs, "transaction") as transaction:
+            transaction.atomic.return_value.__enter__.side_effect = (
+                lambda: events.append("begin")
+            )
+            transaction.atomic.return_value.__exit__.side_effect = end
             jobs.handle_app_restored("app-1")
 
-        assert sleep.call_count == 2
-        restore_steps.resume.assert_called_once_with({"app": app})
+        # all_objects: the default manager hides it until the restore commits.
+        model.objects.filter.assert_not_called()
+        model.all_objects.filter.assert_called_once_with(id="app-1")
+        # no_key: enough to wait for the restore's lock.
+        locked.select_for_update.assert_called_once_with(no_key=True, of=("self",))
+        # The lock is given up before the work starts.
+        assert events == ["begin", "read", "end", "resume"]
 
-    def test_gives_up_on_what_is_not_live_after_the_wait(self, restore_steps):
-        # Rolled back, or deleted again: the default managers don't see it.
-        app_model, environment_model = MagicMock(), MagicMock()
-        app_model.objects.filter.return_value.first.return_value = None
-        environment_model.objects.filter.return_value.select_related.return_value.first.return_value = (
-            None
-        )
+    @pytest.mark.parametrize(
+        "row",
+        [None, MagicMock(deleted_at=timezone.now())],
+        ids=["gone", "still-pending"],
+    )
+    def test_does_nothing_for_an_app_that_is_not_live(self, row, restore_steps):
+        # The restore was rolled back, or the app was deleted again.
+        model = MagicMock()
+        _restored(model, row)
 
-        with _models(App=app_model, Environment=environment_model), patch.object(
-            jobs, "RESTORE_COMMIT_WAIT_SECONDS", 0
-        ):
+        with _models(App=model), patch.object(jobs, "transaction"):
             jobs.handle_app_restored("app-1")
+
+        restore_steps.resume.assert_not_called()
+        restore_steps.keys.assert_not_called()
+        restore_steps.resync.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "deleted_at, app_deleted_at",
+        [(timezone.now(), None), (None, timezone.now())],
+        ids=["still-pending", "its-app-is-pending"],
+    )
+    def test_does_nothing_for_an_environment_that_is_not_live(
+        self, deleted_at, app_deleted_at, restore_steps
+    ):
+        environment = MagicMock(id="env-1", deleted_at=deleted_at)
+        environment.app.deleted_at = app_deleted_at
+        model = MagicMock()
+        _restored(model, environment, related=True)
+
+        with _models(Environment=model), patch.object(jobs, "transaction"):
+            jobs.handle_environment_restored("env-1")
+            _restored(model, None, related=True)
             jobs.handle_environment_restored("env-1")
 
         restore_steps.resume.assert_not_called()
         restore_steps.keys.assert_not_called()
+        restore_steps.resync.assert_not_called()
 
     def test_the_handlers_run_on_the_default_queue(self):
         queue = MagicMock()
@@ -1255,7 +1313,7 @@ class TestResume:
     def _run(self, environments):
         rotating_model, sync_model = MagicMock(), MagicMock(CANCELLED="cancelled")
         rotating_secrets = [MagicMock(), MagicMock()]
-        syncs = [MagicMock()]
+        syncs = [MagicMock(), MagicMock()]
         rotating_model.objects.filter.return_value = rotating_secrets
         sync_model.objects.filter.return_value = syncs
         with _models(RotatingSecret=rotating_model, EnvironmentSync=sync_model), patch(
@@ -1264,15 +1322,21 @@ class TestResume:
             jobs._resume(environments)
         return rotating_model, sync_model, reschedule, trigger, rotating_secrets, syncs
 
-    def test_rearms_rotations_and_reruns_the_syncs_skipped_while_locked(self):
+    def test_rearms_the_rotations_and_runs_the_syncs_again(self):
         app = MagicMock()
 
         rotating_model, sync_model, reschedule, trigger, rotating_secrets, syncs = (
             self._run({"app": app})
         )
 
-        assert reschedule.call_args_list == [call(rs) for rs in rotating_secrets]
-        trigger.assert_called_once_with(syncs[0])
+        # Without the syncs that saving a rotating secret sets off: with ten
+        # rotating secrets, each sync would run ten times, with ten scans of
+        # the organisation's references.
+        assert reschedule.call_args_list == [
+            call(rs, trigger_syncs=False) for rs in rotating_secrets
+        ]
+        # They run once each instead.
+        assert trigger.call_args_list == [call(sync) for sync in syncs]
 
         rotations = rotating_model.objects.filter.call_args.kwargs
         assert rotations["environment__app"] is app
@@ -1282,8 +1346,19 @@ class TestResume:
 
         lookup = sync_model.objects.filter.call_args.kwargs
         assert lookup["environment__app"] is app
-        assert lookup["status"] == "cancelled"
+        # Paused syncs stay paused.
         assert lookup["is_active"] is True
+        assert lookup["deleted_at__isnull"] is True
+
+    def test_runs_the_syncs_that_were_not_cancelled_too(self):
+        # A sync can be out of date without having been cancelled. A secret
+        # it references changed while it was locked, in another app or just
+        # before the deletion: the scan that would have run it skipped it.
+        _, sync_model, *_ = self._run({"id": "env-1"})
+
+        lookup = sync_model.objects.filter.call_args.kwargs
+        assert "status" not in lookup
+        assert lookup["environment__id"] == "env-1"
 
     def test_an_environment_still_pending_deletion_stays_locked(self):
         # A restored app may hold an environment that was deleted on its own.

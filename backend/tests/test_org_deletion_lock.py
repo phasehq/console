@@ -287,7 +287,9 @@ class TestRotationsPauseWhileLocked:
         ) as schedule:
             engine.reschedule(rotating_secret)
 
-        schedule.assert_called_once_with(rotating_secret, delay=expected_delay)
+        schedule.assert_called_once_with(
+            rotating_secret, delay=expected_delay, trigger_syncs=True
+        )
 
     def test_reschedule_rotates_now_when_a_blocked_purge_revoked_the_credential(
         self,
@@ -303,7 +305,9 @@ class TestRotationsPauseWhileLocked:
             engine.reschedule(rotating_secret)
 
         rotating_secret.credentials.filter.assert_called_once_with(status="active")
-        schedule.assert_called_once_with(rotating_secret, delay=timedelta(0))
+        schedule.assert_called_once_with(
+            rotating_secret, delay=timedelta(0), trigger_syncs=True
+        )
 
 
 class TestSyncsPauseWhileLocked:

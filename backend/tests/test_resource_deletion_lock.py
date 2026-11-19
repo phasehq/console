@@ -2,6 +2,7 @@
 can't be reached, and its syncs and rotations pause."""
 
 from contextlib import contextmanager
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -229,8 +230,6 @@ class TestPendingDeletionTypes:
         ]
 
     def test_say_when_the_purge_is_due_and_whether_restore_is_open(self):
-        from datetime import timedelta
-
         from api.utils.resource_deletion import GRACE_PERIOD
 
         deleted_at = timezone.now() - timedelta(hours=1)
@@ -247,8 +246,6 @@ class TestPendingDeletionTypes:
             assert graphene_type.resolve_deletion_delayed(due, None) is False
 
     def test_a_blocked_purge_is_delayed_and_can_still_be_restored(self):
-        from datetime import timedelta
-
         for graphene_type, blocked in self._resources(
             deleted_at=timezone.now() - timedelta(days=3),
             purge_blocked_at=timezone.now() - timedelta(days=1),
@@ -517,7 +514,7 @@ class TestSyncsPauseWhileLocked:
             syncing.module.trigger_sync_tasks(env_sync)
 
         if locked:
-            # Left cancelled, which is what a restore looks for to re-run it.
+            # Left cancelled. A restore runs it again.
             assert env_sync.status == "cancelled"
             cancel.assert_not_called()
             sync_job.delay.assert_not_called()
@@ -566,6 +563,63 @@ class TestRotationsPauseWhileLocked:
         assert mint.called is not locked
         # Not re-armed while locked: a restore reschedules it.
         assert schedule.called is not locked
+
+    def _schedule(self, **options):
+        from ee.integrations.secrets.rotation import engine
+
+        rotating_secret = MagicMock(pk="rs-1", rotation_job_id="old-job")
+        model = MagicMock()
+        with patch.object(engine, "_cancel_job") as cancel, patch.object(
+            engine, "_scheduler"
+        ) as scheduler, patch.object(engine.apps, "get_model", return_value=model):
+            scheduler.return_value.enqueue_at.return_value.id = "new-job"
+            engine._schedule_next_rotation(
+                rotating_secret, delay=timedelta(minutes=10), **options
+            )
+        cancel.assert_called_once_with("old-job")
+        return rotating_secret, model
+
+    def test_scheduling_a_rotation_saves_the_secret_and_so_runs_the_syncs(self):
+        # RotatingSecret.save() saves the environment, which runs its syncs.
+        rotating_secret, model = self._schedule()
+
+        rotating_secret.save.assert_called_once_with(
+            update_fields=["rotation_job_id", "next_rotation_at", "updated_at"]
+        )
+        model.objects.filter.assert_not_called()
+
+    def test_a_restore_rearms_a_rotation_without_running_the_syncs(self):
+        # It re-arms every rotating secret under what was restored, then runs
+        # the syncs once itself.
+        before = timezone.now()
+        rotating_secret, model = self._schedule(trigger_syncs=False)
+
+        rotating_secret.save.assert_not_called()
+        model.objects.filter.assert_called_once_with(pk="rs-1")
+        written = model.objects.filter.return_value.update.call_args
+        assert written.kwargs["rotation_job_id"] == "new-job"
+        assert written.kwargs["next_rotation_at"] >= before + timedelta(minutes=10)
+        # update() sets no auto_now field by itself.
+        assert written.kwargs["updated_at"] >= before
+        assert set(written.kwargs) == {
+            "rotation_job_id",
+            "next_rotation_at",
+            "updated_at",
+        }
+        # The copy in hand matches what was written.
+        assert rotating_secret.rotation_job_id == "new-job"
+        assert rotating_secret.next_rotation_at == written.kwargs["next_rotation_at"]
+
+    def test_reschedule_passes_the_choice_on(self):
+        from ee.integrations.secrets.rotation import engine
+
+        rotating_secret = MagicMock(next_rotation_at=None)
+        with patch.object(engine, "_schedule_next_rotation") as schedule:
+            engine.reschedule(rotating_secret, trigger_syncs=False)
+
+        schedule.assert_called_once_with(
+            rotating_secret, delay=None, trigger_syncs=False
+        )
 
 
 class TestLockedResourcesAreLeftAlone:
