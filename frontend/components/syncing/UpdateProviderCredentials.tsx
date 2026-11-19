@@ -30,6 +30,13 @@ type SavedCredentialState = {
   credentials: CredentialState
 }
 
+// The fields an Agent Connection's hosts are derived from, as the backend derives them.
+const AGENT_ENDPOINT_FIELDS: Record<string, { fields: string[]; where: string }> = {
+  postgres: { fields: ['host', 'port', 'database'], where: 'the new host, port and database' },
+  github: { fields: ['api_url'], where: 'the new API URL' },
+  gitlab: { fields: ['gitlab_host'], where: 'the new GitLab host' },
+}
+
 const credentialLabel = (key: string) => key.replace(/_/g, ' ').toUpperCase()
 
 const parseCredentialState = (credentials?: string | null): CredentialState =>
@@ -79,12 +86,13 @@ export const UpdateProviderCredentials = (props: {
   )
   const credentialsUpdated =
     !isEqual(credentials, savedCredential.credentials) || name !== savedCredential.name
-  // PostgreSQL Agent Connections copy these fields, so saving moves them
+  // Agent Connections of these providers take their hosts from these fields, so saving moves them
   const agentConnectionCount = credential.agentConnectionCount ?? 0
+  const agentEndpoint = provider?.id ? AGENT_ENDPOINT_FIELDS[provider.id] : undefined
   const movesAgentConnections =
-    provider?.id === 'postgres' &&
+    !!agentEndpoint &&
     agentConnectionCount > 0 &&
-    ['host', 'port', 'database'].some(
+    agentEndpoint.fields.some(
       (key) => (credentials[key] ?? '') !== (savedCredential.credentials[key] ?? '')
     )
 
@@ -310,7 +318,7 @@ export const UpdateProviderCredentials = (props: {
           {agentConnectionCount === 1
             ? '1 Agent Connection uses this credential. Saving moves it'
             : `${agentConnectionCount} Agent Connections use this credential. Saving moves them`}{' '}
-          to the new host, port and database and restarts the Agent sessions that use{' '}
+          to {agentEndpoint?.where} and restarts the Agent sessions that use{' '}
           {agentConnectionCount === 1 ? 'it' : 'them'}.
         </div>
       )}

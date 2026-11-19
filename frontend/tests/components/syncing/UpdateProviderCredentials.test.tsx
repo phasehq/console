@@ -254,6 +254,53 @@ describe('UpdateProviderCredentials', () => {
     expect(warning()).toBe(true)
   })
 
+  test('warns that moving a GitHub or GitLab endpoint moves its Agent Connections', async () => {
+    const warning = () => container.textContent?.includes('1 Agent Connection uses this credential')
+    await renderEditable({
+      id: 'credential-1',
+      revision: 'revision-1',
+      name: 'GitHub',
+      credentials: JSON.stringify({ api_url: 'https://github.example.com/api/v3' }),
+      sealedCredentials: ['access_token'],
+      agentConnectionCount: 1,
+      provider: {
+        id: 'github',
+        name: 'GitHub',
+        expectedCredentials: ['access_token'],
+        optionalCredentials: ['host_url', 'api_url'],
+        nonSensitiveCredentials: ['host_url', 'api_url'],
+        endpointCredentials: ['host_url', 'api_url'],
+      },
+    })
+    expect(warning()).toBe(false)
+    await typeInto(field('API URL (Optional)'), 'https://git.example.org/api/v3')
+    expect(warning()).toBe(true)
+    expect(container.textContent).toContain('to the new API URL')
+
+    await act(async () => root.unmount())
+    root = createRoot(container)
+    await renderEditable({
+      id: 'credential-2',
+      revision: 'revision-1',
+      name: 'GitLab',
+      credentials: JSON.stringify({ gitlab_host: 'https://gitlab.example.com' }),
+      sealedCredentials: ['gitlab_token'],
+      agentConnectionCount: 1,
+      provider: {
+        id: 'gitlab',
+        name: 'GitLab',
+        expectedCredentials: ['gitlab_host', 'gitlab_token'],
+        optionalCredentials: [],
+        nonSensitiveCredentials: ['gitlab_host'],
+        endpointCredentials: ['gitlab_host'],
+      },
+    })
+    expect(warning()).toBe(false)
+    await typeInto(field('GITLAB HOST'), 'https://gitlab.example.org')
+    expect(warning()).toBe(true)
+    expect(container.textContent).toContain('to the new GitLab host')
+  })
+
   test('regenerates a sealed AWS External ID and hands the new value over', async () => {
     updateCredentials.mockResolvedValue(savedRevision('revision-2'))
     await renderEditable({
