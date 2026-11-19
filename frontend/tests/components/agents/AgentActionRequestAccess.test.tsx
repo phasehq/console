@@ -584,5 +584,38 @@ describe('reviewing requests for access, renewals and context', () => {
       expect(container.textContent).toContain('Granted until revoked.')
       expect(container.textContent).toContain('renewed')
     })
+
+    test('a renewal of access with no end does not read as a short grant', async () => {
+      const record = { requestedDurationSeconds: 900, grantedDurationSeconds: 900, expiresAt: null }
+      const request = renewRequest()
+      await act(async () =>
+        root.render(
+          <AgentActionReview
+            request={{
+              ...resolved(record, request),
+              appliedAction: { ...(request.action as object), access: record },
+            }}
+          />
+        )
+      )
+      expect(container.textContent).toContain('Access stays until revoked.')
+      expect(container.textContent).not.toContain('Granted 15 minutes')
+      // The access record the server adds is not a reviewer's edit.
+      expect(container.textContent).not.toContain('Edited by the reviewer')
+    })
+
+    test('a denied allow does not read as allowed', async () => {
+      await act(async () =>
+        root.render(
+          <AgentActionReview
+            request={{ ...allowRequest(), status: 'denied', appliedAction: null }}
+          />
+        )
+      )
+      expect(container.textContent).not.toMatch(/Allowed .* for a limited time/)
+      expect(container.textContent).toContain(
+        'Asked to allow DELETE /repos/acme/x for a limited time.'
+      )
+    })
   })
 })

@@ -268,19 +268,17 @@ export function AccessRecordLine({ record }: { record: AccessRecord }) {
   return (
     <p className="text-xs text-neutral-500">
       Asked for {asked}.{' '}
-      {record.grantedSeconds ? (
+      {record.grantedSeconds && record.expiresAt ? (
         <>
-          Granted {describeDuration(record.grantedSeconds)}
-          {record.expiresAt && (
-            <>
-              , until{' '}
-              <time dateTime={record.expiresAt} title={new Date(record.expiresAt).toLocaleString()}>
-                {new Date(record.expiresAt).toLocaleString()}
-              </time>
-            </>
-          )}
+          Granted {describeDuration(record.grantedSeconds)}, until{' '}
+          <time dateTime={record.expiresAt} title={new Date(record.expiresAt).toLocaleString()}>
+            {new Date(record.expiresAt).toLocaleString()}
+          </time>
           .
         </>
+      ) : record.grantedSeconds ? (
+        // A renewal never shortens access that had no end.
+        'Access stays until revoked.'
       ) : (
         'Granted until revoked.'
       )}
