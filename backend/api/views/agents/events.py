@@ -11,6 +11,7 @@ import math
 import re
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from djangorestframework_camel_case.parser import CamelCaseJSONParser
@@ -516,8 +517,11 @@ def _grant_connections(session, events):
     # This names the Connection an event belongs to; it gives no access. A
     # grant that expired or was removed while its session lives on is still
     # the right one for the calls made under it, and the proxy retries a
-    # refused batch for good, so an ended grant of this Workflow is accepted.
+    # refused batch for good, so a grant of this Workflow that ended after the
+    # session opened is accepted. One that ended before it never served it.
     grants = AgentWorkflowGrant.objects.filter(
+        Q(deleted_at__isnull=True) | Q(deleted_at__gt=session.created_at),
+        Q(expires_at__isnull=True) | Q(expires_at__gt=session.created_at),
         id__in=grant_ids,
         workflow=session.workflow,
         organisation=session.organisation,
