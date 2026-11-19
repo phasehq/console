@@ -84,6 +84,7 @@ export type EnvValueCellProps = {
   highlighted: boolean
   canUpdateSecrets: boolean
   canDeleteSecrets: boolean
+  canCreateLockbox: boolean
   updateValue: (rowId: string, envId: string, value: string) => void
   addValue: (rowId: string, env: EnvironmentType) => void
   deleteValue: (rowId: string, env: EnvironmentType) => void
@@ -109,6 +110,7 @@ const EnvValueCellBase = ({
   highlighted,
   canUpdateSecrets,
   canDeleteSecrets,
+  canCreateLockbox,
   updateValue,
   addValue,
   deleteValue,
@@ -484,7 +486,7 @@ const EnvValueCellBase = ({
           )}
 
           {serverSecret && !isSealedAndSaved && labelledSecret && (
-            <ShareSecretDialog secret={labelledSecret} />
+            <ShareSecretDialog secret={labelledSecret} userCanCreateLockbox={canCreateLockbox} />
           )}
 
           {userCanDelete && (
@@ -532,6 +534,7 @@ const areEnvValueCellsEqual = (prev: EnvValueCellProps, next: EnvValueCellProps)
   prev.highlighted === next.highlighted &&
   prev.canUpdateSecrets === next.canUpdateSecrets &&
   prev.canDeleteSecrets === next.canDeleteSecrets &&
+  prev.canCreateLockbox === next.canCreateLockbox &&
   prev.updateValue === next.updateValue &&
   prev.addValue === next.addValue &&
   prev.deleteValue === next.deleteValue &&

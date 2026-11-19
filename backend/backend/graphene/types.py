@@ -143,6 +143,8 @@ class OrganisationType(DjangoObjectType):
     role = graphene.Field(RoleType)
     member_id = graphene.ID()
     member_scim_managed = graphene.Boolean()
+    # Apps the caller is a direct member of. Team-only access is not included.
+    individual_app_ids = graphene.List(graphene.NonNull(graphene.ID))
     keyring = graphene.String()
     recovery = graphene.String()
     plan_detail = graphene.Field(OrganisationPlanType)
@@ -197,6 +199,10 @@ class OrganisationType(DjangoObjectType):
 
     def resolve_member_scim_managed(self, info):
         return OrganisationType._get_member(self, info).scimuser_set.exists()
+
+    def resolve_individual_app_ids(self, info):
+        member = OrganisationType._get_member(self, info)
+        return list(member.apps.filter(is_deleted=False).values_list("id", flat=True))
 
     def resolve_keyring(self, info):
         return OrganisationType._get_member(self, info).wrapped_keyring

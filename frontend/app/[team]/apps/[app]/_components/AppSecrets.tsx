@@ -368,6 +368,7 @@ export const AppSecrets = ({
   const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
   const userCanUpdateSecrets = hasPermission('Secrets', 'update', true)
   const userCanDeleteSecrets = hasPermission('Secrets', 'delete', true)
+  const userCanCreateLockbox = hasPermission('Lockbox', 'create', true)
   const userCanReadSyncs = hasPermission('Integrations', 'read', true)
   const userCanCreateRotation = hasPermission('RotatingSecrets', 'create', true)
 
@@ -2268,6 +2269,7 @@ export const AppSecrets = ({
       revealedEnvIds,
       userCanUpdateSecrets,
       userCanDeleteSecrets,
+      userCanCreateLockbox,
       handleUpdateSecretKey,
       handleUpdateSecretType,
       handleUpdateSecretTags,
@@ -2321,6 +2323,7 @@ export const AppSecrets = ({
             highlightedEnvId={highlightedEnvId}
             canUpdateSecrets={userCanUpdateSecrets}
             canDeleteSecrets={userCanDeleteSecrets}
+            canCreateLockbox={userCanCreateLockbox}
             updateKey={handleUpdateSecretKey}
             updateType={handleUpdateSecretType}
             updateTags={handleUpdateSecretTags}

@@ -65,6 +65,7 @@ interface AppSecretRowProps {
   /** Base app-level permissions, computed once by the grid */
   canUpdateSecrets: boolean
   canDeleteSecrets: boolean
+  canCreateLockbox: boolean
   updateKey: (id: string, key: string) => void
   updateType: (id: string, type: ApiSecretTypeChoices) => void
   updateTags: (id: string, tags: SecretTagType[]) => void
@@ -94,6 +95,7 @@ const AppSecretRowComponent = ({
   highlightedEnvId,
   canUpdateSecrets,
   canDeleteSecrets,
+  canCreateLockbox,
   updateKey,
   updateType,
   updateTags,
@@ -361,6 +363,7 @@ const AppSecretRowComponent = ({
                   secretId={clientAppSecret.id}
                   comment={secretComment}
                   handlePropertyChange={handleKeyLevelPropertyChange}
+                  userCanUpdateSecrets={userCanUpdateSecrets}
                   compact
                 />
               )}
@@ -456,6 +459,7 @@ const AppSecretRowComponent = ({
               highlighted={highlightedEnvId === env.id}
               canUpdateSecrets={canUpdateSecrets}
               canDeleteSecrets={canDeleteSecrets}
+              canCreateLockbox={canCreateLockbox}
               updateValue={updateValue}
               addValue={addEnvValue}
               deleteValue={deleteEnvValue}
@@ -511,6 +515,7 @@ const areAppSecretRowsEqual = (prev: AppSecretRowProps, next: AppSecretRowProps)
   prev.highlightedEnvId === next.highlightedEnvId &&
   prev.canUpdateSecrets === next.canUpdateSecrets &&
   prev.canDeleteSecrets === next.canDeleteSecrets &&
+  prev.canCreateLockbox === next.canCreateLockbox &&
   // Content-keyed by the grid, so a reference compare is enough
   prev.columns === next.columns &&
   prev.updateKey === next.updateKey &&

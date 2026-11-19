@@ -17,7 +17,6 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { getHostname } from '@/utils/appConfig'
 import { newBoxSeed, encryptBox } from '@/utils/crypto'
 import { boxExpiryString } from '@/utils/lockbox'
-import { userHasPermission } from '@/utils/access/permissions'
 
 interface ExpiryOptionT {
   name: string
@@ -53,15 +52,14 @@ const compareExpiryOptions = (a: ExpiryOptionT, b: ExpiryOptionT) => {
   return a.getExpiry() === b.getExpiry()
 }
 
-export const ShareSecretDialog = ({ secret }: { secret: SecretType }) => {
+export const ShareSecretDialog = ({
+  secret,
+  userCanCreateLockbox,
+}: {
+  secret: SecretType
+  userCanCreateLockbox: boolean
+}) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
-
-  const userCanCreateLockbox = userHasPermission(
-    organisation?.role?.permissions,
-    'Lockbox',
-    'create',
-    true
-  )
 
   const [createLockbox, { error, loading }] = useMutation(CreateSharedSecret)
   const [readSecrets] = useMutation(LogSecretReads)

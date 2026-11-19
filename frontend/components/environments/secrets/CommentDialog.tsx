@@ -1,8 +1,6 @@
 import { Button } from '../../common/Button'
 import clsx from 'clsx'
-import { useState, useContext, useRef } from 'react'
-import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useState, useRef } from 'react'
 import { FaHashtag } from 'react-icons/fa6'
 import GenericDialog from '@/components/common/GenericDialog'
 
@@ -11,19 +9,12 @@ export const CommentDialog = (props: {
   secretName: string
   comment: string
   handlePropertyChange: Function
+  userCanUpdateSecrets: boolean
   /** A fixed "Comment" label (the comment shows in the tooltip) instead of the comment text */
   compact?: boolean
 }) => {
-  const { secretId, secretName, comment, handlePropertyChange, compact } = props
-
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-
-  const userCanUpdateSecrets = userHasPermission(
-    organisation?.role?.permissions,
-    'Secrets',
-    'update',
-    true
-  )
+  const { secretId, secretName, comment, handlePropertyChange, userCanUpdateSecrets, compact } =
+    props
 
   const [commentValue, setCommentValue] = useState<string>(comment)
 

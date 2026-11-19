@@ -28,7 +28,7 @@ import { ColorPicker } from '../common/ColorPicker'
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
-  // Team-aware, as the grid's own checks are: a team's role can replace the org role in this app
+  // Team-aware, as the grid's own checks are: access through a team can carry its own role in this app
   const { hasPermission } = useAppPermissions(props.environment.app.id)
   const userCanUpdateEnvironments = hasPermission('Environments', 'update', true)
 
