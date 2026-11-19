@@ -127,6 +127,7 @@ class TestSaveKeepsTheLock:
         assert "deleted_at" not in fields
         assert "is_deleted" not in fields
         assert "purge_blocked_at" not in fields
+        assert "purge_claimed_at" not in fields
         assert "purge_started_at" not in fields
         assert "skip_grace_period" not in fields
         assert {"name", "updated_at"} <= set(fields)
@@ -217,15 +218,31 @@ class TestSchedule:
         "state",
         [
             {"deleted_ago": timedelta(days=3)},
-            # A retry has claimed it, and is revoking its credentials.
+            # A credential minted meanwhile holds up what is left of it.
             {"deleted_ago": timedelta(days=3), "blocked_ago": timedelta(days=1)},
             # Its app or organisation was restored since: a fresh deleted_at.
             {"deleted_ago": timedelta(minutes=1)},
         ],
-        ids=["started", "claimed-by-a-retry", "grace-period-restarted"],
+        ids=["started", "started-then-blocked", "grace-period-restarted"],
     )
-    def test_never_restorable_once_the_purge_has_claimed_it(self, state):
-        claimed = _app(purge_started_at=timezone.now() - timedelta(hours=1), **state)
+    def test_never_restorable_once_the_purge_has_started(self, state):
+        started = _app(purge_started_at=timezone.now() - timedelta(hours=1), **state)
+
+        assert deletion.can_restore(started) is False
+
+    @pytest.mark.parametrize(
+        "state",
+        [
+            {"deleted_ago": timedelta(days=3)},
+            {"deleted_ago": timedelta(days=3), "blocked_ago": timedelta(days=1)},
+            # Not even if something gave it a fresh deleted_at.
+            {"deleted_ago": timedelta(minutes=1)},
+        ],
+        ids=["first-run", "retry-of-a-blocked-purge", "not-due"],
+    )
+    def test_not_restorable_while_a_purge_run_has_claimed_it(self, state):
+        # The run is revoking its credentials.
+        claimed = _environment(purge_claimed_at=timezone.now(), **state)
 
         assert deletion.can_restore(claimed) is False
 
@@ -375,6 +392,7 @@ class TestScheduleAppDeletion:
         # Pending, not a row soft-deleted by an old release.
         assert update["is_deleted"] is False
         assert update["purge_blocked_at"] is None
+        assert update["purge_claimed_at"] is None
         assert update["purge_started_at"] is None
         assert update["skip_grace_period"] is False
         assert app.deleted_at == update["deleted_at"]
@@ -511,10 +529,32 @@ class TestRestoreApp:
         app = _app(
             deleted_ago=timedelta(days=3),
             blocked_ago=timedelta(days=1),
-            purge_started_at=timezone.now(),
+            purge_claimed_at=timezone.now(),
         )
 
         with pytest.raises(ResourceDeletionError, match="being retried. Try again"):
+            self._run(app)
+
+        self.save.assert_not_called()
+
+    def test_refuses_while_the_first_purge_run_has_claimed_it(self):
+        # Whatever its deleted_at says: the run is revoking its credentials.
+        app = _app(deleted_ago=timedelta(minutes=1), purge_claimed_at=timezone.now())
+
+        with pytest.raises(ResourceDeletionError, match="no longer be restored"):
+            self._run(app)
+
+        self.save.assert_not_called()
+
+    def test_refuses_a_started_purge_that_is_blocked(self):
+        # Delayed, but part of it is gone.
+        app = _app(
+            deleted_ago=timedelta(days=3),
+            blocked_ago=timedelta(hours=1),
+            purge_started_at=timezone.now() - timedelta(hours=2),
+        )
+
+        with pytest.raises(ResourceDeletionError, match="no longer be restored"):
             self._run(app)
 
         self.save.assert_not_called()
@@ -550,10 +590,13 @@ class TestRestoreApp:
         environment_model.all_objects.filter.assert_called_once_with(app=app)
         pending = environment_model.all_objects.filter.return_value.filter
         pending.assert_called_once_with(deleted_at__isnull=False, is_deleted=False)
-        # Not one whose purge has started: part of it may be gone.
-        unstarted = pending.return_value.filter
-        unstarted.assert_called_once_with(purge_started_at__isnull=True)
-        restarted = unstarted.return_value.update.call_args.kwargs
+        # Not one a purge run has claimed or started on: its credentials are
+        # being revoked, or part of it is gone.
+        untouched = pending.return_value.filter
+        untouched.assert_called_once_with(
+            purge_claimed_at__isnull=True, purge_started_at__isnull=True
+        )
+        restarted = untouched.return_value.update.call_args.kwargs
         assert timezone.now() - restarted["deleted_at"] < timedelta(seconds=5)
         assert restarted["purge_blocked_at"] is None
 
@@ -698,11 +741,20 @@ class TestRestoreEnvironment:
         retried = self._pending(
             deleted_ago=timedelta(days=3),
             blocked_ago=timedelta(days=1),
-            purge_started_at=timezone.now(),
+            purge_claimed_at=timezone.now(),
         )
 
         with pytest.raises(ResourceDeletionError, match="being retried. Try again"):
             self._run(retried)
+
+    def test_refuses_while_the_first_purge_run_has_claimed_it(self):
+        # Its app's restore can't give it a new grace period meanwhile.
+        claimed = self._pending(
+            deleted_ago=timedelta(minutes=1), purge_claimed_at=timezone.now()
+        )
+
+        with pytest.raises(ResourceDeletionError, match="no longer be restored"):
+            self._run(claimed)
 
     def test_restores_past_the_grace_period_while_the_purge_is_blocked(self):
         environment = self._pending(
@@ -757,10 +809,12 @@ class TestRestartGracePeriods:
             pending = model.all_objects.filter.return_value.filter
             # Not the apps soft-deleted by old releases.
             pending.assert_called_once_with(deleted_at__isnull=False, is_deleted=False)
-            # Nor what a purge has started on: that stays due.
-            unstarted = pending.return_value.filter
-            unstarted.assert_called_once_with(purge_started_at__isnull=True)
-            restarted = unstarted.return_value.update.call_args.kwargs
+            # Nor what a purge run has claimed or started on: that stays due.
+            untouched = pending.return_value.filter
+            untouched.assert_called_once_with(
+                purge_claimed_at__isnull=True, purge_started_at__isnull=True
+            )
+            restarted = untouched.return_value.update.call_args.kwargs
             assert timezone.now() - restarted["deleted_at"] < timedelta(seconds=5)
             assert restarted["purge_blocked_at"] is None
 

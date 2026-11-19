@@ -116,10 +116,14 @@
                     color: #333333;
                   "
                 >
-                  If Phase no longer has access to one of your providers, you
-                  can still restore the app from the Apps page. Give Phase
-                  access to the provider again, for example by updating its
-                  third-party credentials, then delete the app again.
+                  {% if restorable %}If Phase no longer has access to one of
+                  your providers, you can still restore the app from the Apps
+                  page. Give Phase access to the provider again, for example
+                  by updating its third-party credentials, then delete the app
+                  again.{% else %}The deletion has already started, so the app
+                  can no longer be restored. If Phase no longer has access to
+                  one of your providers, give it access again, for example by
+                  updating its third-party credentials.{% endif %}
                 </div>
               </td>
             </tr>

@@ -168,17 +168,14 @@ def revoke_rotating_secret_credentials(environments):
         )
 
 
-def live_credentials_remain(environments):
-    """Whether a lease or rotating credential is still live at a provider.
-
-    Call inside the transaction that runs the cascade. A request that was
-    already under way when the deletion was asked for can mint one after the
-    purge revoked the rest, and the cascade would delete its row unrevoked.
-    This locks the secrets they hang off, so none can be added until the
-    transaction ends: an insert waits, then fails on the missing secret, and
-    its own error handling revokes what it minted."""
+def lock_secrets(environments):
+    """Lock the dynamic and rotating secrets, inside the transaction that
+    runs the cascade. A request that was already under way when the deletion
+    was asked for can mint a lease or credential after the purge revoked the
+    rest. With its secret locked, that insert waits, then fails on the
+    missing secret, and its own error handling revokes what it minted. A
+    rotation in flight holds its rotating secret, so this waits for it."""
     DynamicSecret = apps.get_model("api", "DynamicSecret")
-    DynamicSecretLease = apps.get_model("api", "DynamicSecretLease")
     RotatingSecret = apps.get_model("api", "RotatingSecret")
 
     # Evaluated for the row locks. of=self: not the environments they join.
@@ -188,6 +185,28 @@ def live_credentials_remain(environments):
             .filter(**_scoped("environment__", environments))
             .only("id")
         )
+
+
+def lock_environments(environments):
+    """Lock the environments, inside the transaction that runs the cascade.
+    A request that was already under way may be creating a rotating secret,
+    with its first credential, under one. Saving a rotating secret saves its
+    environment, so that request holds the row until it commits, and this
+    waits for it. Nothing more can then be added below the environments
+    until the cascade commits."""
+    Environment = apps.get_model("api", "Environment")
+
+    list(
+        Environment.all_objects.select_for_update(of=("self",))
+        .filter(**environments)
+        .only("id")
+    )
+
+
+def live_credentials_remain(environments):
+    """Whether a lease or rotating credential is still live at a provider.
+    Exact once `lock_secrets` and `lock_environments` hold their rows."""
+    DynamicSecretLease = apps.get_model("api", "DynamicSecretLease")
 
     return (
         DynamicSecretLease.objects.filter(

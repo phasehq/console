@@ -221,6 +221,7 @@ DELETION_LOCK_FIELDS = (
     "deleted_at",
     "is_deleted",
     "purge_blocked_at",
+    "purge_claimed_at",
     "purge_started_at",
     "skip_grace_period",
 )
@@ -280,7 +281,10 @@ class App(models.Model):
     is_deleted = models.BooleanField(default=False)
     # Set while a credential that can't be revoked holds up the purge.
     purge_blocked_at = models.DateTimeField(blank=True, null=True)
-    # Set once the purge has claimed the row: no restore from then on.
+    # Set while a purge run revokes credentials: no restore meanwhile. The
+    # run hands the row back if it stops before the point of no return.
+    purge_claimed_at = models.DateTimeField(blank=True, null=True)
+    # Set at the point of no return: no restore from then on.
     purge_started_at = models.DateTimeField(blank=True, null=True)
     # Deletion was asked for at once: no grace period, so no restore.
     # db_default: a backend from before this column can still insert rows.
@@ -592,7 +596,10 @@ class Environment(models.Model):
     is_deleted = models.BooleanField(default=False)
     # Set while a credential that can't be revoked holds up the purge.
     purge_blocked_at = models.DateTimeField(blank=True, null=True)
-    # Set once the purge has claimed the row: no restore from then on.
+    # Set while a purge run revokes credentials: no restore meanwhile. The
+    # run hands the row back if it stops before the point of no return.
+    purge_claimed_at = models.DateTimeField(blank=True, null=True)
+    # Set at the point of no return: no restore from then on.
     purge_started_at = models.DateTimeField(blank=True, null=True)
     # Deletion was asked for at once: no grace period, so no restore.
     # db_default: a backend from before this column can still insert rows.

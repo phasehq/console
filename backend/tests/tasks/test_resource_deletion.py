@@ -107,11 +107,11 @@ def steps():
     order.delete.side_effect = _clear_primary_key
 
     def conditional_update(**values):
-        if "purge_started_at" in values and "purge_blocked_at" in values:
+        if "purge_started_at" in values:
             return order.start()  # the point of no return
         if "purge_blocked_at" in values:
             return order.block(values["purge_blocked_at"])
-        return order.claim()  # a retry taking a blocked row
+        return order.claim()  # the run taking the row
 
     def commit(*exc_info):
         order.commit()
@@ -131,6 +131,10 @@ def steps():
         jobs, "stop_syncs", order.syncs
     ), patch.object(
         jobs, "delete_environment_secret_events", order.events
+    ), patch.object(
+        jobs, "lock_secrets", order.lock_secrets
+    ), patch.object(
+        jobs, "lock_environments", order.lock_environments
     ), patch.object(
         jobs, "live_credentials_remain", order.minted
     ), patch.object(
@@ -335,14 +339,35 @@ class TestEnqueuePurges:
 
 
 RELEASED = [
+    "claim",
     "leases",
     "rotating",
     "start",
     "syncs",
     "events",
 ]
+# The final transaction, up to the cascade.
+CHECKED = ["lock_secrets", "lock_environments", "minted"]
 BLOCKED_AGO = {"purge_blocked_at": timezone.now() - timedelta(hours=3)}
+CLAIMED_AGO = {"purge_claimed_at": timezone.now() - timedelta(hours=2)}
 STARTED_AGO = {"purge_started_at": timezone.now() - timedelta(hours=2)}
+
+
+def _handed_back(model):
+    """Whether the run released its claim on the row, and nothing else."""
+    pending = model.all_objects.filter.return_value
+    return pending.filter.call_args_list[-1] == call(
+        purge_started_at__isnull=True
+    ) and pending.filter.return_value.update.call_args_list == [
+        call(purge_claimed_at=None)
+    ]
+
+
+def _claim_touched(model):
+    """Whether anything was written to the row outside the purge's own
+    conditional updates, as releasing a claim is."""
+    pending = model.all_objects.filter.return_value
+    return pending.filter.return_value.update.called or pending.update.called
 
 
 class TestPurgeApp:
@@ -383,24 +408,25 @@ class TestPurgeApp:
         with _models(App=_model(app), Environment=MagicMock()):
             jobs.purge_app("app-1")
 
-        assert _called(steps)[:7] == [*RELEASED, "minted", "delete"]
+        assert _called(steps)[:10] == [*RELEASED, *CHECKED, "delete"]
         steps.delete.assert_called_once_with(app)
 
     def test_a_deletion_asked_for_at_once_can_be_blocked_like_any_other(self, steps):
         steps.leases.side_effect = purge.PurgeBlockedError("could not revoke 1")
+        model = _model(_app(**IMMEDIATE))
 
-        with _models(App=_model(_app(**IMMEDIATE))), pytest.raises(
-            purge.PurgeBlockedError
-        ):
+        with _models(App=model), pytest.raises(purge.PurgeBlockedError):
             jobs.purge_app("app-1")
 
         # Nothing is deleted; the block makes it restorable.
         assert _called(steps) == [
+            "claim",
             "leases",
             "block",
             "email_app_delayed",
             "email_app_delayed",
         ]
+        assert _handed_back(model)
 
     def test_deletes_the_app_after_releasing_what_it_holds(self, steps):
         app = _app()
@@ -415,7 +441,7 @@ class TestPurgeApp:
         scope = {"app": app}
         assert _called(steps) == [
             *RELEASED,
-            "minted",
+            *CHECKED,
             "delete",
             # Recorded before the commit: the deletion and its audit rows are
             # one transaction.
@@ -429,21 +455,33 @@ class TestPurgeApp:
         steps.rotating.assert_called_once_with(scope)
         steps.syncs.assert_called_once_with(scope)
         steps.events.assert_called_once_with(scope)
+        steps.lock_secrets.assert_called_once_with(scope)
+        steps.lock_environments.assert_called_once_with(scope)
         steps.minted.assert_called_once_with(scope)
         steps.delete.assert_called_once_with(app)
 
-        # Never restorable, so nothing is claimed ahead of revoking. The point
-        # of no return is conditional on this one row still being due.
-        steps.claim.assert_not_called()
+        # Claimed before anything is revoked, while the purge has not started.
+        # Both the claim and the point of no return are conditional on this
+        # one row still being due.
         pending = model.all_objects.filter.return_value
         model.all_objects.filter.assert_called_with(id="app-1")
-        steps.ready.assert_called_once_with(pending)
-        started = steps.ready.return_value.update.call_args.kwargs
+        pending.filter.assert_called_once_with(purge_started_at__isnull=True)
+        assert steps.ready.call_args_list == [
+            call(pending.filter.return_value),
+            call(pending),
+        ]
+        claimed, started = (
+            update.kwargs for update in steps.ready.return_value.update.call_args_list
+        )
+        assert timezone.now() - claimed["purge_claimed_at"] < timedelta(seconds=5)
+        assert started["purge_claimed_at"] is None
         assert started["purge_blocked_at"] is None
         # Keeps the time of the run that first got this far.
         assert started["purge_started_at"].get_source_expressions()[0].name == (
             "purge_started_at"
         )
+        # It went through: the claim is not handed back.
+        pending.filter.return_value.update.assert_not_called()
 
         # all_objects: its environments are hidden from Environment.objects.
         environment_model.all_objects.filter.assert_called_once_with(app=app)
@@ -466,6 +504,16 @@ class TestPurgeApp:
             call("dev@acme.test", "Dev", "Billing", "Acme", "a@b.c"),
         ]
 
+    @pytest.mark.parametrize("state", [{}, BLOCKED_AGO], ids=["first-run", "retry"])
+    def test_revokes_nothing_once_the_app_was_restored(self, state, steps):
+        # Also when its organisation's restore gave it a new grace period.
+        steps.claim.return_value = 0
+
+        with _models(App=_model(_app(**state))):
+            jobs.purge_app("app-1")
+
+        assert _called(steps) == ["claim"]
+
     def test_unrevoked_credentials_block_the_purge(self, steps):
         steps.rotating.side_effect = purge.PurgeBlockedError("could not revoke 1")
         model = _model(_app())
@@ -475,6 +523,7 @@ class TestPurgeApp:
 
         # Nothing is stopped or deleted while a credential is still live.
         assert _called(steps) == [
+            "claim",
             "leases",
             "rotating",
             "block",
@@ -485,18 +534,16 @@ class TestPurgeApp:
         assert "is blocked and will retry on the next sweep" in message
         assert "Billing" in message
 
-        # Restoring becomes possible again, and those concerned are told. Only
-        # for a row whose purge has not started: part of that may be gone.
+        # Marked blocked once, then handed back: it can be restored again, and
+        # those concerned are told so.
         pending = model.all_objects.filter.return_value
-        pending.filter.assert_called_once_with(
-            purge_blocked_at__isnull=True, purge_started_at__isnull=True
-        )
-        steps.ready.assert_called_once_with(pending.filter.return_value)
+        assert pending.filter.call_args_list[1] == call(purge_blocked_at__isnull=True)
         blocked_at = steps.block.call_args.args[0]
         assert timezone.now() - blocked_at < timedelta(seconds=5)
+        assert _handed_back(model)
         assert steps.email_app_delayed.call_args_list == [
-            call("owner@acme.test", "Owner", "Billing", "Acme"),
-            call("dev@acme.test", "Dev", "Billing", "Acme"),
+            call("owner@acme.test", "Owner", "Billing", "Acme", True),
+            call("dev@acme.test", "Dev", "Billing", "Acme", True),
         ]
 
     def test_a_block_recorded_by_another_run_is_not_emailed_about_again(self, steps):
@@ -508,23 +555,26 @@ class TestPurgeApp:
 
         steps.email_app_delayed.assert_not_called()
 
-    def test_any_other_failure_retries_without_allowing_a_restore(self, steps):
+    def test_any_other_failure_hands_the_row_back_unblocked(self, steps):
         steps.leases.side_effect = RuntimeError("database is down")
+        model = _model(_app())
 
-        with _models(App=_model(_app())), pytest.raises(RuntimeError):
+        with _models(App=model), pytest.raises(RuntimeError):
             jobs.purge_app("app-1")
 
-        assert _called(steps) == ["leases"]
+        # Not marked blocked, so a restore stays refused: it retries.
+        assert _called(steps) == ["claim", "leases"]
+        assert _handed_back(model)
         steps.notify.assert_called_once()
 
-    def test_no_longer_due_once_its_credentials_were_revoked(self, steps):
-        # Its organisation was restored meanwhile: the grace period restarted.
+    def test_stops_if_the_app_is_gone_once_its_credentials_were_revoked(self, steps):
+        # Deleted with its organisation meanwhile.
         steps.start.return_value = 0
 
         with _models(App=_model(_app())):
             jobs.purge_app("app-1")
 
-        assert _called(steps) == ["leases", "rotating", "start"]
+        assert _called(steps) == ["claim", "leases", "rotating", "start"]
 
     def test_stops_at_the_time_budget_and_leaves_the_app_locked(self, steps):
         steps.events.return_value = False
@@ -583,16 +633,18 @@ class TestPurgeApp:
         with _models(App=model):
             jobs.purge_app("app-1")
 
-        # The organisation row stays unlocked.
+        # The organisation row stays unlocked. no_key: a request already
+        # under way that holds an environment row can still commit.
         pending = model.all_objects.filter.return_value
-        pending.select_for_update.assert_called_once_with(of=("self",))
+        pending.select_for_update.assert_called_once_with(no_key=True, of=("self",))
+        steps.lock_environments.assert_not_called()
         steps.delete.assert_not_called()
         steps.audit.assert_not_called()
         steps.email_app.assert_not_called()
 
     # -- a blocked purge is retried ------------------------------------------
 
-    def test_a_retry_claims_the_row_before_it_revokes_anything(self, steps):
+    def test_a_retry_claims_the_row_like_a_first_run(self, steps):
         # Blocked means restorable: a restore must not land while the
         # credentials of what would be a live app are being revoked.
         model = _model(_app(**BLOCKED_AGO))
@@ -600,59 +652,61 @@ class TestPurgeApp:
         with _models(App=model, Environment=MagicMock()):
             jobs.purge_app("app-1")
 
-        assert _called(steps)[:5] == ["claim", "leases", "rotating", "start", "syncs"]
-        pending = model.all_objects.filter.return_value
-        pending.filter.assert_called_once_with(
-            purge_blocked_at__isnull=False, purge_started_at__isnull=True
-        )
+        assert _called(steps)[:6] == RELEASED
         steps.delete.assert_called_once()
 
-    def test_a_retry_revokes_nothing_once_the_app_was_restored(self, steps):
-        steps.claim.return_value = 0
-
-        with _models(App=_model(_app(**BLOCKED_AGO))):
-            jobs.purge_app("app-1")
-
-        assert _called(steps) == ["claim"]
-
     @pytest.mark.parametrize(
-        "failure",
-        [purge.PurgeBlockedError("could not revoke 1"), RuntimeError("redis down")],
+        "failure, steps_taken",
+        [
+            (
+                purge.PurgeBlockedError("could not revoke 1"),
+                ["claim", "leases", "rotating", "block"],
+            ),
+            (RuntimeError("redis down"), ["claim", "leases", "rotating"]),
+        ],
         ids=["blocked-again", "any-other-failure"],
     )
-    def test_a_retry_that_fails_hands_the_row_back(self, failure, steps):
+    def test_a_retry_that_fails_hands_the_row_back(self, failure, steps_taken, steps):
         steps.rotating.side_effect = failure
+        steps.block.return_value = 0  # already marked blocked
         model = _model(_app(**BLOCKED_AGO))
 
         with _models(App=model), pytest.raises(type(failure)):
             jobs.purge_app("app-1")
 
         # Restorable again, and no second email about the same block.
-        assert _called(steps) == ["claim", "leases", "rotating"]
-        pending = model.all_objects.filter.return_value
-        assert pending.filter.call_args_list[-1] == call(purge_blocked_at__isnull=False)
-        pending.filter.return_value.update.assert_called_once_with(
-            purge_started_at=None
-        )
+        assert _called(steps) == steps_taken
+        assert _handed_back(model)
         steps.email_app_delayed.assert_not_called()
 
-    def test_a_claim_left_by_a_retry_that_died_is_handed_back_too(self, steps):
+    def test_a_claim_left_by_a_run_that_died_is_taken_over(self, steps):
+        # One purge job runs per row at a time, so nobody else holds it.
         steps.leases.side_effect = purge.PurgeBlockedError("could not revoke 1")
-        model = _model(_app(**BLOCKED_AGO, **STARTED_AGO))
+        steps.block.return_value = 0
+        model = _model(_app(**BLOCKED_AGO, **CLAIMED_AGO))
 
         with _models(App=model), pytest.raises(purge.PurgeBlockedError):
             jobs.purge_app("app-1")
 
-        # Still marked blocked, so it never passed the point of no return.
-        assert _called(steps) == ["leases"]
-        pending = model.all_objects.filter.return_value
-        pending.filter.return_value.update.assert_called_once_with(
-            purge_started_at=None
-        )
+        assert _called(steps) == ["claim", "leases", "block"]
+        assert _handed_back(model)
 
     # -- a purge that has started --------------------------------------------
 
-    def test_a_started_purge_that_is_blocked_later_stays_unrestorable(self, steps):
+    def test_a_started_purge_goes_on_without_claiming(self, steps):
+        # An earlier run stopped at its time budget.
+        model = _model(_app(**STARTED_AGO))
+
+        with _models(App=model, Environment=MagicMock()):
+            jobs.purge_app("app-1")
+
+        assert _called(steps)[:5] == ["leases", "rotating", "start", "syncs", "events"]
+        steps.claim.assert_not_called()
+        steps.delete.assert_called_once()
+
+    def test_a_started_purge_that_is_blocked_is_delayed_but_not_restorable(
+        self, steps
+    ):
         # An earlier run stopped part way: logs are gone, syncs are stopped.
         steps.leases.side_effect = purge.PurgeBlockedError("could not revoke 1")
         model = _model(_app(**STARTED_AGO))
@@ -660,9 +714,18 @@ class TestPurgeApp:
         with _models(App=model), pytest.raises(purge.PurgeBlockedError):
             jobs.purge_app("app-1")
 
-        assert _called(steps) == ["leases"]
-        model.all_objects.filter.return_value.filter.assert_not_called()
-        steps.email_app_delayed.assert_not_called()
+        # The delay is recorded and those concerned are told, without the
+        # offer to restore. Nothing is handed back.
+        assert _called(steps) == [
+            "leases",
+            "block",
+            "email_app_delayed",
+            "email_app_delayed",
+        ]
+        assert not _handed_back(model) and not _claim_touched(model)
+        assert steps.email_app_delayed.call_args_list[0] == call(
+            "owner@acme.test", "Owner", "Billing", "Acme", False
+        )
         steps.notify.assert_called_once()
 
     # -- credentials minted while the purge ran ------------------------------
@@ -674,16 +737,40 @@ class TestPurgeApp:
         with _models(App=_model(_app()), Environment=MagicMock()):
             jobs.purge_app("app-1")
 
-        assert _called(steps)[5:12] == [
-            "minted",
+        assert _called(steps)[6:16] == [
+            *CHECKED,
             "commit",
             "leases",
             "rotating",
-            "minted",
+            *CHECKED,
             "delete",
-            "cascade_audit",
         ]
         steps.delete.assert_called_once()
+
+    def test_what_was_minted_meanwhile_and_cant_be_revoked_delays_the_purge(
+        self, steps
+    ):
+        steps.minted.return_value = True
+        steps.leases.side_effect = [None, purge.PurgeBlockedError("could not revoke 1")]
+        model = _model(_app())
+
+        with _models(App=model), pytest.raises(purge.PurgeBlockedError):
+            jobs.purge_app("app-1")
+
+        # Past the point of no return: recorded and emailed, never restorable.
+        assert _called(steps)[6:] == [
+            *CHECKED,
+            "commit",
+            "leases",
+            "block",
+            "email_app_delayed",
+            "email_app_delayed",
+        ]
+        assert steps.email_app_delayed.call_args_list[0] == call(
+            "owner@acme.test", "Owner", "Billing", "Acme", False
+        )
+        assert not _handed_back(model) and not _claim_touched(model)
+        steps.delete.assert_not_called()
 
     def test_leaves_it_to_the_next_sweep_if_credentials_keep_appearing(self, steps):
         steps.minted.return_value = True
@@ -696,19 +783,26 @@ class TestPurgeApp:
         steps.audit.assert_not_called()
         steps.email_app.assert_not_called()
 
-    def test_the_secrets_are_locked_before_the_app(self, steps):
-        # A rotation in flight holds its rotating secret, then updates the
-        # environment: the other order could deadlock with it.
+    def test_looks_for_live_credentials_with_every_row_above_them_locked(self, steps):
+        # The secrets first: a rotation in flight holds its rotating secret,
+        # then updates the environment, so the other order could deadlock with
+        # it. The environments last: that waits for a request that is still
+        # adding a secret, and stops anything more being added.
         model = _model(_app())
         locked = []
-        steps.minted.side_effect = lambda scope: locked.append("secrets") and False
+        steps.lock_secrets.side_effect = lambda scope: locked.append("secrets")
         relocked = model.all_objects.filter.return_value.select_for_update
         relocked.side_effect = lambda **kw: locked.append("app") or relocked.return_value
+        steps.lock_environments.side_effect = lambda scope: locked.append(
+            "environments"
+        )
+        steps.minted.side_effect = lambda scope: locked.append("look") and False
 
         with _models(App=model, Environment=MagicMock()):
             jobs.purge_app("app-1")
 
-        assert locked == ["secrets", "app"]
+        assert locked == ["secrets", "app", "environments", "look"]
+        steps.delete.assert_called_once()
 
 
 class TestPurgeEnvironment:
@@ -759,7 +853,7 @@ class TestPurgeEnvironment:
         with _models(Environment=_model(environment)):
             jobs.purge_environment("env-1")
 
-        assert _called(steps)[:7] == [*RELEASED, "minted", "delete"]
+        assert _called(steps)[:10] == [*RELEASED, *CHECKED, "delete"]
         steps.delete.assert_called_once_with(environment)
 
     def test_deletes_the_environment_after_releasing_what_it_holds(self, steps):
@@ -772,7 +866,7 @@ class TestPurgeEnvironment:
         scope = {"id": "env-1"}
         assert _called(steps) == [
             *RELEASED,
-            "minted",
+            *CHECKED,
             "delete",
             "audit",
             "commit",
@@ -781,11 +875,14 @@ class TestPurgeEnvironment:
         ]
         steps.leases.assert_called_once_with(scope)
         steps.events.assert_called_once_with(scope)
+        steps.lock_secrets.assert_called_once_with(scope)
+        steps.lock_environments.assert_called_once_with(scope)
         steps.minted.assert_called_once_with(scope)
         steps.delete.assert_called_once_with(environment)
         # The app row stays unlocked.
         pending = model.all_objects.filter.return_value
         pending.select_for_update.assert_called_once_with(of=("self",))
+        pending.filter.assert_called_once_with(purge_started_at__isnull=True)
 
         audit = steps.audit.call_args.kwargs
         assert audit["resource_type"] == "env"
@@ -800,37 +897,88 @@ class TestPurgeEnvironment:
             "owner@acme.test", "Owner", "Staging", "Billing", "Acme", "a@b.c"
         )
 
+    def test_revokes_nothing_once_the_environment_was_restored(self, steps):
+        # Also when its app's restore gave it a new grace period.
+        steps.claim.return_value = 0
+
+        with _models(Environment=_model(_environment())):
+            jobs.purge_environment("env-1")
+
+        assert _called(steps) == ["claim"]
+
     def test_unrevoked_credentials_block_the_purge(self, steps):
         steps.leases.side_effect = purge.PurgeBlockedError("could not revoke 1")
+        model = _model(_environment())
+
+        with _models(Environment=model), pytest.raises(purge.PurgeBlockedError):
+            jobs.purge_environment("env-1")
+
+        assert _called(steps) == [
+            "claim",
+            "leases",
+            "block",
+            "email_environment_delayed",
+            "email_environment_delayed",
+        ]
+        assert _handed_back(model)
+        assert steps.email_environment_delayed.call_args_list[0] == call(
+            "owner@acme.test", "Owner", "Staging", "Billing", "Acme", True
+        )
+
+    def test_a_retry_claims_the_row_and_hands_it_back_if_blocked_again(self, steps):
+        steps.leases.side_effect = purge.PurgeBlockedError("could not revoke 1")
+        steps.block.return_value = 0  # already marked blocked
+        model = _model(_environment(**BLOCKED_AGO))
+
+        with _models(Environment=model), pytest.raises(purge.PurgeBlockedError):
+            jobs.purge_environment("env-1")
+
+        assert _called(steps) == ["claim", "leases", "block"]
+        assert _handed_back(model)
+        steps.email_environment_delayed.assert_not_called()
+
+    def test_a_started_purge_that_is_blocked_is_delayed_but_not_restorable(
+        self, steps
+    ):
+        steps.rotating.side_effect = purge.PurgeBlockedError("could not revoke 1")
+        model = _model(_environment(**STARTED_AGO))
+
+        with _models(Environment=model), pytest.raises(purge.PurgeBlockedError):
+            jobs.purge_environment("env-1")
+
+        assert _called(steps) == [
+            "leases",
+            "rotating",
+            "block",
+            "email_environment_delayed",
+            "email_environment_delayed",
+        ]
+        assert not _handed_back(model) and not _claim_touched(model)
+        assert steps.email_environment_delayed.call_args_list[0] == call(
+            "owner@acme.test", "Owner", "Staging", "Billing", "Acme", False
+        )
+
+    def test_what_was_minted_meanwhile_and_cant_be_revoked_delays_the_purge(
+        self, steps
+    ):
+        steps.minted.return_value = True
+        steps.rotating.side_effect = [
+            None,
+            purge.PurgeBlockedError("could not revoke 1"),
+        ]
 
         with _models(Environment=_model(_environment())), pytest.raises(
             purge.PurgeBlockedError
         ):
             jobs.purge_environment("env-1")
 
-        assert _called(steps) == [
-            "leases",
+        assert _called(steps)[-3:] == [
             "block",
             "email_environment_delayed",
             "email_environment_delayed",
         ]
-        assert steps.email_environment_delayed.call_args_list[0] == call(
-            "owner@acme.test", "Owner", "Staging", "Billing", "Acme"
-        )
-
-    def test_a_retry_claims_the_row_and_hands_it_back_if_blocked_again(self, steps):
-        steps.leases.side_effect = purge.PurgeBlockedError("could not revoke 1")
-        model = _model(_environment(**BLOCKED_AGO))
-
-        with _models(Environment=model), pytest.raises(purge.PurgeBlockedError):
-            jobs.purge_environment("env-1")
-
-        assert _called(steps) == ["claim", "leases"]
-        pending = model.all_objects.filter.return_value
-        pending.filter.return_value.update.assert_called_once_with(
-            purge_started_at=None
-        )
-        steps.email_environment_delayed.assert_not_called()
+        assert steps.email_environment_delayed.call_args_list[0].args[-1] is False
+        steps.delete.assert_not_called()
 
     def test_stops_at_the_time_budget_and_leaves_the_environment_locked(self, steps):
         steps.events.return_value = False
@@ -846,6 +994,7 @@ class TestPurgeEnvironment:
         with _models(Environment=model):
             jobs.purge_environment("env-1")
 
+        steps.lock_environments.assert_not_called()
         steps.delete.assert_not_called()
         steps.audit.assert_not_called()
 
@@ -961,7 +1110,7 @@ class TestDeletionEmails:
 
     def test_app_deletion_delayed_email(self):
         subject, recipients, text = self._sent(
-            "send_app_deletion_delayed_email", "Billing", "Acme"
+            "send_app_deletion_delayed_email", "Billing", "Acme", True
         )
 
         assert subject == "Deletion of Billing is delayed"
@@ -969,10 +1118,15 @@ class TestDeletionEmails:
         assert "the app <b>Billing</b> in <b>Acme</b>" in text
         assert "won\u2019t be deleted until they are revoked" in text
         assert "restore the app from the Apps page" in text
+        assert "can no longer be restored" not in text
 
     def test_environment_deletion_delayed_email(self):
         subject, recipients, text = self._sent(
-            "send_environment_deletion_delayed_email", "Staging", "Billing", "Acme"
+            "send_environment_deletion_delayed_email",
+            "Staging",
+            "Billing",
+            "Acme",
+            True,
         )
 
         assert subject == "Deletion of Staging in Billing is delayed"
@@ -980,6 +1134,26 @@ class TestDeletionEmails:
         assert "the environment <b>Staging</b> of the app <b>Billing</b>" in text
         assert "<b>Acme</b>" in text
         assert "restore the environment from the app\u2019s page" in text
+        assert "can no longer be restored" not in text
+
+    @pytest.mark.parametrize(
+        "send, args, what",
+        [
+            ("send_app_deletion_delayed_email", ("Billing", "Acme"), "app"),
+            (
+                "send_environment_deletion_delayed_email",
+                ("Staging", "Billing", "Acme"),
+                "environment",
+            ),
+        ],
+    )
+    def test_a_delay_after_the_purge_started_offers_no_restore(self, send, args, what):
+        _, _, text = self._sent(send, *args, False)
+
+        assert "won\u2019t be deleted until they are revoked" in text
+        assert f"so the {what} can no longer be restored" in text
+        assert "give it access again" in text
+        assert "you can still restore" not in text
 
 
 # ---------------------------------------------------------------------------
@@ -1202,46 +1376,56 @@ class TestScopedPurgeSteps:
         lookup = credential_model.objects.filter.call_args.kwargs
         assert lookup["rotating_secret__environment__id"] == "env-1"
 
-    def _live_credentials(self, active_lease=False, unrevoked_credential=False):
-        secret_model, lease_model = MagicMock(), MagicMock()
-        rotating_model, credential_model = MagicMock(), MagicMock()
-        order = []
-        for name, model in (("dynamic", secret_model), ("rotating", rotating_model)):
-            model.objects.select_for_update.side_effect = (
-                lambda _name=name, _model=model, **kw: order.append(("lock", _name, kw))
-                or _model.objects.select_for_update.return_value
-            )
-        lease_model.objects.filter.return_value.exists.side_effect = (
-            lambda: order.append("leases") or active_lease
-        )
-        credential_model.objects.filter.return_value.exists.side_effect = (
-            lambda: order.append("credentials") or unrevoked_credential
-        )
+    def test_the_secrets_are_locked_for_the_scope_only(self):
+        # With its secret locked, no lease or credential can be added to it
+        # before the cascade commits.
+        secret_model, rotating_model = MagicMock(), MagicMock()
+
         with self._purge_models(
-            DynamicSecret=secret_model,
-            DynamicSecretLease=lease_model,
-            RotatingSecret=rotating_model,
-            RotatingSecretCredential=credential_model,
+            DynamicSecret=secret_model, RotatingSecret=rotating_model
         ):
-            remain = purge.live_credentials_remain({"id": "env-1"})
-        return remain, order, secret_model, lease_model, rotating_model, credential_model
+            purge.lock_secrets({"id": "env-1"})
 
-    def test_the_secrets_are_locked_before_looking_for_live_credentials(self):
-        # With the secrets locked, no lease or credential can be added before
-        # the cascade commits.
-        remain, order, secrets, leases, rotating, credentials = self._live_credentials()
-
-        assert remain is False
-        # of=self: not the environments the filter joins.
-        assert order == [
-            ("lock", "dynamic", {"of": ("self",)}),
-            ("lock", "rotating", {"of": ("self",)}),
-            "leases",
-            "credentials",
-        ]
-        for model in (secrets, rotating):
+        for model in (secret_model, rotating_model):
+            # of=self: not the environments the filter joins.
+            model.objects.select_for_update.assert_called_once_with(of=("self",))
             locked = model.objects.select_for_update.return_value
             locked.filter.assert_called_once_with(environment__id="env-1")
+            # Evaluated: a queryset that is never read takes no lock.
+            locked.filter.return_value.only.return_value.__iter__.assert_called_once()
+
+    def test_the_environments_are_locked_though_pending_deletion(self):
+        environment_model = MagicMock()
+        app = MagicMock()
+
+        with self._purge_models(Environment=environment_model):
+            purge.lock_environments({"app": app})
+
+        # all_objects: the ones pending deletion are the ones being purged.
+        environment_model.objects.select_for_update.assert_not_called()
+        environment_model.all_objects.select_for_update.assert_called_once_with(
+            of=("self",)
+        )
+        locked = environment_model.all_objects.select_for_update.return_value
+        locked.filter.assert_called_once_with(app=app)
+        locked.filter.return_value.only.return_value.__iter__.assert_called_once()
+
+    def _live_credentials(self, active_lease=False, unrevoked_credential=False):
+        lease_model, credential_model = MagicMock(), MagicMock()
+        lease_model.objects.filter.return_value.exists.return_value = active_lease
+        credential_model.objects.filter.return_value.exists.return_value = (
+            unrevoked_credential
+        )
+        with self._purge_models(
+            DynamicSecretLease=lease_model, RotatingSecretCredential=credential_model
+        ):
+            remain = purge.live_credentials_remain({"id": "env-1"})
+        return remain, lease_model, credential_model
+
+    def test_looks_for_live_credentials_in_the_scope_only(self):
+        remain, leases, credentials = self._live_credentials()
+
+        assert remain is False
         leases.objects.filter.assert_called_once_with(
             status=leases.ACTIVE, secret__environment__id="env-1"
         )

@@ -48,11 +48,13 @@ def purge_due(resource):
 
 
 def can_restore(resource):
-    """Until the grace period ends, and later while the purge is blocked.
-    Never once the purge has claimed the row (`purge_started_at`): from then
-    on it revokes credentials and deletes."""
+    """Until the grace period ends, and later while the purge is blocked. Not
+    while a purge run has claimed the row to revoke its credentials
+    (`purge_claimed_at`), and never once the purge has started on what can't
+    be undone (`purge_started_at`)."""
     return (
         is_pending_deletion(resource)
+        and resource.purge_claimed_at is None
         and resource.purge_started_at is None
         and (not purge_due(resource) or resource.purge_blocked_at is not None)
     )
@@ -75,11 +77,12 @@ def is_ready_for_purge(resource):
 
 
 def _restart_grace_periods(queryset):
-    # Not what a purge has claimed: part of it may be gone already, so it
-    # stays due and the purge carries on.
-    pending_deletion(queryset).filter(purge_started_at__isnull=True).update(
-        deleted_at=timezone.now(), purge_blocked_at=None
-    )
+    # Not what a purge run has claimed or started on: its credentials are
+    # being revoked, or part of it is gone already. It stays due and the
+    # purge carries on.
+    pending_deletion(queryset).filter(
+        purge_claimed_at__isnull=True, purge_started_at__isnull=True
+    ).update(deleted_at=timezone.now(), purge_blocked_at=None)
 
 
 def environment_is_locked(environment_id):
@@ -129,6 +132,7 @@ def _scheduled(now, immediately):
         "deleted_at": now,
         "is_deleted": False,
         "purge_blocked_at": None,
+        "purge_claimed_at": None,
         "purge_started_at": None,
         "skip_grace_period": immediately,
         "updated_at": now,
@@ -136,11 +140,10 @@ def _scheduled(now, immediately):
 
 
 def _cannot_restore_message(resource, kind):
-    # Claimed while still marked blocked: a retry is revoking credentials.
-    # It hands the row back if it is blocked again.
+    # Claimed while marked blocked: a retry is revoking credentials. It hands
+    # the row back if it is blocked again.
     retrying = (
-        resource.purge_started_at is not None
-        and resource.purge_blocked_at is not None
+        resource.purge_claimed_at is not None and resource.purge_blocked_at is not None
     )
     if retrying:
         return (

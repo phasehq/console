@@ -29,6 +29,8 @@ from api.tasks.purge import (
     delete_with_cascade,
     enqueue_purges,
     live_credentials_remain,
+    lock_environments,
+    lock_secrets,
     notify,
     owner_recipients,
     revoke_dynamic_secret_leases,
@@ -279,34 +281,46 @@ def _revoke(environments):
     revoke_rotating_secret_credentials(environments)
 
 
-def _release(resource, environments, pending, label, email_delayed):
-    """Revoke what is live at providers, stop the sync jobs and delete the
-    secret events. `resource` is the row being purged as first read, and
-    `pending` the same row as a queryset. Returns False when the purge can't
-    go on yet."""
-    started = resource.purge_started_at is not None
-    # Blocked by an earlier run, so it can be restored. This retry claims it
-    # before revoking anything: a restore then can't land while the
-    # credentials of what would be a live resource are being revoked.
-    retrying = resource.purge_blocked_at is not None
-    if retrying and not started and not _claim(pending):
-        return False  # restored first
-
+def _revoke_or_delay(environments, pending, label, email_delayed, restorable):
+    """Revoke what is live at providers. If a credential can't be revoked,
+    record that the purge is delayed and email about it before raising.
+    `restorable` is whether that email may offer a restore."""
     try:
         _revoke(environments)
     except Exception as e:
         notify(
             f"Deletion of {label} is blocked and will retry on the next sweep: {e}"
         )
-        if retrying:
-            _release_claim(pending, label)
-        elif not started and isinstance(e, PurgeBlockedError):
-            _mark_blocked(pending, label, email_delayed)
+        if isinstance(e, PurgeBlockedError):
+            _mark_blocked(pending, label, lambda: email_delayed(restorable))
         raise
 
-    # What follows can't be undone. Mark the row started, unless it was
-    # restored or its grace period restarted meanwhile: from here on it is
-    # never restorable, whatever happens to its app or organisation.
+
+def _release(resource, environments, pending, label, email_delayed):
+    """Revoke what is live at providers, stop the sync jobs and delete the
+    secret events. `resource` is the row being purged as first read, and
+    `pending` the same row as a queryset. Returns False when the purge can't
+    go on yet."""
+    started = resource.purge_started_at is not None
+    # Until the point of no return, a run claims the row before it revokes
+    # anything. Neither a restore, nor a parent's restore giving the row a new
+    # grace period, can then land while the credentials of what would be a
+    # live resource are being revoked.
+    if not started and not _claim(pending):
+        return False  # restored first, or no longer due
+
+    try:
+        _revoke_or_delay(
+            environments, pending, label, email_delayed, restorable=not started
+        )
+    except Exception:
+        if not started:
+            # Nothing is deleted yet. Blocked, it can be restored again.
+            _release_claim(pending, label)
+        raise
+
+    # What follows can't be undone. From here on the row is never restorable,
+    # whatever happens to its app or organisation.
     if not _start(pending):
         return False
 
@@ -320,45 +334,42 @@ def _release(resource, environments, pending, label, email_delayed):
 
 
 def _claim(pending):
-    """Take a blocked row for a retry. False if it was restored first."""
+    """Take the row for this run. False if it was restored first, or is no
+    longer due. One purge job runs per row at a time, so a claim found here
+    was left by a run that died, and is taken over."""
     return bool(
-        ready_for_purge(
-            pending.filter(
-                purge_blocked_at__isnull=False, purge_started_at__isnull=True
-            )
-        ).update(purge_started_at=timezone.now())
+        ready_for_purge(pending.filter(purge_started_at__isnull=True)).update(
+            purge_claimed_at=timezone.now()
+        )
     )
 
 
 def _release_claim(pending, label):
-    """Hand back a row whose retry was blocked again: it can be restored once
-    more. Only while it is still marked blocked, which `_start` clears."""
+    """Hand back a row whose run stopped before the point of no return."""
     try:
-        pending.filter(purge_blocked_at__isnull=False).update(purge_started_at=None)
+        pending.filter(purge_started_at__isnull=True).update(purge_claimed_at=None)
     except Exception:
         logger.exception("Failed to release the purge claim on %s", label)
 
 
 def _start(pending):
-    """Pass the point of no return. False if the row is no longer due."""
+    """Pass the point of no return. False if the row is gone."""
     return bool(
         ready_for_purge(pending).update(
             purge_started_at=Coalesce(F("purge_started_at"), Value(timezone.now())),
+            purge_claimed_at=None,
             purge_blocked_at=None,
         )
     )
 
 
 def _mark_blocked(pending, label, email_delayed):
-    """Allow restoring past the grace period, and email about it once per
-    deletion. Later sweeps retry without emailing again. Not for a row whose
-    purge has started: part of it may be gone."""
+    """Record that a credential holds up the purge, and email about it once.
+    Later sweeps retry without emailing again."""
     try:
-        first = ready_for_purge(
-            pending.filter(
-                purge_blocked_at__isnull=True, purge_started_at__isnull=True
-            )
-        ).update(purge_blocked_at=timezone.now())
+        first = ready_for_purge(pending.filter(purge_blocked_at__isnull=True)).update(
+            purge_blocked_at=timezone.now()
+        )
     except Exception:
         logger.exception("Failed to record the blocked purge of %s", label)
         return
@@ -416,32 +427,31 @@ def _email(organisation, actor, send):
             logger.exception("Failed to send deletion email to %s", email)
 
 
-def _delete(environments, lock, may_be_purged, delete, label):
+def _delete(environments, lock, may_be_purged, delete, label, revoke):
     """The final delete, in one transaction with its audit rows. `lock()`
-    returns the row, locked; `delete(row)` runs the cascade and records it.
-    Returns the deleted row, or None when nothing was deleted."""
+    returns the row, locked; `delete(row)` runs the cascade and records it;
+    `revoke()` revokes what was minted meanwhile. Returns the deleted row, or
+    None when nothing was deleted."""
     for _ in range(FINAL_DELETE_ATTEMPTS):
         with transaction.atomic():
-            # Before the row itself: a rotation in flight holds its rotating
-            # secret and then updates the environment, so the other order
-            # could deadlock with it.
-            minted = live_credentials_remain(environments)
+            # The secrets before the rows above them: a rotation in flight
+            # holds its rotating secret and then updates the environment, so
+            # the other order could deadlock with it.
+            lock_secrets(environments)
             row = lock()
             if not may_be_purged(row):
                 return None
-            if not minted:
+            # Looked for only now, with every row a new lease or credential
+            # would hang off locked: whatever a request already under way was
+            # adding has committed, and nothing more can be added.
+            lock_environments(environments)
+            if not live_credentials_remain(environments):
                 delete(row)
                 return row
 
         # Minted by a request that began before the deletion was asked for.
         logger.info("Purge of %s found a credential minted meanwhile", label)
-        try:
-            _revoke(environments)
-        except Exception as e:
-            notify(
-                f"Deletion of {label} is blocked and will retry on the next sweep: {e}"
-            )
-            raise
+        revoke()
 
     logger.warning(
         "Purge of %s keeps finding new credentials; the next sweep continues", label
@@ -466,12 +476,12 @@ def purge_app(app_id):
     actor = deletion_actor(organisation, "app", app_id)
     actor_type, actor_id, actor_metadata = actor
 
-    def email_delayed():
+    def email_delayed(restorable):
         _email(
             organisation,
             actor,
             lambda email, display_name: send_app_deletion_delayed_email(
-                email, display_name, name, organisation.name
+                email, display_name, name, organisation.name, restorable
             ),
         )
 
@@ -481,9 +491,12 @@ def purge_app(app_id):
         return
 
     def lock():
+        # no_key: keeps a restore out, yet lets a request already under way
+        # commit. One holding an environment row may need a key-share lock on
+        # the app row to commit, and would deadlock with a full lock here.
         # of=self: the organisation row stays unlocked.
         return (
-            pending.select_for_update(of=("self",))
+            pending.select_for_update(no_key=True, of=("self",))
             .select_related("organisation")
             .first()
         )
@@ -513,7 +526,11 @@ def purge_app(app_id):
             description=f"Permanently deleted app '{name}'",
         )
 
-    if _delete(scope, lock, _app_may_be_purged, delete, label) is None:
+    def revoke_minted():
+        # Past the point of no return: delayed, but not restorable.
+        _revoke_or_delay(scope, pending, label, email_delayed, restorable=False)
+
+    if _delete(scope, lock, _app_may_be_purged, delete, label, revoke_minted) is None:
         return
     logger.info("Deleted %s", label)
 
@@ -547,12 +564,12 @@ def purge_environment(environment_id):
     actor = deletion_actor(organisation, "env", environment_id)
     actor_type, actor_id, actor_metadata = actor
 
-    def email_delayed():
+    def email_delayed(restorable):
         _email(
             organisation,
             actor,
             lambda email, display_name: send_environment_deletion_delayed_email(
-                email, display_name, name, app.name, organisation.name
+                email, display_name, name, app.name, organisation.name, restorable
             ),
         )
 
@@ -590,7 +607,14 @@ def purge_environment(environment_id):
             ),
         )
 
-    if _delete(scope, lock, _environment_may_be_purged, delete, label) is None:
+    def revoke_minted():
+        # Past the point of no return: delayed, but not restorable.
+        _revoke_or_delay(scope, pending, label, email_delayed, restorable=False)
+
+    if (
+        _delete(scope, lock, _environment_may_be_purged, delete, label, revoke_minted)
+        is None
+    ):
         return
     logger.info("Deleted %s", label)
 
