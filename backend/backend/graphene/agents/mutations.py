@@ -145,10 +145,10 @@ def _text(value, label, *, maximum=255, allow_empty=False):
     return result
 
 
-def _clean_save(instance):
+def _clean_save(instance, update_fields=None):
     try:
         instance.full_clean()
-        instance.save()
+        instance.save(update_fields=update_fields)
     except (ValidationError, IntegrityError) as exc:
         if isinstance(exc, ValidationError):
             raise GraphQLError("; ".join(exc.messages)) from exc
@@ -370,26 +370,33 @@ class UpdateAgentMutation(graphene.Mutation):
     @classmethod
     def mutate(cls, root, info, agent_id, **changes):
         try:
-            agent = Agent.objects.select_related("organisation").get(
+            initial = Agent.objects.select_related("organisation").get(
                 id=agent_id, deleted_at__isnull=True
             )
         except (Agent.DoesNotExist, ValueError) as exc:
             raise GraphQLError("Agent not found") from exc
-        member = organisation_member(info, agent.organisation_id)
-        require_agent(member, agent, "update")
+        member = organisation_member(info, initial.organisation_id)
+        require_agent(member, initial, "update")
+        fields = {}
         if changes.get("name") is not None:
-            agent.name = _text(changes["name"], "name")
+            fields["name"] = _text(changes["name"], "name")
         if changes.get("harness_type") is not None:
             harness_type = str(changes["harness_type"]).lower()
             if harness_type not in dict(Agent.HARNESS_CHOICES):
                 raise GraphQLError("Unsupported Agent harness type")
-            agent.harness_type = harness_type
+            fields["harness_type"] = harness_type
         if changes.get("status") is not None:
             state = str(changes["status"]).lower()
             if state not in dict(Agent.STATUS_CHOICES):
                 raise GraphQLError("Unsupported Agent status")
-            agent.status = state
-        _clean_save(agent)
+            fields["status"] = state
+        with transaction.atomic():
+            # Locked and saved by field, so an Agent deleted since the check
+            # above stays deleted.
+            agent = _lock_active_agent(initial.id)
+            for name, value in fields.items():
+                setattr(agent, name, value)
+            _clean_save(agent, update_fields=[*fields, "updated_at"])
         if agent.status == Agent.DISABLED:
             revoke_agent_sessions(
                 AgentSession.objects.filter(workflow__agent=agent, revoked_at__isnull=True)
@@ -494,10 +501,24 @@ class UpdateAgentWorkflowMutation(graphene.Mutation):
             raise GraphQLError("Agent Workflow not found") from exc
         member = organisation_member(info, workflow.organisation_id)
         require_workflow(member, workflow, "update")
-        previous_name = workflow.name
-        if changes.get("name") is not None:
-            workflow.name = _text(changes["name"], "name")
-        _clean_save(workflow)
+        name = changes.get("name")
+        if name is not None:
+            name = _text(name, "name")
+        with transaction.atomic():
+            # Locked and saved by field, so a Workflow deleted since the check
+            # above stays deleted.
+            try:
+                workflow = (
+                    AgentWorkflow.objects.select_for_update(of=("self",))
+                    .select_related("organisation", "agent")
+                    .get(id=workflow.id, deleted_at__isnull=True)
+                )
+            except AgentWorkflow.DoesNotExist as exc:
+                raise GraphQLError("Agent Workflow not found") from exc
+            previous_name = workflow.name
+            if name is not None:
+                workflow.name = name
+            _clean_save(workflow, update_fields=["name", "updated_at"])
         _audit(
             info,
             workflow.organisation,
