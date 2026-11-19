@@ -138,6 +138,7 @@ import {
   mergeAppSecretsUpdate,
   mergeImportedRows,
   moveAppSecretRows,
+  repeatedKeyToFix,
   selectionTraits,
   restoreAppSecretEntries,
   revertAppSecretEntries,
@@ -1828,14 +1829,10 @@ export const AppSecrets = ({
       return false
     }
 
-    if (duplicateRowIds.size > 0) {
+    const repeated = repeatedKeyToFix(clientAppSecrets, alignedServerRows, dynamicKeySlots)
+    if (repeated) {
       // It may be in a closed folder, so say where
-      const repeated = clientAppSecrets.find((row) => duplicateRowIds.has(row.id))
-      toast.error(
-        repeated
-          ? `Secret keys cannot be repeated: ${repeated.key} in ${repeated.path ?? '/'}`
-          : 'Secret keys cannot be repeated!'
-      )
+      toast.error(`Secret keys cannot be repeated: ${repeated.key} in ${repeated.path}`)
       return false
     }
 

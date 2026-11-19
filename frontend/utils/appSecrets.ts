@@ -656,6 +656,50 @@ export const duplicateKeyRowIds = (
   return duplicates
 }
 
+/**
+ * A key the deploy itself would repeat: a value that is new to its env and folder under that
+ * key (added, renamed or moved there) while another value, or a dynamic secret, has it.
+ * A repeat the saved copy already holds is left for whoever opens it to fix.
+ */
+export const repeatedKeyToFix = (
+  rows: AppSecret[],
+  savedRows: AppSecret[],
+  dynamicKeys: DynamicKeySlot[] = []
+): { key: string; path: string } | null => {
+  const dynamicSlots = new Set(dynamicKeys.map(({ envId, path, key }) => keySlot(envId, path, key)))
+  const slotOf = (row: AppSecret, envId: string, secret: SecretType) =>
+    keySlot(envId, secret.path || row.path || '/', secret.key || row.key)
+  const savedSlots = new Map<string, string>()
+  for (const row of savedRows)
+    for (const { env, secret } of row.envs)
+      if (secret && env.id) savedSlots.set(secret.id, slotOf(row, env.id, secret))
+
+  const held = new Map<string, { key: string; path: string; values: number; arrived: boolean }>()
+  for (const row of rows) {
+    for (const entry of row.envs) {
+      const secret = entry.secret as SecretWithFlags | null
+      if (!secret || secret.stagedForDelete || !entry.env.id) continue
+      const key = secret.key || row.key
+      if (!key) continue
+      const slot = slotOf(row, entry.env.id, secret)
+      const at = held.get(slot) ?? {
+        key,
+        path: secret.path || row.path || '/',
+        values: 0,
+        arrived: false,
+      }
+      at.values += 1
+      if (savedSlots.get(secret.id) !== slot) at.arrived = true
+      held.set(slot, at)
+    }
+  }
+
+  for (const [slot, at] of held)
+    if (at.arrived && (at.values > 1 || dynamicSlots.has(slot)))
+      return { key: at.key, path: at.path }
+  return null
+}
+
 type KeyStates = { states: Map<string, KeyState>; envIds: Set<string> }
 
 /** Where each key is in one copy of the rows, by env and folder */

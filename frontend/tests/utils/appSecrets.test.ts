@@ -15,6 +15,7 @@ import {
   mergeAppSecretsUpdate,
   mergeImportedRows,
   moveAppSecretRows,
+  repeatedKeyToFix,
   restoreAppSecretEntries,
   revertAppSecretEntries,
   selectionTraits,
@@ -624,6 +625,99 @@ describe('duplicateKeyRowIds', () => {
       { ...row('A', { dev: secret('new-1', 'A', '') }), id: 'replacement' },
     ]
     expect(duplicateKeyRowIds(rows).size).toBe(0)
+  })
+})
+
+describe('repeatedKeyToFix', () => {
+  const inFolder = (id: string, path: string, values: Record<string, SecretType | null>) => ({
+    ...row('A', values),
+    id,
+    path,
+  })
+  // Two saved values under one key in Production's /api, as two sessions can leave them
+  const twice = [
+    inFolder('one', '/api', { prod: secret('p1', 'A', '1', { path: '/api' }) }),
+    inFolder('two', '/api', { prod: secret('p2', 'A', '2', { path: '/api' }) }),
+  ]
+
+  it('leaves a repeat the saved copy already holds to an edit elsewhere', () => {
+    const saved = [...twice, row('B', { dev: secret('d1', 'B', 'x') })]
+    const edited = [...twice, row('B', { dev: secret('d1', 'B', 'y') })]
+    expect(repeatedKeyToFix(edited, saved)).toBeNull()
+  })
+
+  it('leaves it to an edit of one of the two values, which repeats nothing new', () => {
+    const edited = [
+      twice[0],
+      inFolder('two', '/api', { prod: secret('p2', 'A', 'changed', { path: '/api' }) }),
+    ]
+    expect(repeatedKeyToFix(edited, twice)).toBeNull()
+  })
+
+  it('names a key that a new value repeats, and its folder', () => {
+    const saved = [inFolder('one', '/api', { dev: secret('d1', 'A', '1', { path: '/api' }) })]
+    const added = [
+      ...saved,
+      inFolder('new', '/api', { dev: secret('new-1', 'A', '', { path: '/api' }) }),
+    ]
+    expect(repeatedKeyToFix(added, saved)).toEqual({ key: 'A', path: '/api' })
+  })
+
+  it('names a key that a rename or a move brings where it is taken', () => {
+    const saved = [
+      row('A', { dev: secret('d1', 'A', '1') }),
+      row('B', { dev: secret('d2', 'B', '2') }),
+      inFolder('nested', '/api', { dev: secret('d3', 'A', '3', { path: '/api' }) }),
+    ]
+    const renamed = [
+      saved[0],
+      { ...row('A', { dev: secret('d2', 'A', '2') }), id: 'app-B' },
+      saved[2],
+    ]
+    expect(repeatedKeyToFix(renamed, saved)).toEqual({ key: 'A', path: '/' })
+
+    const moved = [saved[0], saved[1], inFolder('nested', '/', { dev: secret('d3', 'A', '3') })]
+    expect(repeatedKeyToFix(moved, saved)).toEqual({ key: 'A', path: '/' })
+  })
+
+  it('names a new key that a dynamic secret maps, not one saved beside it before', () => {
+    const dynamicKeys = [{ envId: 'dev', path: '/', key: 'AWS_ACCESS_KEY_ID' }]
+    const saved = [row('AWS_ACCESS_KEY_ID', { dev: secret('d1', 'AWS_ACCESS_KEY_ID', 'x') })]
+    expect(repeatedKeyToFix(saved, saved, dynamicKeys)).toBeNull()
+
+    const added = [row('AWS_ACCESS_KEY_ID', { dev: secret('new-1', 'AWS_ACCESS_KEY_ID', 'x') })]
+    expect(repeatedKeyToFix(added, [], dynamicKeys)).toEqual({
+      key: 'AWS_ACCESS_KEY_ID',
+      path: '/',
+    })
+  })
+
+  it('ignores values staged for deletion', () => {
+    const replaced = [
+      row('A', { dev: { ...secret('d1', 'A', '1'), stagedForDelete: true } as SecretType }),
+      { ...row('A', { dev: secret('new-1', 'A', '') }), id: 'replacement' },
+    ]
+    expect(repeatedKeyToFix(replaced, [row('A', { dev: secret('d1', 'A', '1') })])).toBeNull()
+  })
+
+  it("goes by each value's own key, which an env that isn't shown keeps in a rename", () => {
+    // B renamed to A with Production not shown: Production's value is still B, beside its A
+    const saved = [
+      row('A', { prod: secret('p1', 'A', '1') }),
+      row('B', { dev: secret('d2', 'B', '2'), prod: secret('p2', 'B', '2') }),
+    ]
+    const renamed = [
+      saved[0],
+      { ...row('A', { dev: secret('d2', 'A', '2'), prod: secret('p2', 'B', '2') }), id: 'app-B' },
+    ]
+    expect(repeatedKeyToFix(renamed, saved)).toBeNull()
+
+    // Shown, Production's value is renamed too and lands on the A it already has
+    const renamedEverywhere = [
+      saved[0],
+      { ...row('A', { dev: secret('d2', 'A', '2'), prod: secret('p2', 'A', '2') }), id: 'app-B' },
+    ]
+    expect(repeatedKeyToFix(renamedEverywhere, saved)).toEqual({ key: 'A', path: '/' })
   })
 })
 
