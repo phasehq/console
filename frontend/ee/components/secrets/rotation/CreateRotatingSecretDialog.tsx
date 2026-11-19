@@ -255,6 +255,9 @@ export const CreateRotatingSecretDialog = forwardRef<
   // Prevents later-arriving credential or provider data from reseeding the form.
   const prefillAppliedRef = useRef(false)
 
+  // By value: a caller's fresh environment object on each render mustn't re-seed the form
+  const defaultNameTemplate = buildDefaultNameTemplate(environment, path)
+
   useEffect(() => {
     if (!provider) return
     const outputs = (provider.outputSchema as SchemaField[]) ?? []
@@ -277,7 +280,7 @@ export const CreateRotatingSecretDialog = forwardRef<
     // Seed a context-aware name template so the provider-side resource
     // name reflects the app/env/path it belongs to.
     if (configs.some((f) => f.id === 'name_template')) {
-      initialConfig.name_template = buildDefaultNameTemplate(environment, path)
+      initialConfig.name_template = defaultNameTemplate
     }
     if (initialState?.config) {
       // Prefill overrides defaults — and the target env's name_template should
@@ -296,7 +299,7 @@ export const CreateRotatingSecretDialog = forwardRef<
       setIntervalSeconds(initialState.rotationIntervalSeconds)
     if (initialState?.revocationDelaySeconds !== undefined && initialState?.revocationDelaySeconds !== null)
       setRevocationDelaySeconds(initialState.revocationDelaySeconds)
-  }, [provider, environment, path, initialState])
+  }, [provider, defaultNameTemplate, initialState])
 
   // Auto-select the provider when the prefill and provider data are ready.
   useEffect(() => {
