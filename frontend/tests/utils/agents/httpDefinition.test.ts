@@ -88,7 +88,27 @@ describe('custom Connection definitions', () => {
       { label: 'the decoy prefix of token', text: 'sk-' },
       { label: 'the value of username', text: 'alice' },
       { label: 'the prefix of the Authorization header', text: 'Bearer ' },
+      { label: 'a header name', text: 'Authorization' },
+      { label: 'a query parameter name', text: 'api_key' },
+      { label: 'host 1', text: 'api.example.com' },
+      { label: 'the path of host 1', text: '/v1/*' },
     ])
+  })
+
+  test('refuses a secret written into a host path or a call class path', () => {
+    const secret = 'xoxb-abcdef0123456789'
+    const inPath: HttpDefinition = {
+      ...definition,
+      hosts: [{ match: 'exact', value: 'hooks.example.com', path: `/services/${secret}` }],
+    }
+    expect(secretValueProblem(secret, inPath)).toBe(
+      'The secret also appears in the path of host 1, which the Agent can read.'
+    )
+    const inClass: HttpDefinition = {
+      ...definition,
+      operationClasses: [{ match: { path: `/jobs/${secret}` }, class: 'delete' }],
+    }
+    expect(secretValueProblem(secret, inClass)).toMatch(/the path of call class 1/)
   })
 
   test('counts secret length in bytes, not characters', () => {

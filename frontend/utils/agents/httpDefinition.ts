@@ -168,7 +168,8 @@ export const secretFieldNames = (definition: Pick<HttpDefinition, 'fields'>): st
  * occur inside any of it: the proxy treats that as a leak.
  */
 export const agentVisibleTexts = (
-  definition: Pick<HttpDefinition, 'fields' | 'injections'>
+  definition: Pick<HttpDefinition, 'fields' | 'injections'> &
+    Partial<Pick<HttpDefinition, 'hosts' | 'operationClasses'>>
 ): Array<{ label: string; text: string }> => {
   const texts: Array<{ label: string; text: string }> = []
   for (const field of definition.fields) {
@@ -180,6 +181,19 @@ export const agentVisibleTexts = (
   for (const injection of definition.injections) {
     if (injection.type === 'header' && injection.prefix)
       texts.push({ label: `the prefix of the ${injection.name} header`, text: injection.prefix })
+    if (injection.type === 'header' || injection.type === 'query')
+      texts.push({
+        label: injection.type === 'header' ? 'a header name' : 'a query parameter name',
+        text: injection.name,
+      })
+  }
+  for (const [index, host] of (definition.hosts ?? []).entries()) {
+    texts.push({ label: `host ${index + 1}`, text: host.value })
+    if (host.path) texts.push({ label: `the path of host ${index + 1}`, text: host.path })
+  }
+  for (const [index, rule] of (definition.operationClasses ?? []).entries()) {
+    if (rule.match.path)
+      texts.push({ label: `the path of call class ${index + 1}`, text: rule.match.path })
   }
   return texts
 }
@@ -207,7 +221,7 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^
  */
 export const secretValueProblem = (
   value: string,
-  definition: Pick<HttpDefinition, 'fields' | 'injections'>
+  definition: Parameters<typeof agentVisibleTexts>[0]
 ): string => {
   if (value.includes('\u0000') || LONE_SURROGATE.test(value))
     return 'The secret contains characters that cannot be stored.'
