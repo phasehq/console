@@ -965,6 +965,7 @@ export default function AgentDetailPage(props: {
 
           <Tab.Panel>
             <AgentEventLog
+              team={params.team}
               organisationId={organisation!.id}
               agentId={agent.id}
               workflows={workflows.map(({ id, name, grants }) => ({

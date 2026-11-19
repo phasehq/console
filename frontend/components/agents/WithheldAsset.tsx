@@ -7,7 +7,7 @@ import { WITHHELD_APP_LABEL, hiddenEnvironmentsLabel } from '@/utils/agents/appA
  * stays, its name does not. The backend has already left the name out.
  */
 
-const Withheld = ({ children, className }: { children: string; className?: string }) => (
+export const Withheld = ({ children, className }: { children: string; className?: string }) => (
   <span
     className={clsx('inline-flex min-w-0 items-center gap-1 text-neutral-500', className)}
     data-withheld

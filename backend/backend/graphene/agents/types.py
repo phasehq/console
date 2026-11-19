@@ -30,6 +30,7 @@ from api.utils.agent_access import (
     iso_timestamp,
 )
 from api.utils.agent_app_access import connection_environments, grant_access
+from api.utils.agent_leak_events import LEAK_PROTECTION_EVENT, placeholder_secrets
 from api.utils.asset_visibility import asset_visibility
 from api.utils.agent_config import (
     ConfigRegistryError,
@@ -816,9 +817,18 @@ class AgentEventType(DjangoObjectType):
         fields = "__all__"
 
     def resolve_detail(self, info):
+        detail = dict(self.detail or {})
+        if self.event_type == LEAK_PROTECTION_EVENT:
+            # ``secrets`` is the Console's: where the secrets behind the
+            # event's placeholders live, as far as the viewer may see.
+            detail.pop("secrets", None)
+            secrets = placeholder_secrets(
+                self, _viewer_visibility(info, self.organisation_id)
+            )
+            if secrets:
+                detail["secrets"] = secrets
         # An app secrets call names its app and environment; leave out what
         # the viewer cannot access.
-        detail = dict(self.detail or {})
         if not detail.get("app_id"):
             return detail
         visibility = _viewer_visibility(info, self.organisation_id)

@@ -1,5 +1,5 @@
 // Brand and acronym spellings for words in enum-like values, e.g. aws_assume_role.
-const AGENT_WORD_SPELLINGS: Record<string, string> = {
+export const AGENT_WORD_SPELLINGS: Record<string, string> = {
   api: 'API',
   aws: 'AWS',
   gcp: 'GCP',

@@ -18,6 +18,14 @@ jest.mock('@apollo/client', () => ({
   useMutation: jest.fn(),
   useQuery: jest.fn(),
 }))
+jest.mock('next/link', () => ({
+  __esModule: true,
+  default: ({ children, href, ...props }: any) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}))
 jest.mock('react-toastify', () => ({
   toast: { success: jest.fn(), error: jest.fn() },
 }))
@@ -140,6 +148,7 @@ describe('AgentEventLog blocked host action', () => {
     await act(async () => {
       root.render(
         <AgentEventLog
+          team="acme"
           organisationId="org-1"
           agentId="agent-1"
           workflows={[
@@ -388,6 +397,7 @@ describe('AgentEventLog paging', () => {
     await act(async () => {
       root.render(
         <AgentEventLog
+          team="acme"
           organisationId="org-1"
           agentId="agent-1"
           workflows={[]}
@@ -436,6 +446,7 @@ describe('AgentEventLog paging', () => {
     await act(async () => {
       root.render(
         <AgentEventLog
+          team="acme"
           organisationId="org-1"
           agentId="agent-1"
           workflows={[]}
@@ -453,6 +464,7 @@ describe('AgentEventLog paging', () => {
     await act(async () => {
       root.render(
         <AgentEventLog
+          team="acme"
           organisationId="org-1"
           agentId="agent-1"
           workflows={[]}
@@ -595,6 +607,7 @@ describe('AgentEventLog access rules', () => {
     await act(async () => {
       root.render(
         <AgentEventLog
+          team="acme"
           organisationId="org-1"
           agentId="agent-1"
           workflows={[{ id: 'workflow-1', name: 'Default', connections: [] }]}
@@ -667,5 +680,334 @@ describe('AgentEventLog access rules', () => {
         (button) => button.textContent === 'Ask'
       )
     ).toBe(false)
+  })
+})
+
+describe('AgentEventLog leak protection', () => {
+  let container: HTMLDivElement
+  let root: Root
+  let query: jest.Mock
+
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    query = jest.fn()
+    ;(useApolloClient as jest.Mock).mockReturnValue({ query })
+    ;(useQuery as jest.Mock).mockReturnValue({ data: undefined, error: undefined, loading: false })
+    ;(useMutation as jest.Mock).mockReturnValue([jest.fn(), { loading: false }])
+  })
+
+  afterEach(async () => {
+    await act(async () => root.unmount())
+    container.remove()
+    jest.clearAllMocks()
+  })
+
+  const leak = (eventId: string, minute: number, changes: Record<string, unknown>) => ({
+    ...event('secret_in_request'),
+    ingestSeq: String(minute),
+    eventId,
+    proxyCreatedAt: `2026-11-19T10:${String(minute).padStart(2, '0')}:00Z`,
+    eventType: 'leak_protection',
+    method: 'POST',
+    host: 'api.anthropic.com',
+    path: '/v1/messages',
+    statusCode: null,
+    proxyDecision: 'ALLOW',
+    session: { sessionUid: 'session-1' },
+    ...changes,
+  })
+
+  // As the Console stores and returns them: snake case keys, and the secrets
+  // behind the placeholders as far as this viewer may see.
+  const CENSORED = leak('censored', 4, {
+    outcome: 'censored',
+    latencyMs: 3,
+    detail: {
+      mode: 'censor',
+      harness: 'claude',
+      capture: 'proxy',
+      severity: 'high',
+      where: 'body',
+      inventory_hits: 4,
+      rule_redactions: 1,
+      placeholder_count: 5,
+      labels: 'aws_access_key_id',
+      placeholders:
+        'ph:secret:secret-1,ph:secret:secret-2,ph:secret:secret-3,ph:aws_access_key_id:1',
+      secrets: [
+        {
+          placeholder: 'ph:secret:secret-1',
+          app_id: 'app-1',
+          app_name: 'orders-service',
+          environment_id: 'env-1',
+          environment_name: 'Production',
+          secret_id: 'secret-1',
+          path: '/billing',
+        },
+        {
+          placeholder: 'ph:secret:secret-2',
+          app_id: 'app-1',
+          app_name: 'orders-service',
+          environment_restricted: true,
+        },
+        { placeholder: 'ph:secret:secret-3', app_restricted: true },
+      ],
+    },
+  })
+  const BLOCKED = leak('blocked', 3, {
+    method: 'GET',
+    path: '/redacted',
+    statusCode: 403,
+    proxyDecision: 'BLOCK',
+    outcome: 'denied',
+    detail: { mode: 'censor', harness: 'claude', where: 'url', inventory_hits: 1 },
+  })
+  const UNREAD = leak('unread', 2, {
+    outcome: 'unread',
+    reason: 'body_over_limit',
+    detail: { mode: 'censor', harness: 'opencode', capture: 'tunnel', rule_version: 7 },
+  })
+  const BYPASS = leak('bypass', 1, {
+    method: 'CONNECT',
+    host: 'chatgpt.com',
+    path: '/',
+    outcome: 'bypass',
+    reason: 'tls_refused',
+    detail: { mode: 'censor', harness: 'codex', window_seconds: 40 },
+  })
+  const REQUEST = {
+    ...event('upstream_ok'),
+    ingestSeq: '0',
+    eventId: 'request',
+    proxyCreatedAt: '2026-11-19T10:00:00Z',
+    proxyDecision: 'ALLOW',
+    outcome: 'ok',
+    statusCode: 200,
+    latencyMs: 12,
+    detail: { aws_sigv4_failure: 'none' },
+  }
+
+  const renderLog = async (events: Array<Record<string, unknown>>) => {
+    query.mockResolvedValue({ data: { agentEvents: { events, nextCursor: '4', hasMore: false } } })
+    await act(async () => {
+      root.render(
+        <AgentEventLog
+          team="acme"
+          organisationId="org-1"
+          agentId="agent-1"
+          workflows={[{ id: 'workflow-1', name: 'Default', connections: [] }]}
+          sessions={[]}
+          canRead
+          canAllowHosts
+        />
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
+
+  const row = (eventId: string) =>
+    container
+      .querySelector<HTMLButtonElement>(`button[aria-label="Show details for event ${eventId}"]`)!
+      .closest('tr')!
+
+  const cells = (eventId: string) =>
+    Array.from(row(eventId).querySelectorAll('td')).map((cell) => cell.textContent)
+
+  const headline = (eventId: string) => row(eventId).querySelector<HTMLElement>('td div[title]')!
+
+  const expand = (eventId: string) => {
+    const collapsed = row(eventId)
+    act(() => collapsed.click())
+    return collapsed.nextElementSibling as HTMLElement
+  }
+
+  const field = (panel: HTMLElement, label: string) =>
+    Array.from(panel.querySelectorAll<HTMLElement>('div.space-y-0\\.5')).find(
+      (candidate) => candidate.firstElementChild?.textContent === label
+    )?.lastElementChild as HTMLElement | undefined
+
+  test('says what leak protection did in each row, in place of the method and path', async () => {
+    await renderLog([CENSORED, BLOCKED, UNREAD, BYPASS, REQUEST])
+
+    expect(cells('censored').slice(3, 6)).toEqual([
+      'Removed 5 secret values from a request to api.anthropic.comHigh severityClaude Code · Phase AI proxy',
+      'Allow',
+      'Censored3 ms',
+    ])
+    expect(cells('blocked').slice(3, 6)).toEqual([
+      'Blocked a request to api.anthropic.com with a secret in its URLClaude Code',
+      'Block',
+      'BlockedHTTP 403',
+    ])
+    expect(cells('unread').slice(3, 6)).toEqual([
+      'Did not read a request to api.anthropic.com: the body was over the size limitOpenCode · phase up',
+      'Allow',
+      'Not read',
+    ])
+    expect(cells('bypass').slice(3, 6)).toEqual([
+      "Not reading chatgpt.com for 40 seconds: the tool refused Phase's certificateCodex",
+      'Allow',
+      'Reading paused',
+    ])
+
+    // The request itself stays one hover away.
+    expect(headline('censored').title).toBe('POST api.anthropic.com:443/v1/messages')
+    expect(headline('bypass').title).toBe('CONNECT chatgpt.com:443/')
+    // Never offered as a host to allow.
+    expect(container.textContent).not.toContain('Allow host')
+  })
+
+  test('colours a row by its tone and marks its severity', async () => {
+    await renderLog([
+      CENSORED,
+      BLOCKED,
+      UNREAD,
+      BYPASS,
+      { ...CENSORED, eventId: 'calm', detail: {} },
+    ])
+
+    expect(headline('censored').className).toContain('text-red-700')
+    expect(headline('blocked').className).toContain('text-red-700')
+    expect(headline('unread').className).toContain('text-amber-700')
+    expect(headline('bypass').className).toContain('text-amber-700')
+    expect(headline('calm').className).toBe('')
+
+    const severity = Array.from(row('censored').querySelectorAll('span')).find(
+      (element) => element.textContent === 'High severity'
+    )!
+    expect(severity.className).toContain('bg-red-500/10')
+    expect(row('blocked').textContent).not.toContain('severity')
+    // With nothing to say about the tool, the row says what kind of event it is.
+    expect(cells('calm')[3]).toBe(
+      'Removed secret values from a request to api.anthropic.comLeak protection'
+    )
+  })
+
+  test('an event of another type is shown as before', async () => {
+    await renderLog([CENSORED, REQUEST])
+
+    expect(cells('request').slice(3, 6)).toEqual([
+      'GET ssmmessages.eu-central-1.amazonaws.com:443/v1/data-channelNo connection',
+      'Allow',
+      'HTTP 20012 ms',
+    ])
+    const panel = expand('request')
+    expect(field(panel, 'Outcome')?.textContent).toBe('ok')
+    expect(field(panel, 'Reason')?.textContent).toBe('upstream_ok')
+    expect(field(panel, 'Bytes in / out')?.textContent).toBe('0 / 0')
+    expect(panel.querySelector('pre')?.textContent).toBe('{"aws_sigv4_failure":"none"}')
+    expect(field(panel, 'Tool')).toBeUndefined()
+  })
+
+  test('expands to the words, with the placeholders as chips and no raw detail', async () => {
+    await renderLog([CENSORED, BLOCKED, UNREAD, BYPASS])
+    const panel = expand('censored')
+
+    expect(field(panel, 'Request')?.textContent).toBe('POST api.anthropic.com:443/v1/messages')
+    expect(field(panel, 'Tool')?.textContent).toBe('Claude Code')
+    expect(field(panel, 'Captured by')?.textContent).toBe('Phase AI proxy')
+    expect(field(panel, 'Mode')?.textContent).toBe('Censor')
+    expect(field(panel, 'Severity')?.textContent).toBe('High')
+    expect(field(panel, 'Found in')?.textContent).toBe('Body')
+    expect(Array.from(field(panel, 'Found')!.children).map((line) => line.textContent)).toEqual([
+      '4 known secret values',
+      '1 token format replaced',
+      '5 distinct secrets in the request',
+    ])
+    expect(field(panel, 'Token formats')?.textContent).toBe('AWS access key ID')
+    // What the words replace is not repeated.
+    for (const label of ['Outcome', 'Bytes in / out', 'Credential action', 'Provider', 'Reason'])
+      expect(field(panel, label)).toBeUndefined()
+    expect(panel.querySelector('pre')).toBeNull()
+    expect(panel.textContent).not.toContain('inventory_hits')
+
+    const chips = Array.from(field(panel, 'Placeholders')!.querySelectorAll('code'))
+    expect(chips.map((chip) => chip.textContent)).toEqual([
+      'ph:secret:secret-1',
+      'ph:secret:secret-2',
+      'ph:secret:secret-3',
+      'ph:aws_access_key_id:1',
+    ])
+    // The chip is the log's own badge.
+    expect(chips[0].parentElement!.className).toContain('rounded-full')
+    expect(field(panel, 'Placeholders')!.textContent).toContain('+1 more not named in this event')
+  })
+
+  test('names the secret behind a placeholder only as far as the viewer may see', async () => {
+    await renderLog([CENSORED])
+    const placeholders = field(expand('censored'), 'Placeholders')!
+    const [first, second, third, fourth] = Array.from(placeholders.querySelectorAll('code')).map(
+      (chip) => chip.closest('span.inline-flex')!.parentElement!
+    )
+
+    const link = first.querySelector('a')!
+    expect(link.textContent).toBe('A secret in orders-service (Production)')
+    expect(link.getAttribute('href')).toBe(
+      '/acme/apps/app-1/environments/env-1/billing?secret=secret-1'
+    )
+    expect(second.textContent).toBe(
+      "ph:secret:secret-2A secret in orders-service (an environment you can't access)"
+    )
+    expect(third.textContent).toBe("ph:secret:secret-3A secret in an app you can't access")
+    for (const withheld of [second, third]) {
+      expect(withheld.querySelector('a')).toBeNull()
+      expect(withheld.querySelector('[data-withheld]')).not.toBeNull()
+    }
+    expect(fourth.textContent).toBe('ph:aws_access_key_id:1')
+  })
+
+  test('shows the rest of each kind of event, and any detail it has no words for', async () => {
+    await renderLog([CENSORED, BLOCKED, UNREAD, BYPASS])
+
+    const blocked = expand('blocked')
+    expect(field(blocked, 'Request')?.textContent).toBe('GET api.anthropic.com:443/redacted')
+    expect(field(blocked, 'Found in')?.textContent).toBe('URL')
+    expect(field(blocked, 'Found')?.textContent).toBe('1 known secret value')
+    expect(field(blocked, 'Placeholders')).toBeUndefined()
+
+    const unread = expand('unread')
+    expect(field(unread, 'Captured by')?.textContent).toBe('phase up')
+    expect(field(unread, 'Found')).toBeUndefined()
+    expect(unread.querySelector('pre')?.textContent).toBe('{"rule_version":7}')
+
+    const bypass = expand('bypass')
+    expect(field(bypass, 'Tool')?.textContent).toBe('Codex')
+    expect(field(bypass, 'Not reading for')?.textContent).toBe('40 seconds')
+    expect(bypass.querySelector('pre')).toBeNull()
+  })
+
+  test('narrows the log to leak protection from the filter menu', async () => {
+    await renderLog([CENSORED, REQUEST])
+    const trigger = container.querySelector<HTMLButtonElement>('[title="Filter Agent events"]')!
+    await act(async () => trigger.click())
+    const group = container.querySelector('[role="group"][aria-label="Event type"]')!
+    const option = group.querySelector<HTMLButtonElement>('button[aria-pressed]')!
+    expect(option.textContent).toContain('Leak protection')
+    expect(query.mock.calls[0][0].variables).toMatchObject({ eventType: null })
+
+    query.mockClear()
+    await act(async () => {
+      option.click()
+      await Promise.resolve()
+    })
+    expect(query.mock.calls[0][0].variables).toMatchObject({ eventType: 'leak_protection' })
+    expect(option.getAttribute('aria-pressed')).toBe('true')
+    expect(trigger.textContent).toContain('(active)')
+    // The live tail follows the same filter.
+    expect((useQuery as jest.Mock).mock.calls.at(-1)[1].variables).toMatchObject({
+      eventType: 'leak_protection',
+    })
+
+    // A second click clears it.
+    query.mockClear()
+    await act(async () => {
+      option.click()
+      await Promise.resolve()
+    })
+    expect(query.mock.calls[0][0].variables).toMatchObject({ eventType: null })
+    expect(trigger.textContent).not.toContain('(active)')
   })
 })
