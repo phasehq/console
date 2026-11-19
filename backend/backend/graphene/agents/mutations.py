@@ -30,7 +30,10 @@ from api.models import (
     OrganisationMember,
     ProviderCredentials,
 )
-from api.utils.access.permissions import role_has_global_access
+from api.utils.access.permissions import (
+    account_can_access_workflow,
+    role_has_global_access,
+)
 from api.utils.agent_access import (
     MAX_DURATION_SECONDS,
     MIN_DURATION_SECONDS,
@@ -545,7 +548,10 @@ class DeleteAgentWorkflowMutation(graphene.Mutation):
         return cls(ok=True)
 
 
-def _membership_workflows(agent, workflow_ids, *, lock=False):
+def _membership_workflows(agent, workflow_ids, actor, *, held=(), lock=False):
+    """The Agent's Workflows a membership is to cover. ``held`` are the IDs it
+    covers already; the actor must reach any other themselves."""
+
     ids = [str(value).strip() for value in workflow_ids or []]
     if not ids or any(not value for value in ids):
         raise GraphQLError("At least one Workflow is required")
@@ -555,17 +561,28 @@ def _membership_workflows(agent, workflow_ids, *, lock=False):
     if lock:
         queryset = queryset.select_for_update(of=("self",))
     workflows = list(
-        queryset.filter(
+        queryset.select_related("agent")
+        .filter(
             id__in=ids,
             agent=agent,
             organisation=agent.organisation,
             deleted_at__isnull=True,
-        ).order_by("created_at", "id")
+        )
+        .order_by("created_at", "id")
     )
     if {str(workflow.id) for workflow in workflows} != set(ids):
         raise GraphQLError(
             "One or more Workflows are inactive, unavailable, or belong to another Agent"
         )
+    held = {str(value) for value in held}
+    for workflow in workflows:
+        if str(workflow.id) not in held and not account_can_access_workflow(
+            actor, workflow, "read"
+        ):
+            raise GraphQLError(
+                "You can add only Workflows you have access to yourself. Ask "
+                "an Owner or Admin to add the others."
+            )
     return workflows
 
 
@@ -643,7 +660,9 @@ class AssignAgentMemberMutation(graphene.Mutation):
             require_agent(actor, agent, "update")
             require_role(actor, "create", "AgentMemberships")
             target = _membership_target(agent.organisation, member_id)
-            workflows = _membership_workflows(agent, workflow_ids, lock=True)
+            workflows = _membership_workflows(
+                agent, workflow_ids, actor, lock=True
+            )
             if AgentMembership.objects.filter(
                 agent=agent,
                 member=target,
@@ -705,7 +724,13 @@ class UpdateAgentMemberWorkflowsMutation(graphene.Mutation):
                     "Owner and Admin access is implicit and cannot be scoped"
                 )
             workflows = _membership_workflows(
-                membership.agent, workflow_ids, lock=True
+                membership.agent,
+                workflow_ids,
+                actor,
+                held=AgentWorkflowMembership.objects.filter(
+                    agent_membership=membership, deleted_at__isnull=True
+                ).values_list("workflow_id", flat=True),
+                lock=True,
             )
             _set_membership_workflows(membership, workflows, actor)
         _audit(
