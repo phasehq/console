@@ -382,12 +382,37 @@ export type ImportEnvOptions = { withValues: boolean; withComments: boolean }
  * imported value and comment in each env, and a new key becomes a new row.
  */
 export const mergeImportedRows = (
-  rows: AppSecret[],
+  current: AppSecret[],
   imported: AppSecret[],
   environments: EnvironmentType[],
   path: string,
-  options: Record<string, ImportEnvOptions> = {}
+  options: Record<string, ImportEnvOptions> = {},
+  server: AppSecret[] = [],
+  newRowId: NewRowId = randomRowId
 ): AppSecret[] => {
+  // A key renamed with an env hidden is still the old key there. An import is matched per env on
+  // the key each value is saved under, so such a value first leaves the row whose name it lacks.
+  const incomingKeys = new Set(imported.map((row) => row.key))
+  const mixed = current.filter(
+    (row) =>
+      rowPath(row) === path &&
+      row.envs.some(
+        ({ secret }) =>
+          secret &&
+          !inPlace(row, secret) &&
+          (incomingKeys.has(row.key) || incomingKeys.has(secret.key))
+      )
+  )
+  const rows =
+    mixed.length > 0
+      ? settleRows(
+          current,
+          mixed.map((row) => row.id),
+          serverIndex(server),
+          newRowId
+        ).rows
+      : current
+
   // Imports land in one folder, so only its keys can be overwritten
   const byKey = new Map(
     rows.filter((row) => (row.path ?? '/') === path).map((row) => [row.key, row])

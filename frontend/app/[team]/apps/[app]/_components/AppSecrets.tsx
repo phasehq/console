@@ -876,7 +876,14 @@ export const AppSecrets = ({
   const bulkAddNewClientSecrets = useCallback(
     (imported: AppSecret[], options?: Record<string, ImportEnvOptions>) =>
       setClientAppSecrets((prev) =>
-        mergeImportedRows(prev, imported, environmentsRef.current, secretPath, options)
+        mergeImportedRows(
+          prev,
+          imported,
+          environmentsRef.current,
+          secretPath,
+          options,
+          serverRowsRef.current
+        )
       ),
     [secretPath]
   )

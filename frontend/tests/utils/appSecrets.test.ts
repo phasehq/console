@@ -671,4 +671,73 @@ describe('mergeImportedRows', () => {
     expect(merged[1]).toMatchObject({ id: 'imported-TOKEN', key: 'TOKEN', path: '/' })
     expect(merged[1].envs[0].secret).toMatchObject({ value: 'y', path: '/', key: 'TOKEN' })
   })
+
+  describe('with a key renamed while an env was hidden', () => {
+    // OLD became NEW in Development; Production, hidden then, still has it as OLD
+    const server = [
+      row('OLD', { dev: secret('d1', 'OLD', 'dev'), prod: secret('p1', 'OLD', 'prod-live') }),
+    ]
+    const renamed = [
+      {
+        ...server[0],
+        key: 'NEW',
+        envs: server[0].envs.map((entry) =>
+          entry.env.id === 'dev' ? { ...entry, secret: secret('d1', 'NEW', 'dev') } : entry
+        ),
+      },
+    ]
+    const inProd = (rows: AppSecret[]) =>
+      rows.flatMap((r) =>
+        r.envs
+          .filter((entry) => entry.env.id === 'prod' && entry.secret)
+          .map((entry) => ({ row: r.key, ...entry.secret! }))
+      )
+    const merge = (imported: AppSecret[], prodOptions = all) =>
+      mergeImportedRows(
+        renamed,
+        imported,
+        envs,
+        '/',
+        { prod: prodOptions },
+        server,
+        () => 'split-1'
+      )
+
+    it('adds the new key to that env instead of overwriting the value it keeps under the old one', () => {
+      const merged = merge([importedRow('NEW', { prod: secret('new-1', 'NEW', 'imported') })])
+
+      expect(inProd(merged)).toEqual([
+        expect.objectContaining({ row: 'NEW', id: 'new-1', key: 'NEW', value: 'imported' }),
+        expect.objectContaining({ row: 'OLD', id: 'p1', key: 'OLD', value: 'prod-live' }),
+      ])
+      // The renamed value stays with its row
+      expect(merged[0]).toMatchObject({ id: 'app-OLD', key: 'NEW' })
+      expect(merged[0].envs[0].secret).toMatchObject({ id: 'd1', key: 'NEW' })
+      expect(merged[1]).toMatchObject({ id: 'split-1', key: 'OLD' })
+    })
+
+    it('adds it blank where the env takes keys only', () => {
+      const merged = merge([importedRow('NEW', { prod: secret('new-1', 'NEW', '') })], keysOnly)
+
+      expect(inProd(merged)).toEqual([
+        expect.objectContaining({ row: 'NEW', id: 'new-1', value: '' }),
+        expect.objectContaining({ row: 'OLD', id: 'p1', value: 'prod-live' }),
+      ])
+    })
+
+    it('updates the value under the old key when that is what the file names', () => {
+      const merged = merge([importedRow('OLD', { prod: secret('new-1', 'OLD', 'imported') })])
+
+      expect(inProd(merged)).toEqual([
+        expect.objectContaining({ row: 'OLD', id: 'p1', key: 'OLD', value: 'imported' }),
+      ])
+      expect(merged.map((r) => r.key)).toEqual(['NEW', 'OLD'])
+    })
+
+    it('leaves the row as it is when the import names neither key', () => {
+      const merged = merge([importedRow('OTHER', { prod: secret('new-1', 'OTHER', 'x') })])
+
+      expect(merged[0]).toBe(renamed[0])
+    })
+  })
 })
