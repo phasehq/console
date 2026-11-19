@@ -512,10 +512,13 @@ def resolve_app_agent_access(root, info, app_id):
     app = App.objects.filter(id=app_id, is_deleted=False).first()
     if app is None or not hasattr(user, "userId"):
         raise GraphQLError("App not found")
-    if not user_has_permission(user, "read", "ServiceAccounts", app.organisation, True):
-        return []
     if not user_can_access_app(user.userId, app.id):
         raise GraphQLError("You don't have access to this app")
+    # With the app, so a team's role for it decides, not the organisation role.
+    if not user_has_permission(
+        user, "read", "ServiceAccounts", app.organisation, True, app=app
+    ):
+        return []
     now = timezone.now()
     grants = (
         AgentWorkflowGrant.objects.active(now)
