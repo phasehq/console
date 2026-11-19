@@ -941,43 +941,56 @@ class UpdateSecretFolderMutation(graphene.Mutation):
         if not user_can_access_environment(user.userId, env.id):
             raise GraphQLError("You don't have access to this environment")
 
-        # A rotation's secrets move with their folder, which takes the say an edit of the rotation does
-        if RotatingSecret.objects.filter(
-            folder_id__in=_descendant_folder_ids(folder), deleted_at__isnull=True
-        ).exists() and not user_has_permission(
-            user, "update", "RotatingSecrets", org, True, app=app
-        ):
-            raise GraphQLError(
-                "This folder contains rotating secrets. You need "
-                "permission to update rotating secrets to rename or move it."
-            )
-
-        new_name = folder.name if name is None else name.strip()
-        new_parent = folder.path if path is None else normalize_path_string(path)
-
-        if not re.match(FOLDER_NAME_REGEX, new_name):
-            raise GraphQLError(
-                "Folder names can only include letters, numbers, hyphens and underscores, and must be 64 characters or less."
-            )
-        if new_parent == "/" and new_name.lower() in RESERVED_ROOT_FOLDER_NAMES:
-            raise GraphQLError(f'"{new_name}" is a reserved name and cannot be used for root folders')
-
-        old_full = _full_folder_path(folder.path, folder.name)
-        new_full = _full_folder_path(new_parent, new_name)
-        if new_full == old_full:
-            return UpdateSecretFolderMutation(folder=folder)
-
-        if _path_under(new_parent, old_full, old_full) is not None:
-            raise GraphQLError("A folder can't be moved into itself")
-
-        if (
-            SecretFolder.objects.filter(environment=env, path=new_parent, name=new_name)
-            .exclude(id=folder.id)
-            .exists()
-        ):
-            raise GraphQLError("A folder with that name already exists at this path!")
-
         with transaction.atomic():
+            # One restructure at a time in an environment. Each moves what it read at
+            # the start, so two at once (of one folder, or of a folder and one inside
+            # it) would leave paths that lead nowhere.
+            list(
+                SecretFolder.objects.select_for_update()
+                .filter(environment=env)
+                .order_by("id")
+                .values_list("id", flat=True)
+            )
+            folder = SecretFolder.objects.get(id=folder_id)
+
+            # A rotation's secrets move with their folder, which takes the say an edit of the rotation does
+            if RotatingSecret.objects.filter(
+                folder_id__in=_descendant_folder_ids(folder), deleted_at__isnull=True
+            ).exists() and not user_has_permission(
+                user, "update", "RotatingSecrets", org, True, app=app
+            ):
+                raise GraphQLError(
+                    "This folder contains rotating secrets. You need "
+                    "permission to update rotating secrets to rename or move it."
+                )
+
+            new_name = folder.name if name is None else name.strip()
+            new_parent = folder.path if path is None else normalize_path_string(path)
+
+            if not re.match(FOLDER_NAME_REGEX, new_name):
+                raise GraphQLError(
+                    "Folder names can only include letters, numbers, hyphens and underscores, and must be 64 characters or less."
+                )
+            if new_parent == "/" and new_name.lower() in RESERVED_ROOT_FOLDER_NAMES:
+                raise GraphQLError(
+                    f'"{new_name}" is a reserved name and cannot be used for root folders'
+                )
+
+            old_full = _full_folder_path(folder.path, folder.name)
+            new_full = _full_folder_path(new_parent, new_name)
+            if new_full == old_full:
+                return UpdateSecretFolderMutation(folder=folder)
+
+            if _path_under(new_parent, old_full, old_full) is not None:
+                raise GraphQLError("A folder can't be moved into itself")
+
+            if (
+                SecretFolder.objects.filter(environment=env, path=new_parent, name=new_name)
+                .exclude(id=folder.id)
+                .exists()
+            ):
+                raise GraphQLError("A folder with that name already exists at this path!")
+
             folder.name = new_name
             folder.path = new_parent
             folder.folder = (

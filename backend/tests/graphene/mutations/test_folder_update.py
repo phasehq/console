@@ -6,7 +6,7 @@ secrets, and the syncs that send the folder.
 """
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import DEFAULT, MagicMock, patch
 
 import pytest
 from graphql import GraphQLError
@@ -37,8 +37,11 @@ class _Run:
         has_access=True,
         has_rotation=False,
         conflict=False,
+        current=None,
     ):
         self.folder = folder
+        # The folder as found once the environment's folders are locked
+        self.current = current or folder
         self.inside = inside or {}
         self.permitted = permitted
         self.has_access = has_access
@@ -48,6 +51,8 @@ class _Run:
         self.parent = object()
         # What happened, in order: the transaction closing and the environment's save
         self.events = []
+        # And before that: each read of the folder, the transaction opening, the lock
+        self.steps = []
 
     def __call__(self, **kwargs):
         from backend.graphene.mutations.environment import UpdateSecretFolderMutation
@@ -58,6 +63,9 @@ class _Run:
         ), patch(f"{_M}._descendant_folder_ids", return_value={"folder-1"}), patch(
             f"{_M}.create_environment_folder_structure", return_value=self.parent
         ) as self.create_folders, patch(f"{_M}.transaction") as transaction:
+            transaction.atomic.return_value.__enter__.side_effect = (
+                lambda: self.steps.append("transaction")
+            )
             transaction.atomic.return_value.__exit__.side_effect = (
                 lambda *exc: self.events.append("committed")
             )
@@ -70,11 +78,21 @@ class _Run:
                     found.values_list.return_value = self.inside.get(name, [])
                     found.exclude.return_value.exists.return_value = self.conflict
                     found.exists.return_value = self.has_rotation
-                self.models["SecretFolder"].objects.get.return_value = self.folder
+                folders = self.models["SecretFolder"].objects
+                folders.get.side_effect = self._read
+                folders.select_for_update.side_effect = self._lock
                 return UpdateSecretFolderMutation.mutate(None, _info(), "folder-1", **kwargs)
             finally:
                 for p in patches:
                     p.stop()
+
+    def _read(self, **kwargs):
+        self.steps.append("read")
+        return self.folder if self.steps.count("read") == 1 else self.current
+
+    def _lock(self):
+        self.steps.append("locked")
+        return DEFAULT
 
     def _permission(self, user, action, resource, *args, **kwargs):
         return self.permitted if resource == "Secrets" else False
@@ -233,3 +251,54 @@ def test_a_folder_holding_a_rotation_needs_permission_over_rotations():
         _Run(folder, has_rotation=True)(name="jobs")
 
     folder.save.assert_not_called()
+
+
+def test_the_environments_folders_are_locked_before_the_folder_is_read_to_act_on():
+    folder = _folder(name="workers", path="/")
+    run = _Run(folder, inside={"Secret": ["/workers"]})
+
+    run(name="jobs")
+
+    # The first read only finds whose folder it is, for the permission checks
+    assert run.steps == ["read", "transaction", "locked", "read"]
+    locked = run.models["SecretFolder"].objects.select_for_update.return_value.filter
+    locked.assert_called_once_with(environment=folder.environment)
+    # In one order, so two requests can't each hold a row the other waits for
+    locked.return_value.order_by.assert_called_once_with("id")
+
+
+def test_an_edit_that_landed_first_is_built_on_not_undone():
+    """Two edits at once would each move what they read at the start. The second waits for the
+    lock, then works from where the first left the folder."""
+    first_read = _folder(name="workers", path="/")
+    # Renamed by another request before this one got the lock
+    current = _folder(name="jobs", path="/")
+    current.environment = first_read.environment
+    run = _Run(
+        first_read,
+        current=current,
+        inside={"SecretFolder": ["/jobs/queues"], "Secret": ["/jobs"], "EnvironmentSync": ["/jobs"]},
+    )
+
+    result = run(name="tasks")
+
+    first_read.save.assert_not_called()
+    current.save.assert_called_once()
+    assert (current.name, current.path) == ("tasks", "/")
+    assert result.folder is current
+    # What is inside is looked for where the folder is now, not where it was first read
+    assert run.updates("SecretFolder") == [("/jobs/queues", "/tasks/queues")]
+    assert run.updates("Secret") == [("/jobs", "/tasks")]
+    assert run.updates("EnvironmentSync") == [("/jobs", "/tasks")]
+
+
+def test_an_edit_already_made_by_another_request_changes_nothing():
+    first_read = _folder(name="workers", path="/")
+    current = _folder(name="jobs", path="/")
+    current.environment = first_read.environment
+    run = _Run(first_read, current=current)
+
+    run(name="jobs")
+
+    current.save.assert_not_called()
+    current.environment.save.assert_not_called()
