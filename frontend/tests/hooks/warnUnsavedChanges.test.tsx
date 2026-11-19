@@ -134,6 +134,119 @@ describe('useWarnIfUnsavedChanges', () => {
     back.mockRestore()
   })
 
+  describe('where the browser tells where the tab is in its history', () => {
+    const at = (index: number) =>
+      Object.defineProperty(window, 'navigation', {
+        value: { currentEntry: { index } },
+        configurable: true,
+      })
+    /** The browser arrives on an entry, by Back, Forward or a step the guard made */
+    const arrive = (index: number) => {
+      at(index)
+      window.dispatchEvent(new PopStateEvent('popstate', { state: { page: 'any' } }))
+    }
+    let go: jest.SpyInstance
+    let pushState: jest.SpyInstance
+
+    beforeEach(() => {
+      at(3)
+      go = jest.spyOn(window.history, 'go').mockImplementation(() => {})
+      pushState = jest.spyOn(window.history, 'pushState')
+    })
+    afterEach(() => {
+      go.mockRestore()
+      pushState.mockRestore()
+      delete (window as { navigation?: unknown }).navigation
+    })
+
+    it.each([
+      ['back', 2, 1],
+      ['forward', 4, -1],
+      ['several entries back', 0, 3],
+    ])('undoes a step %s by stepping, which keeps the entries ahead', async (_, landed, undo) => {
+      const onLeave = jest.fn()
+      await render({ unsaved: true, onLeave })
+
+      arrive(landed)
+      expect(router).not.toHaveBeenCalled()
+      expect(go).toHaveBeenCalledWith(undo)
+      // Pushing the page again is what would drop them
+      expect(pushState).not.toHaveBeenCalled()
+      expect(onLeave).toHaveBeenCalledTimes(1)
+
+      // Back on its own entry, which neither the router nor the user hears of
+      arrive(3)
+      expect(router).not.toHaveBeenCalled()
+      expect(onLeave).toHaveBeenCalledTimes(1)
+
+      // Carrying on makes the same step again, and that one reaches the router
+      act(() => (onLeave.mock.calls[0][0] as LeavePage)())
+      expect(go).toHaveBeenLastCalledWith(-undo)
+      arrive(landed)
+      expect(router).toHaveBeenCalledTimes(1)
+      expect(onLeave).toHaveBeenCalledTimes(1)
+    })
+
+    it('carries on even when told to before the browser is back on its entry', async () => {
+      const onLeave = jest.fn()
+      await render({ unsaved: true, onLeave })
+
+      arrive(2)
+      act(() => (onLeave.mock.calls[0][0] as LeavePage)())
+      arrive(3)
+      arrive(2)
+
+      expect(router).toHaveBeenCalledTimes(1)
+      expect(onLeave).toHaveBeenCalledTimes(1)
+    })
+
+    it('counts from the entry the changes were made on', async () => {
+      const onLeave = jest.fn()
+      await render({ unsaved: false, onLeave })
+      // A hash adds an entry of this same page
+      at(4)
+      await render({ unsaved: true, onLeave })
+
+      arrive(3)
+      expect(go).toHaveBeenCalledWith(1)
+      expect(onLeave).toHaveBeenCalledTimes(1)
+    })
+
+    it('pushes the page again, as without positions, when the browser says it has not moved', async () => {
+      const onLeave = jest.fn()
+      await render({ unsaved: true, onLeave })
+
+      window.history.replaceState({ page: 'syncing' }, '', '/acme/apps/storefront/syncing')
+      arrive(3)
+
+      expect(router).not.toHaveBeenCalled()
+      expect(go).not.toHaveBeenCalled()
+      expect(pushState).toHaveBeenCalledWith(
+        { page: 'grid' },
+        '',
+        'http://localhost/acme/apps/storefront'
+      )
+      expect(onLeave).toHaveBeenCalledTimes(1)
+    })
+
+    it("steps back the same way after the browser's confirm is turned down", async () => {
+      await render({ unsaved: true })
+      const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false)
+
+      arrive(2)
+      expect(go).toHaveBeenCalledWith(1)
+      expect(pushState).not.toHaveBeenCalled()
+      expect(router).not.toHaveBeenCalled()
+
+      confirm.mockReturnValue(true)
+      arrive(3)
+      arrive(2)
+      expect(go).toHaveBeenCalledTimes(1)
+      expect(router).toHaveBeenCalledTimes(1)
+      confirm.mockRestore()
+    })
+  })
+
   it('holds a navigation made in code and hands it to the app to ask', async () => {
     const onLeave = jest.fn()
     await render({ unsaved: true, onLeave })

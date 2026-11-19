@@ -16,6 +16,14 @@ const CONFIRM_MESSAGE =
 /** Carries on with a navigation that was held back */
 export type LeavePage = () => void
 
+type HistoryPosition = { navigation?: { currentEntry?: { index: number } | null } }
+
+/** The current entry's place in the tab's history, where the browser tells (the Navigation API) */
+const historyIndex = () => {
+  const index = (window as Window & HistoryPosition).navigation?.currentEntry?.index
+  return typeof index === 'number' && index >= 0 ? index : null
+}
+
 /** Next.js can't block navigation, so links and popstate are caught before its router sees them */
 export function useWarnIfUnsavedChanges(
   unsaved: boolean,
@@ -30,10 +38,16 @@ export function useWarnIfUnsavedChanges(
   onLeaveRef.current = onLeave
   // Set while carrying on with a back/forward the user agreed to
   const allowPopRef = useRef(false)
+  // Set while the browser steps back to this page's entry after a back/forward was held
+  const returningRef = useRef(false)
   // This page's history entry, put back when a back/forward is held
-  const entryRef = useRef<{ state: unknown; url: string } | null>(null)
+  const entryRef = useRef<{ state: unknown; url: string; index: number | null } | null>(null)
   useEffect(() => {
-    entryRef.current = { state: window.history.state, url: window.location.href }
+    entryRef.current = {
+      state: window.history.state,
+      url: window.location.href,
+      index: historyIndex(),
+    }
   }, [pathname, searchParams])
 
   useEffect(() => {
@@ -47,22 +61,38 @@ export function useWarnIfUnsavedChanges(
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [unsaved, loader])
 
-  // Stepping back after putting this entry back lands where the user was heading, either way
   useEffect(() => {
     if (!unsaved) return
     // A step back that went ahead after the guard came down isn't waiting any more
     allowPopRef.current = false
+    // The entry the changes are made on: a hash may have added one for this same page since
+    if (entryRef.current) entryRef.current.index = historyIndex()
 
     const guard = (e: PopStateEvent) => {
+      const entry = entryRef.current
+      const at = historyIndex()
+      // How far the browser went from this page's entry, where it tells
+      const steps = entry && entry.index !== null && at !== null ? at - entry.index : null
+      if (steps === 0 && returningRef.current) {
+        // Back on this page's entry: the router never saw it leave
+        returningRef.current = false
+        e.stopImmediatePropagation()
+        return
+      }
       if (allowPopRef.current) {
         allowPopRef.current = false
         return
       }
-      const entry = entryRef.current
       const hold = () => {
         e.stopImmediatePropagation()
-        // With the router's own state, its patched pushState passes this straight through
-        if (entry) window.history.pushState(entry.state, '', entry.url)
+        if (steps) {
+          // Stepping back to this entry keeps the ones ahead of it, which pushing it again would drop
+          returningRef.current = true
+          window.history.go(-steps)
+        } else if (entry) {
+          // With the router's own state, its patched pushState passes this straight through
+          window.history.pushState(entry.state, '', entry.url)
+        }
         loader.done(true)
       }
       const ask = onLeaveRef.current
@@ -70,7 +100,9 @@ export function useWarnIfUnsavedChanges(
         hold()
         ask(() => {
           allowPopRef.current = true
-          window.history.back()
+          if (steps) window.history.go(steps)
+          // From the entry pushed again, one step back is where the user was heading, either way
+          else window.history.back()
         })
       } else if (!confirm(CONFIRM_MESSAGE)) hold()
     }
