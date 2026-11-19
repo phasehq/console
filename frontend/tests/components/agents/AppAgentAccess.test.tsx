@@ -102,6 +102,24 @@ describe('the Agents tab of an app', () => {
       Array.from(tableRow.children).map((cell) => cell.textContent)
     )
 
+  test('a failed read says so instead of showing no Agents', async () => {
+    ;(useQuery as jest.Mock).mockImplementation((document) =>
+      document === GetAppAgentAccess
+        ? { data: undefined, loading: false, error: new Error('Network error'), refetch: jest.fn() }
+        : { data: { apps: [{ id: 'app-1', sseEnabled: true }] }, loading: false }
+    )
+    await act(async () => {
+      root.render(
+        <Suspense fallback={null}>
+          <AppAgents params={Promise.resolve({ team: 'acme', app: 'app-1' })} />
+        </Suspense>
+      )
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(container.textContent).toContain('Network error')
+    expect(container.textContent).not.toContain('No Agents')
+  })
+
   test('lists each Workflow with access, linking the Agent', async () => {
     await render([
       row(),

@@ -11,6 +11,7 @@ import { GetAppAgentAccess } from '@/graphql/queries/apps/getAppAgentAccess.gql'
 import { EmptyState } from '@/components/common/EmptyState'
 import Spinner from '@/components/common/Spinner'
 import { GrantExpiryText } from '@/components/agents/AgentGrantExtras'
+import { AgentError } from '@/components/agents/AgentUI'
 import { agentsPath } from '@/utils/agents/routes'
 import {
   SSE_REQUIRED_LINE,
@@ -42,7 +43,7 @@ export default function AppAgents(props: { params: Promise<{ team: string; app: 
   // The server lists Agents to those who may see the app's service accounts.
   const canRead = hasPermission('ServiceAccounts', 'read', true)
 
-  const { data, loading } = useQuery(GetAppAgentAccess, {
+  const { data, loading, error, refetch } = useQuery(GetAppAgentAccess, {
     variables: { appId: params.app },
     skip: !organisation || !canRead,
     fetchPolicy: 'cache-and-network',
@@ -75,6 +76,9 @@ export default function AppAgents(props: { params: Promise<{ team: string; app: 
         <></>
       </EmptyState>
     )
+
+  // A failed read is not "no Agents".
+  if (error && !data) return <AgentError message={error.message} retry={() => refetch()} />
 
   return (
     <div className="w-full space-y-6 text-black dark:text-white">
