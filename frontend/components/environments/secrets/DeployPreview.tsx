@@ -969,14 +969,24 @@ export const DeployPreviewDialog = forwardRef<DeployPreviewHandle, DeployPreview
         {hasActions && (
           <div className="mt-4 flex items-center justify-between gap-3 border-t border-neutral-500/20 pt-3">
             {onDiscard ? (
-              <Button variant="outline" icon={FaUndo} onClick={closeThen(onDiscard)}>
+              <Button
+                variant="outline"
+                icon={FaUndo}
+                disabled={changeCount === 0}
+                onClick={closeThen(onDiscard)}
+              >
                 Discard all changes
               </Button>
             ) : (
               <span />
             )}
             {onDeploy && (
-              <Button variant="primary" icon={FaCloudUploadAlt} onClick={closeThen(onDeploy)}>
+              <Button
+                variant="primary"
+                icon={FaCloudUploadAlt}
+                disabled={changeCount === 0}
+                onClick={closeThen(onDeploy)}
+              >
                 Deploy {plural(changeCount, 'change')}
               </Button>
             )}

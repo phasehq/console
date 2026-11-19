@@ -577,6 +577,8 @@ type ChoiceProps = {
   onReview: () => void
   onDiscard: () => void
   onDeploy: () => void
+  /** Told while the card holds a discard that can be undone, so it isn't taken down with the last change */
+  onUndoable?: (undoable: boolean) => void
 } & DiscardHandlers
 
 const CARD_BADGE =
@@ -602,10 +604,16 @@ const ChangesCard = ({
   onDiscard,
   onDeploy,
   onDiscardChanges,
+  onUndoable,
 }: ChoiceProps) => {
   const count = changes.changes.length
   const { discards, discard, undo } = useDiscards(onDiscardChanges)
   const canDiscard = Boolean(onDiscardChanges)
+  const undoable = discards.length > 0
+  useEffect(() => {
+    onUndoable?.(undoable)
+    return () => onUndoable?.(false)
+  }, [undoable, onUndoable])
 
   // Envs whose changes were all discarded keep their place while the discard can be undone
   const groups = [...changes.groups]
@@ -786,14 +794,24 @@ const ChangesCard = ({
         )}
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-neutral-500/20 bg-zinc-200/50 px-3 py-2 dark:bg-zinc-900/40">
-        <Button variant="outline" icon={FaUndo} onClick={onDiscard}>
+        <Button variant="outline" icon={FaUndo} disabled={count === 0} onClick={onDiscard}>
           Discard
         </Button>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" icon={FaCodeCompare} onClick={onReview}>
+          <Button
+            variant="secondary"
+            icon={FaCodeCompare}
+            disabled={count === 0}
+            onClick={onReview}
+          >
             Review
           </Button>
-          <Button variant="primary" icon={FaCloudUploadAlt} onClick={onDeploy}>
+          <Button
+            variant="primary"
+            icon={FaCloudUploadAlt}
+            disabled={count === 0}
+            onClick={onDeploy}
+          >
             Deploy {plural(count, 'change')}
           </Button>
         </div>
@@ -850,7 +868,7 @@ const PendingChanges = ({ deploying, ...props }: ChoiceProps & { deploying: bool
       <button
         type="button"
         onClick={choose(onReview)}
-        disabled={deploying}
+        disabled={deploying || count === 0}
         title="Review the changes"
         aria-haspopup="dialog"
         className={clsx(
@@ -909,7 +927,20 @@ export const DeployControls = ({
   onDeploy,
   onDiscardChanges,
 }: DeployControlsProps) => {
-  const pending = dirty || deploying
+  // The card stays, with nothing left to deploy, while a discard made in it can still be undone
+  const [undoable, setUndoable] = useState(false)
+  // Raised with the discard itself: one render without it would take the card down with the last change
+  const discardInCard = useMemo<DiscardHandlers['onDiscardChanges']>(
+    () =>
+      onDiscardChanges &&
+      ((changes) => {
+        const undo = onDiscardChanges(changes)
+        if (undo) setUndoable(true)
+        return undo
+      }),
+    [onDiscardChanges]
+  )
+  const pending = dirty || deploying || undoable
   const following = !pending && run.phase !== 'idle' && run.phase !== 'deploying'
 
   const line: ReactNode = pending ? (
@@ -920,7 +951,8 @@ export const DeployControls = ({
       onReview={onReview}
       onDiscard={onDiscard}
       onDeploy={onDeploy}
-      onDiscardChanges={onDiscardChanges}
+      onDiscardChanges={discardInCard}
+      onUndoable={setUndoable}
     />
   ) : following ? (
     <span className="hidden items-center gap-1.5 whitespace-nowrap text-neutral-500 lg:flex">
@@ -940,7 +972,12 @@ export const DeployControls = ({
       : ''
 
   const face = pending ? (
-    <button type="button" onClick={onDeploy} disabled={deploying} className={FACE_PRIMARY}>
+    <button
+      type="button"
+      onClick={onDeploy}
+      disabled={deploying || !dirty}
+      className={clsx(FACE_PRIMARY, !deploying && !dirty && 'opacity-60')}
+    >
       {deploying ? (
         <Spinner size="xs" color="emerald" />
       ) : (

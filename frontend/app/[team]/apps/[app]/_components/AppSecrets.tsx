@@ -2613,16 +2613,17 @@ export const AppSecrets = ({
           </div>
         </div>
 
+        {/* Not only while there are changes: discarding the last one in it must leave its Undo */}
+        <DeployPreviewDialog
+          ref={previewRef}
+          changes={secretChanges}
+          syncsByEnvId={syncsByEnvId}
+          onDiscard={confirmDiscard}
+          onDeploy={handleSaveChanges}
+          onDiscardChanges={handleDiscardSomeChanges}
+        />
         {unsavedChanges && (
           <>
-            <DeployPreviewDialog
-              ref={previewRef}
-              changes={secretChanges}
-              syncsByEnvId={syncsByEnvId}
-              onDiscard={confirmDiscard}
-              onDeploy={handleSaveChanges}
-              onDiscardChanges={handleDiscardSomeChanges}
-            />
             <DiscardChangesDialog
               ref={discardRef}
               changes={secretChanges}
