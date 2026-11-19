@@ -1,5 +1,5 @@
 import { ApiEnvironmentKeyGrantGrantTypeChoices as Grant, EnvironmentKeyType } from '@/apollo/graphql'
-import { grantedEnvIds, hasEnvAccess } from '@/utils/access/envGrants'
+import { grantedEnvIds, holdsEnvItself } from '@/utils/access/envGrants'
 
 const key = (envId: string, ...grantTypes: Grant[]) =>
   ({
@@ -21,10 +21,12 @@ describe('grantedEnvIds', () => {
     expect(grants.team).toEqual(['staging', 'prod'])
   })
 
-  it('answers access by either route', () => {
-    expect(hasEnvAccess(grants, 'staging')).toBe(true)
-    expect(hasEnvAccess(grants, 'qa')).toBe(false)
-    expect(hasEnvAccess(undefined, 'dev')).toBe(false)
+  it("counts an env as the account's own only when it holds it itself", () => {
+    expect(holdsEnvItself(grants, 'dev')).toBe(true)
+    expect(holdsEnvItself(grants, 'prod')).toBe(true)
+    expect(holdsEnvItself(grants, 'staging')).toBe(false)
+    expect(holdsEnvItself(grants, 'qa')).toBe(false)
+    expect(holdsEnvItself(undefined, 'dev')).toBe(false)
   })
 
   it('reads no keys as no access', () => {

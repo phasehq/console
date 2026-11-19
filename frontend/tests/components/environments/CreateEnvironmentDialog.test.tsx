@@ -244,7 +244,7 @@ describe('CreateEnvironmentDialog', () => {
     container.remove()
   })
 
-  it('starts a copy with the accounts that have its source', async () => {
+  it('starts a copy with the accounts that hold the source themselves', async () => {
     mockServer.keys = { alice: { prod: ['INDIVIDUAL'] }, bob: { dev: ['INDIVIDUAL'] } }
     await open('prod')
     expect(picker()!.dataset.selected).toBe('alice')
@@ -254,6 +254,21 @@ describe('CreateEnvironmentDialog', () => {
     expect(scopeSentFor('alice')).toEqual(['prod', 'new'])
     expect(scopeSentFor('bob')).toBeUndefined()
     expect(toast.success).toHaveBeenCalledWith('Environment created!')
+  })
+
+  it('leaves an account unticked when only a team gives it the source', async () => {
+    mockServer.keys = {
+      alice: { dev: ['INDIVIDUAL'], prod: ['TEAM'] },
+      bob: { prod: ['INDIVIDUAL', 'TEAM'] },
+    }
+    await open('prod')
+    expect(picker()!.dataset.selected).toBe('bob')
+
+    await typeName('prod-eu')
+    await create()
+    // Her access to the copy would be her own, and outlive her place in the team
+    expect(mockServer.keys.alice.new).toBeUndefined()
+    expect(mockServer.keys.bob.new).toEqual(['INDIVIDUAL'])
   })
 
   it('cannot be submitted as a copy while its accounts are still loading', async () => {

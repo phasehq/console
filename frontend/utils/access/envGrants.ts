@@ -19,6 +19,6 @@ export const grantedEnvIds = (
   return grants
 }
 
-/** Whether an account reaches an env by either route */
-export const hasEnvAccess = (grants: EnvGrants | undefined, envId: string) =>
-  Boolean(grants && (grants.individual.includes(envId) || grants.team.includes(envId)))
+/** Whether an account holds an env itself, whatever a team also gives it */
+export const holdsEnvItself = (grants: EnvGrants | undefined, envId: string) =>
+  Boolean(grants?.individual.includes(envId))

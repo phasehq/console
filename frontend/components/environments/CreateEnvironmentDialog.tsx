@@ -52,7 +52,7 @@ import { ColorPicker } from '../common/ColorPicker'
 import { stringToHexColor } from '@/utils/copy'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { userHasGlobalAccess } from '@/utils/access/permissions'
-import { EnvGrants, grantedEnvIds, hasEnvAccess } from '@/utils/access/envGrants'
+import { EnvGrants, grantedEnvIds, holdsEnvItself } from '@/utils/access/envGrants'
 import {
   EnvContents,
   emptyFoldersToCreate,
@@ -357,7 +357,9 @@ export const CreateEnvironmentDialog = forwardRef<
     [client, appId]
   )
 
-  // A copy starts with the access its source has
+  // A copy starts with the accounts that hold its source themselves. One that only a team gives the
+  // source isn't ticked: access handed out here is the account's own, and would outlive its place
+  // in the team
   const prefillKey =
     sourceId && !accessTouched
       ? `${openings}:${sourceId}:${assignable.map((account) => account.id).join(' ')}`
@@ -381,7 +383,9 @@ export const CreateEnvironmentDialog = forwardRef<
       .then((grants) => {
         if (cancelled) return
         setSelectedIds(
-          new Set(grants.filter(([, granted]) => hasEnvAccess(granted, sourceId)).map(([id]) => id))
+          new Set(
+            grants.filter(([, granted]) => holdsEnvItself(granted, sourceId)).map(([id]) => id)
+          )
         )
         setPrefilled({ key: prefillKey, unread: false })
       })
