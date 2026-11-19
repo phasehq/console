@@ -4,7 +4,10 @@ import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcess
 import { CreateNewSecretFolder } from '@/graphql/mutations/environments/createFolder.gql'
 import { UpdateSecretFolderOp } from '@/graphql/mutations/environments/updateFolder.gql'
 import { DeleteFolder } from '@/graphql/mutations/environments/deleteFolder.gql'
-import { CreateEnvironmentDialogHandle } from '@/components/environments/CreateEnvironmentDialog'
+import {
+  CreateEnvironmentDialog,
+  CreateEnvironmentDialogHandle,
+} from '@/components/environments/CreateEnvironmentDialog'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { UpdateEnvOrder } from '@/graphql/mutations/environments/updateEnvironmentOrder.gql'
 import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
@@ -2792,7 +2795,8 @@ export const AppSecrets = ({
               </div>
             }
           >
-            <></>
+            {/* Creating an environment reads no secret; its button is otherwise in the grid's header */}
+            {userCanCreateEnvironments ? <CreateEnvironmentDialog appId={app} /> : <></>}
           </EmptyState>
         ) : loadFailed && !hasContent ? (
           <EmptyState
