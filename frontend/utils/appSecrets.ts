@@ -1,5 +1,11 @@
 import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
+import {
+  KeyState,
+  ReferenceContext,
+  ReferenceValidationError,
+  validateSecretReferences,
+} from '@/utils/secretReferences'
 import { areTagsAreSame } from '@/utils/tags'
 
 // Client-side flag carried on staged deletions (not part of the GraphQL type)
@@ -648,6 +654,71 @@ export const duplicateKeyRowIds = (
   for (const [slot, ids] of byEnvKey)
     if (ids.length > 1 || dynamicSlots.has(slot)) ids.forEach((id) => duplicates.add(id))
   return duplicates
+}
+
+type KeyStates = { states: Map<string, KeyState>; envIds: Set<string> }
+
+/** Where each key is in one copy of the rows, by env and folder */
+const keyStatesOf = (rows: AppSecret[]): KeyStates => {
+  const states = new Map<string, KeyState>()
+  const envIds = new Set<string>()
+  for (const row of rows) {
+    for (const { env, secret } of row.envs) {
+      // The value's own key and folder: an env that isn't shown keeps its own when a row is
+      // renamed or moved
+      const key = secret ? secret.key || row.key : ''
+      if (!secret || key === '' || !env.id) continue
+      envIds.add(env.id)
+      const slot = keySlot(env.id, secret.path || row.path || '/', key)
+      const deleted = (secret as SecretWithFlags).stagedForDelete
+      if (!deleted || !states.has(slot)) states.set(slot, deleted ? 'deleted' : 'present')
+    }
+  }
+  return { states, envIds }
+}
+
+const keyStateAt =
+  ({ states }: KeyStates, envIds: Set<string>): NonNullable<ReferenceContext['keyStateAt']> =>
+  (envId, path, key) =>
+    envId && envIds.has(envId) ? states.get(keySlot(envId, path, key)) ?? 'missing' : undefined
+
+/**
+ * The broken references to ask about before a deploy: every one in the rows it changes
+ * (values in `envIds`), and elsewhere the ones it breaks itself, by deleting, renaming or
+ * moving what they point to. One that was broken already and isn't touched stays quiet.
+ * `savedRows` is the saved copy, its rows carrying the ids of the rows that hold their values.
+ */
+export const deployReferenceErrors = (
+  rows: AppSecret[],
+  savedRows: AppSecret[],
+  envIds: Set<string>,
+  context: ReferenceContext
+): ReferenceValidationError[] => {
+  const savedById = new Map(savedRows.map((row) => [row.id, row]))
+  const active = rows.filter((row) =>
+    row.envs.some((entry) => entry.secret && !(entry.secret as SecretWithFlags).stagedForDelete)
+  )
+  const current = keyStatesOf(rows)
+  const saved = keyStatesOf(savedRows)
+  // Both copies answer for the same envs, so only a changed target reads as newly broken
+  const held = new Set([...current.envIds, ...saved.envIds])
+  const now = { ...context, keyStateAt: keyStateAt(current, held) }
+  const before = { ...context, keyStateAt: keyStateAt(saved, held) }
+  // A reference resolves by the env its value is in and its own text, whichever row holds it
+  const idOf = (error: ReferenceValidationError) => `${error.envName}\u0000${error.reference}`
+  const inRow = (error: ReferenceValidationError) => `${error.secretKey}\u0000${idOf(error)}`
+
+  const edited = active
+    .filter((row) => appSecretRowIsEdited(savedById.get(row.id), row))
+    .map((row) => ({ ...row, envs: row.envs.filter((entry) => envIds.has(entry.env.id!)) }))
+  const inEdited = validateSecretReferences(edited, now)
+
+  const brokenBefore = new Set(validateSecretReferences(active, before).map(idOf))
+  const reported = new Set(inEdited.map(inRow))
+  const newlyBroken = validateSecretReferences(active, now).filter(
+    (error) => !brokenBefore.has(idOf(error)) && !reported.has(inRow(error))
+  )
+  return [...inEdited, ...newlyBroken]
 }
 
 export type RowListItem =

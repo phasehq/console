@@ -6,6 +6,7 @@ import {
   buildAppSecretRows,
   carryRowKeys,
   deployIsShown,
+  deployReferenceErrors,
   dirtyEnvIds,
   duplicateKeyRowIds,
   envSecretsEqual,
@@ -20,6 +21,7 @@ import {
   snapshotHasDeploy,
   staleAppSecretEntries,
 } from '@/utils/appSecrets'
+import { ReferenceContext } from '@/utils/secretReferences'
 
 const dev = { id: 'dev', name: 'Development' } as EnvironmentType
 const staging = { id: 'staging', name: 'Staging' } as EnvironmentType
@@ -622,6 +624,113 @@ describe('duplicateKeyRowIds', () => {
       { ...row('A', { dev: secret('new-1', 'A', '') }), id: 'replacement' },
     ]
     expect(duplicateKeyRowIds(rows).size).toBe(0)
+  })
+})
+
+describe('deployReferenceErrors', () => {
+  const context: ReferenceContext = {
+    teamSlug: 'team',
+    appId: 'app',
+    envIds: { development: 'dev', staging: 'staging', production: 'prod' },
+    secretIdLookup: {},
+    secretKeys: [],
+    envSecretKeys: {},
+    envRootKeys: {},
+    envNames: ['Development', 'Staging', 'Production'],
+    folderPaths: [],
+    folderSecretKeys: {},
+    envFolderKeys: {},
+    orgApps: [],
+    deletedKeys: [],
+  }
+  const shown = new Set(['dev', 'staging', 'prod'])
+  const host = row('HOST', { dev: secret('d1', 'HOST', 'db'), prod: secret('p1', 'HOST', 'db') })
+  const url = (values: Record<string, string>) =>
+    row(
+      'URL',
+      Object.fromEntries(
+        Object.entries(values).map(([env, value]) => [env, secret(`url-${env}`, 'URL', value)])
+      )
+    )
+  const references = (errors: ReturnType<typeof deployReferenceErrors>) =>
+    errors.map((error) => `${error.secretKey} in ${error.envName}: ${error.reference}`)
+
+  it('asks about a reference in an untouched value whose key the deploy renames', () => {
+    const saved = [host, url({ dev: '${HOST}' })]
+    const renamed = {
+      ...host,
+      key: 'DB_HOST',
+      envs: host.envs.map((entry) =>
+        entry.secret ? { ...entry, secret: { ...entry.secret, key: 'DB_HOST' } } : entry
+      ),
+    }
+    const errors = deployReferenceErrors([renamed, saved[1]], saved, shown, context)
+    expect(references(errors)).toEqual(['URL in Development: ${HOST}'])
+  })
+
+  it('asks about one whose key the deploy moves to another folder', () => {
+    const saved = [host, url({ dev: '${HOST}' })]
+    const moved = {
+      ...host,
+      path: '/db',
+      envs: host.envs.map((entry) =>
+        entry.secret ? { ...entry, secret: { ...entry.secret, path: '/db' } } : entry
+      ),
+    }
+    const errors = deployReferenceErrors([moved, saved[1]], saved, shown, context)
+    expect(references(errors)).toEqual(['URL in Development: ${HOST}'])
+  })
+
+  it('stays quiet about a reference that was broken already and is not touched', () => {
+    const saved = [host, url({ dev: '${NOWHERE}' }), row('B', { dev: secret('b1', 'B', '1') })]
+    const edited = [saved[0], saved[1], row('B', { dev: secret('b1', 'B', '2') })]
+    expect(deployReferenceErrors(edited, saved, shown, context)).toEqual([])
+  })
+
+  it('reports every broken reference in a row the deploy changes, once', () => {
+    const saved = [host, url({ dev: '${NOWHERE}' })]
+    const edited = [host, url({ dev: 'x ${NOWHERE} ${HOST}' })]
+    const errors = deployReferenceErrors(edited, saved, shown, context)
+    expect(references(errors)).toEqual(['URL in Development: ${NOWHERE}'])
+  })
+
+  it("resolves a reference by the key the other env's value has, not the row's", () => {
+    // Renamed with Production not shown: the row is DB_HOST, Production's value is still HOST
+    const renamedInDev = row('DB_HOST', {
+      dev: secret('d1', 'DB_HOST', 'db'),
+      prod: secret('p1', 'HOST', 'db'),
+    })
+    const savedHost = { ...host, id: renamedInDev.id }
+    const onlyDev = new Set(['dev'])
+    const errorsFor = (value: string) =>
+      references(
+        deployReferenceErrors(
+          [renamedInDev, url({ dev: value })],
+          [savedHost, url({ dev: 'x' })],
+          onlyDev,
+          context
+        )
+      )
+
+    expect(errorsFor('${production.DB_HOST}')).toEqual([
+      'URL in Development: ${production.DB_HOST}',
+    ])
+    expect(errorsFor('${production.HOST}')).toEqual([])
+  })
+
+  it("asks about an unshown env's value that points at a key renamed in a shown one", () => {
+    const saved = [host, url({ prod: '${development.HOST}' })]
+    const renamedInDev = row('DB_HOST', {
+      dev: secret('d1', 'DB_HOST', 'db'),
+      prod: secret('p1', 'HOST', 'db'),
+    })
+    const errors = deployReferenceErrors(
+      [{ ...renamedInDev, id: host.id }, saved[1]],
+      saved,
+      new Set(['dev']),
+      context
+    )
+    expect(references(errors)).toEqual(['URL in Production: ${development.HOST}'])
   })
 })
 

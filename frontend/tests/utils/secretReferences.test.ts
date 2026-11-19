@@ -1194,4 +1194,52 @@ describe('validateSecretReferences', () => {
     expect(errors[0].secretKey).toBe('A')
     expect(errors[1].secretKey).toBe('B')
   })
+
+  describe("with the caller's own copy of where each key is", () => {
+    // The copy holds Development and Production; Staging falls back to the key lists
+    const states: Record<string, 'present' | 'deleted'> = {
+      'env-dev-id|/|DB_HOST': 'present',
+      'env-dev-id|/backend|REDIS_URL': 'present',
+      'env-dev-id|/|OLD_KEY': 'deleted',
+      'env-prod-id|/|PROD_KEY': 'present',
+      'env-prod-id|/|RETIRED': 'deleted',
+    }
+    const held = makeContext({
+      keyStateAt: (envId, path, key) =>
+        envId === 'env-dev-id' || envId === 'env-prod-id'
+          ? states[`${envId}|${path}|${key}`] ?? 'missing'
+          : undefined,
+    })
+    const inDev = (value: string) => [
+      {
+        key: 'CONN',
+        envs: [{ env: { id: 'env-dev-id', name: 'Development' }, secret: { value } }],
+      },
+    ]
+
+    test('resolves a local reference at the folder it names', () => {
+      expect(validateSecretReferences(inDev('${DB_HOST} ${backend/REDIS_URL}'), held)).toEqual([])
+      const errors = validateSecretReferences(inDev('${REDIS_URL} ${backend/DB_HOST}'), held)
+      expect(errors.map((e) => e.reference)).toEqual(['${REDIS_URL}', '${backend/DB_HOST}'])
+    })
+
+    test('flags a local reference to a key staged for deletion', () => {
+      const errors = validateSecretReferences(inDev('${OLD_KEY}'), held)
+      expect(errors).toHaveLength(1)
+      expect(errors[0].deleted).toBe(true)
+    })
+
+    test('flags a reference into another env to a key it lacks, and accepts one it has', () => {
+      expect(validateSecretReferences(inDev('${production.PROD_KEY}'), held)).toEqual([])
+      const errors = validateSecretReferences(inDev('${production.DB_HOST}'), held)
+      expect(errors.map((e) => e.error)).toEqual([
+        'Referenced key "DB_HOST" does not exist in "production"',
+      ])
+    })
+
+    test('falls back to the key lists for an env the copy does not hold', () => {
+      expect(validateSecretReferences(inDev('${staging.STAGING_ONLY}'), held)).toEqual([])
+      expect(validateSecretReferences(inDev('${staging.PROD_KEY}'), held)).toHaveLength(1)
+    })
+  })
 })
