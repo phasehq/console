@@ -122,9 +122,25 @@ def revoke_dynamic_secret_leases(environments):
         raise PurgeBlockedError(f"could not revoke {failed} dynamic secret lease(s)")
 
 
+def _unrevoked_rotating_credentials(environments):
+    """Every credential that may still be live at the provider, REVOKE_FAILED
+    included: once its rows are deleted, nothing can revoke them."""
+    RotatingSecretCredential = apps.get_model("api", "RotatingSecretCredential")
+
+    return RotatingSecretCredential.objects.filter(
+        status__in=[
+            RotatingSecretCredential.PENDING,
+            RotatingSecretCredential.ACTIVE,
+            RotatingSecretCredential.EXPIRING,
+            RotatingSecretCredential.REVOKING,
+            RotatingSecretCredential.REVOKE_FAILED,
+        ],
+        **_scoped("rotating_secret__environment__", environments),
+    )
+
+
 def revoke_rotating_secret_credentials(environments):
     RotatingSecret = apps.get_model("api", "RotatingSecret")
-    RotatingSecretCredential = apps.get_model("api", "RotatingSecretCredential")
     from ee.integrations.secrets.rotation.engine import (
         cancel_rotation_jobs,
         revoke_credential,
@@ -135,18 +151,7 @@ def revoke_rotating_secret_credentials(environments):
     ):
         cancel_rotation_jobs(rotating_secret)
 
-    # Every credential that may still be live at the provider, REVOKE_FAILED
-    # included: once its rows are deleted, nothing can revoke them.
-    unrevoked = RotatingSecretCredential.objects.filter(
-        status__in=[
-            RotatingSecretCredential.PENDING,
-            RotatingSecretCredential.ACTIVE,
-            RotatingSecretCredential.EXPIRING,
-            RotatingSecretCredential.REVOKING,
-            RotatingSecretCredential.REVOKE_FAILED,
-        ],
-        **_scoped("rotating_secret__environment__", environments),
-    )
+    unrevoked = _unrevoked_rotating_credentials(environments)
 
     for credential_id in list(unrevoked.values_list("id", flat=True)):
         try:
@@ -161,6 +166,36 @@ def revoke_rotating_secret_credentials(environments):
         raise PurgeBlockedError(
             f"could not revoke {remaining} rotating secret credential(s)"
         )
+
+
+def live_credentials_remain(environments):
+    """Whether a lease or rotating credential is still live at a provider.
+
+    Call inside the transaction that runs the cascade. A request that was
+    already under way when the deletion was asked for can mint one after the
+    purge revoked the rest, and the cascade would delete its row unrevoked.
+    This locks the secrets they hang off, so none can be added until the
+    transaction ends: an insert waits, then fails on the missing secret, and
+    its own error handling revokes what it minted."""
+    DynamicSecret = apps.get_model("api", "DynamicSecret")
+    DynamicSecretLease = apps.get_model("api", "DynamicSecretLease")
+    RotatingSecret = apps.get_model("api", "RotatingSecret")
+
+    # Evaluated for the row locks. of=self: not the environments they join.
+    for model in (DynamicSecret, RotatingSecret):
+        list(
+            model.objects.select_for_update(of=("self",))
+            .filter(**_scoped("environment__", environments))
+            .only("id")
+        )
+
+    return (
+        DynamicSecretLease.objects.filter(
+            status=DynamicSecretLease.ACTIVE,
+            **_scoped("secret__environment__", environments),
+        ).exists()
+        or _unrevoked_rotating_credentials(environments).exists()
+    )
 
 
 def stop_syncs(environments):

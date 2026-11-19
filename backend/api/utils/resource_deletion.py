@@ -48,10 +48,13 @@ def purge_due(resource):
 
 
 def can_restore(resource):
-    """Until the grace period ends, and later while the purge is blocked: a
-    blocked purge deletes nothing, and clears the block before it does."""
-    return is_pending_deletion(resource) and (
-        not purge_due(resource) or resource.purge_blocked_at is not None
+    """Until the grace period ends, and later while the purge is blocked.
+    Never once the purge has claimed the row (`purge_started_at`): from then
+    on it revokes credentials and deletes."""
+    return (
+        is_pending_deletion(resource)
+        and resource.purge_started_at is None
+        and (not purge_due(resource) or resource.purge_blocked_at is not None)
     )
 
 
@@ -72,7 +75,9 @@ def is_ready_for_purge(resource):
 
 
 def _restart_grace_periods(queryset):
-    pending_deletion(queryset).update(
+    # Not what a purge has claimed: part of it may be gone already, so it
+    # stays due and the purge carries on.
+    pending_deletion(queryset).filter(purge_started_at__isnull=True).update(
         deleted_at=timezone.now(), purge_blocked_at=None
     )
 
@@ -124,9 +129,25 @@ def _scheduled(now, immediately):
         "deleted_at": now,
         "is_deleted": False,
         "purge_blocked_at": None,
+        "purge_started_at": None,
         "skip_grace_period": immediately,
         "updated_at": now,
     }
+
+
+def _cannot_restore_message(resource, kind):
+    # Claimed while still marked blocked: a retry is revoking credentials.
+    # It hands the row back if it is blocked again.
+    retrying = (
+        resource.purge_started_at is not None
+        and resource.purge_blocked_at is not None
+    )
+    if retrying:
+        return (
+            f"The deletion of this {kind} is being retried. Try again in a "
+            "few minutes."
+        )
+    return f"This {kind} can no longer be restored."
 
 
 def _skip_grace_period(resource, queryset, kind):
@@ -186,10 +207,16 @@ def restore_app(app_id):
     """Cancel an app's pending deletion. Returns the restored app."""
     App = apps.get_model("api", "App")
     Environment = apps.get_model("api", "Environment")
+    Organisation = apps.get_model("api", "Organisation")
     from backend.quotas import can_add_app
 
     with transaction.atomic():
-        # of=self: the organisation row stays unlocked.
+        # The organisation first, so two restores can't both take the plan's
+        # last slot. no_key: rows that reference it can still be inserted.
+        organisation_id = App.all_objects.values_list(
+            "organisation_id", flat=True
+        ).get(id=app_id)
+        Organisation.objects.select_for_update(no_key=True).get(id=organisation_id)
         app = (
             App.all_objects.select_for_update(of=("self",))
             .select_related("organisation")
@@ -199,7 +226,7 @@ def restore_app(app_id):
             raise ResourceDeletionError("This app is not scheduled for deletion.")
         # Past the deadline the purge may already be running.
         if not can_restore(app):
-            raise ResourceDeletionError("This app can no longer be restored.")
+            raise ResourceDeletionError(_cannot_restore_message(app, "app"))
         # Apps pending deletion don't count towards the plan's limit.
         if not can_add_app(app.organisation):
             raise ResourceDeletionError(
@@ -271,11 +298,17 @@ def delete_environment_now(environment_id):
 def restore_environment(environment_id):
     """Cancel an environment's pending deletion. Returns the restored
     environment."""
+    App = apps.get_model("api", "App")
     Environment = apps.get_model("api", "Environment")
     from backend.quotas import can_add_environment
 
     with transaction.atomic():
-        # of=self: the app row stays unlocked.
+        # The app first, so two restores can't both take the plan's last
+        # slot. no_key: rows that reference it can still be inserted.
+        app_id = Environment.all_objects.values_list("app_id", flat=True).get(
+            id=environment_id
+        )
+        App.all_objects.select_for_update(no_key=True, of=("self",)).get(id=app_id)
         environment = (
             Environment.all_objects.select_for_update(of=("self",))
             .select_related("app__organisation")
@@ -293,7 +326,9 @@ def restore_environment(environment_id):
             )
         # Past the deadline the purge may already be running.
         if not can_restore(environment):
-            raise ResourceDeletionError("This environment can no longer be restored.")
+            raise ResourceDeletionError(
+                _cannot_restore_message(environment, "environment")
+            )
         # Environments pending deletion don't count towards the plan's limit.
         if not can_add_environment(app):
             raise ResourceDeletionError(

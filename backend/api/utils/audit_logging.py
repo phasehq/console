@@ -84,23 +84,58 @@ def log_audit_event(
     Log a generic audit event. Fire-and-forget — never raises.
     """
     try:
-        AuditEvent.objects.create(
+        record_audit_event(
             organisation=organisation,
             event_type=event_type,
             resource_type=resource_type,
-            resource_id=str(resource_id),
+            resource_id=resource_id,
             actor_type=actor_type,
-            actor_id=str(actor_id),
-            actor_metadata=actor_metadata or {},
-            resource_metadata=resource_metadata or {},
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata=resource_metadata,
             old_values=old_values,
             new_values=new_values,
             description=description,
             ip_address=ip_address,
-            user_agent=user_agent or "",
+            user_agent=user_agent,
         )
     except Exception:
         logger.exception("Failed to write audit event: %s %s %s", event_type, resource_type, resource_id)
+
+
+def record_audit_event(
+    organisation,
+    event_type,
+    resource_type,
+    resource_id,
+    actor_type,
+    actor_id,
+    actor_metadata=None,
+    resource_metadata=None,
+    old_values=None,
+    new_values=None,
+    description="",
+    ip_address=None,
+    user_agent="",
+):
+    """Write an audit event, raising on failure. For a caller that writes it
+    in the same transaction as the change it records: a swallowed database
+    error there would roll the whole transaction back unnoticed."""
+    AuditEvent.objects.create(
+        organisation=organisation,
+        event_type=event_type,
+        resource_type=resource_type,
+        resource_id=str(resource_id),
+        actor_type=actor_type,
+        actor_id=str(actor_id),
+        actor_metadata=actor_metadata or {},
+        resource_metadata=resource_metadata or {},
+        old_values=old_values,
+        new_values=new_values,
+        description=description,
+        ip_address=ip_address,
+        user_agent=user_agent or "",
+    )
 
 
 def get_actor_info(request):
@@ -233,10 +268,10 @@ def audit_app_cascade_envs(
     Secret and disappear with them; replicating that history into
     AuditEvent would flood the log.
 
-    Called once the delete has committed, so a failed delete leaves no
-    record of one. `environments` are the rows fetched before it."""
+    Called in the transaction that deletes them, so the deletion and its
+    record commit together. `environments` are the rows fetched before it."""
     for env in environments:
-        log_audit_event(
+        record_audit_event(
             organisation=app.organisation,
             event_type="D",
             resource_type="env",

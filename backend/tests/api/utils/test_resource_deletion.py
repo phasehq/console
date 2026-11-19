@@ -127,6 +127,7 @@ class TestSaveKeepsTheLock:
         assert "deleted_at" not in fields
         assert "is_deleted" not in fields
         assert "purge_blocked_at" not in fields
+        assert "purge_started_at" not in fields
         assert "skip_grace_period" not in fields
         assert {"name", "updated_at"} <= set(fields)
         assert "id" not in fields
@@ -173,6 +174,12 @@ class TestSchedule:
     def test_the_grace_period_is_24_hours(self):
         assert GRACE_PERIOD == timedelta(hours=24)
 
+    @pytest.mark.parametrize("model", [App, Environment])
+    def test_the_flag_has_a_database_default(self, model):
+        # During a rolling deploy, a backend from before the column still
+        # inserts apps and environments without it.
+        assert model._meta.get_field("skip_grace_period").db_default is False
+
     @pytest.mark.parametrize("resource", [_app, _environment])
     def test_due_once_the_grace_period_has_ended(self, resource):
         assert deletion.purge_due(resource()) is False
@@ -205,6 +212,22 @@ class TestSchedule:
         blocked = _environment(deleted_ago=timedelta(days=3), blocked_ago=timedelta(1))
 
         assert deletion.can_restore(blocked) is True
+
+    @pytest.mark.parametrize(
+        "state",
+        [
+            {"deleted_ago": timedelta(days=3)},
+            # A retry has claimed it, and is revoking its credentials.
+            {"deleted_ago": timedelta(days=3), "blocked_ago": timedelta(days=1)},
+            # Its app or organisation was restored since: a fresh deleted_at.
+            {"deleted_ago": timedelta(minutes=1)},
+        ],
+        ids=["started", "claimed-by-a-retry", "grace-period-restarted"],
+    )
+    def test_never_restorable_once_the_purge_has_claimed_it(self, state):
+        claimed = _app(purge_started_at=timezone.now() - timedelta(hours=1), **state)
+
+        assert deletion.can_restore(claimed) is False
 
     @pytest.mark.parametrize("resource", [_app, _environment])
     def test_a_deletion_asked_for_at_once_has_no_grace_period(self, resource):
@@ -352,6 +375,7 @@ class TestScheduleAppDeletion:
         # Pending, not a row soft-deleted by an old release.
         assert update["is_deleted"] is False
         assert update["purge_blocked_at"] is None
+        assert update["purge_started_at"] is None
         assert update["skip_grace_period"] is False
         assert app.deleted_at == update["deleted_at"]
         assert app.purge_blocked_at is None
@@ -386,11 +410,22 @@ class TestScheduleAppDeletion:
 class TestRestoreApp:
     def _run(self, app, can_add=True):
         model, environment_model = MagicMock(), MagicMock()
+        self.organisation_model = MagicMock()
+        self.locks = []
+        model.all_objects.values_list.return_value.get.return_value = "org-1"
+        self.organisation_model.objects.select_for_update.side_effect = (
+            lambda **kw: self.locks.append(("organisation", kw)) or MagicMock()
+        )
         locked = model.all_objects.select_for_update.return_value
         locked.select_related.return_value.get.return_value = app
-        with _models(App=model, Environment=environment_model), patch(
-            "backend.quotas.can_add_app", return_value=can_add
-        ), patch.object(App, "save") as save:
+        model.all_objects.select_for_update.side_effect = (
+            lambda **kw: self.locks.append(("app", kw)) or locked
+        )
+        with _models(
+            App=model, Environment=environment_model, Organisation=self.organisation_model
+        ), patch("backend.quotas.can_add_app", return_value=can_add), patch.object(
+            App, "save"
+        ) as save:
             try:
                 restored = deletion.restore_app("app-1")
             finally:
@@ -412,8 +447,15 @@ class TestRestoreApp:
                 "updated_at",
             ]
         )
-        # The organisation row stays unlocked.
-        model.all_objects.select_for_update.assert_called_once_with(of=("self",))
+        model.all_objects.values_list.assert_called_once_with(
+            "organisation_id", flat=True
+        )
+        # The organisation first, so two restores can't both pass the plan's
+        # limit. no_key: its other rows can still be inserted meanwhile.
+        assert self.locks == [
+            ("organisation", {"no_key": True}),
+            ("app", {"of": ("self",)}),
+        ]
 
     def test_refuses_an_app_that_is_not_scheduled(self):
         with pytest.raises(ResourceDeletionError, match="not scheduled"):
@@ -452,6 +494,31 @@ class TestRestoreApp:
 
         self.save.assert_not_called()
 
+    def test_refuses_once_the_purge_has_started(self):
+        # Part of it may be gone, whatever its deleted_at now says.
+        app = _app(
+            deleted_ago=timedelta(minutes=1),
+            purge_started_at=timezone.now() - timedelta(hours=1),
+        )
+
+        with pytest.raises(ResourceDeletionError, match="no longer be restored"):
+            self._run(app)
+
+        self.save.assert_not_called()
+
+    def test_says_to_try_again_while_a_blocked_purge_is_being_retried(self):
+        # The retry hands it back if it is blocked again.
+        app = _app(
+            deleted_ago=timedelta(days=3),
+            blocked_ago=timedelta(days=1),
+            purge_started_at=timezone.now(),
+        )
+
+        with pytest.raises(ResourceDeletionError, match="being retried. Try again"):
+            self._run(app)
+
+        self.save.assert_not_called()
+
     def test_a_restore_while_blocked_brings_the_grace_period_back(self):
         # Deleted again later, it is scheduled as usual unless asked otherwise.
         app = _app(
@@ -483,7 +550,10 @@ class TestRestoreApp:
         environment_model.all_objects.filter.assert_called_once_with(app=app)
         pending = environment_model.all_objects.filter.return_value.filter
         pending.assert_called_once_with(deleted_at__isnull=False, is_deleted=False)
-        restarted = pending.return_value.update.call_args.kwargs
+        # Not one whose purge has started: part of it may be gone.
+        unstarted = pending.return_value.filter
+        unstarted.assert_called_once_with(purge_started_at__isnull=True)
+        restarted = unstarted.return_value.update.call_args.kwargs
         assert timezone.now() - restarted["deleted_at"] < timedelta(seconds=5)
         assert restarted["purge_blocked_at"] is None
 
@@ -536,13 +606,21 @@ class TestScheduleEnvironmentDeletion:
 
 class TestRestoreEnvironment:
     def _run(self, environment, can_add=True, conflict=None, taken_index=False):
-        model = MagicMock()
+        model, self.app_model = MagicMock(), MagicMock()
+        self.locks = []
+        model.all_objects.values_list.return_value.get.return_value = "app-1"
+        self.app_model.all_objects.select_for_update.side_effect = (
+            lambda **kw: self.locks.append(("app", kw)) or MagicMock()
+        )
         locked = model.all_objects.select_for_update.return_value
         locked.select_related.return_value.get.return_value = environment
+        model.all_objects.select_for_update.side_effect = (
+            lambda **kw: self.locks.append(("environment", kw)) or locked
+        )
         siblings = model.objects.filter.return_value
         siblings.filter.return_value.exists.return_value = taken_index
         siblings.aggregate.return_value = {"index__max": 4}
-        with _models(Environment=model), patch(
+        with _models(Environment=model, App=self.app_model), patch(
             "backend.quotas.can_add_environment", return_value=can_add
         ), patch.object(
             deletion, "environment_name_conflict", return_value=conflict
@@ -575,6 +653,12 @@ class TestRestoreEnvironment:
         assert update["index"] == 2
         # Environment.save() would trigger syncs inside the transaction.
         self.save.assert_not_called()
+        # The app first, so two restores can't both pass the plan's limit.
+        model.all_objects.values_list.assert_called_once_with("app_id", flat=True)
+        assert self.locks == [
+            ("app", {"no_key": True, "of": ("self",)}),
+            ("environment", {"of": ("self",)}),
+        ]
 
     def test_goes_last_when_its_place_in_the_order_was_taken(self):
         environment = self._pending(index=2)
@@ -600,6 +684,25 @@ class TestRestoreEnvironment:
     def test_refuses_once_the_purge_is_due(self):
         with pytest.raises(ResourceDeletionError, match="no longer be restored"):
             self._run(self._pending(deleted_ago=PAST_GRACE))
+
+    def test_refuses_once_the_purge_has_started(self):
+        started = self._pending(
+            deleted_ago=timedelta(minutes=1),
+            purge_started_at=timezone.now() - timedelta(hours=1),
+        )
+
+        with pytest.raises(ResourceDeletionError, match="no longer be restored"):
+            self._run(started)
+
+    def test_says_to_try_again_while_a_blocked_purge_is_being_retried(self):
+        retried = self._pending(
+            deleted_ago=timedelta(days=3),
+            blocked_ago=timedelta(days=1),
+            purge_started_at=timezone.now(),
+        )
+
+        with pytest.raises(ResourceDeletionError, match="being retried. Try again"):
+            self._run(retried)
 
     def test_restores_past_the_grace_period_while_the_purge_is_blocked(self):
         environment = self._pending(
@@ -654,7 +757,10 @@ class TestRestartGracePeriods:
             pending = model.all_objects.filter.return_value.filter
             # Not the apps soft-deleted by old releases.
             pending.assert_called_once_with(deleted_at__isnull=False, is_deleted=False)
-            restarted = pending.return_value.update.call_args.kwargs
+            # Nor what a purge has started on: that stays due.
+            unstarted = pending.return_value.filter
+            unstarted.assert_called_once_with(purge_started_at__isnull=True)
+            restarted = unstarted.return_value.update.call_args.kwargs
             assert timezone.now() - restarted["deleted_at"] < timedelta(seconds=5)
             assert restarted["purge_blocked_at"] is None
 
