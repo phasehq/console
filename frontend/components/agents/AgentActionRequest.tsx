@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import clsx from 'clsx'
 import isEqual from 'lodash/isEqual'
+import omit from 'lodash/omit'
 import { FaCheck, FaChevronDown, FaChevronRight, FaUndo } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
@@ -136,7 +137,16 @@ const CHANGE_STYLE: Record<DiffEntry['change'], { mark: string; text: string; wo
 }
 
 /** What an applied allow added, from the action as stored. */
-function AppliedAllow({ action, app }: { action: unknown; app: boolean }) {
+function AppliedAllow({
+  action,
+  app,
+  applied,
+}: {
+  action: unknown
+  app: boolean
+  /** False for a request that was denied or withdrawn: nothing was allowed. */
+  applied: boolean
+}) {
   const target = (action as { allow?: unknown } | null)?.allow
   // An app Connection's allow names classes of secrets calls.
   const classes = readAppClasses(target)
@@ -148,7 +158,9 @@ function AppliedAllow({ action, app }: { action: unknown; app: boolean }) {
         : ''
   return (
     <p className="text-xs text-neutral-500">
-      {text ? `Allowed ${text} for a limited time.` : 'Asked to allow a call for a limited time.'}
+      {text
+        ? `${applied ? 'Allowed' : 'Asked to allow'} ${text} for a limited time.`
+        : 'Asked to allow a call for a limited time.'}
     </p>
   )
 }
@@ -276,6 +288,14 @@ function AppliedAppAccess({ request }: { request: AgentActionRequest }) {
   )
 }
 
+// An app access action uses a string `access` for its level, which a reviewer may edit.
+const withoutGrantRecord = (action: unknown) => {
+  if (!action || typeof action !== 'object') return action
+  const record = (action as { access?: unknown }).access
+  const added = ['accessRecord', 'writeAccess']
+  return omit(action, record && typeof record === 'object' ? [...added, 'access'] : added)
+}
+
 /** What an action request asks for, or once resolved, what was applied and how. */
 export function AgentActionReview({ request }: { request: AgentActionRequest }) {
   const review = readActionReview(request.actionReview)
@@ -286,8 +306,11 @@ export function AgentActionReview({ request }: { request: AgentActionRequest }) 
   const assurance = approvalLabel(request.approval)
 
   if (!pending) {
+    // The server adds what it granted to the applied action; that is not a reviewer's edit.
     const wasEdited =
-      !!request.appliedAction && !!request.action && !isEqual(request.appliedAction, request.action)
+      !!request.appliedAction &&
+      !!request.action &&
+      !isEqual(withoutGrantRecord(request.appliedAction), withoutGrantRecord(request.action))
     const shown = applied ?? filed
     return (
       <section className="space-y-3 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3">
@@ -322,6 +345,7 @@ export function AgentActionReview({ request }: { request: AgentActionRequest }) 
           <AppliedAllow
             action={request.appliedAction ?? request.action}
             app={request.connection?.serviceType === APP_SERVICE_TYPE}
+            applied={!!request.appliedAction}
           />
         )}
         {type === REQUEST_ACTION_TYPES.renew && (
@@ -441,7 +465,7 @@ export function AgentActionApproveDialog({
   const visibility = readAppVisibility(request)
   const withheldLine = withheldReviewLine(
     visibility,
-    isAppAccess ? (review?.appAccess?.environments.length ?? 0) : undefined
+    isAppAccess ? review?.appAccess?.environments.length ?? 0 : undefined
   )
   const partialAppAccess = isAppAccess && !withheldLine && visibility.hiddenEnvironmentCount > 0
   const takesDuration = actionTakesDuration(type)
