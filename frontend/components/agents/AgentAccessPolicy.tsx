@@ -37,6 +37,7 @@ import {
   takesOperations,
   withDefault,
   type AdvancedRuleDraft,
+  type ManagedPolicy,
   type OperationRuleDraft,
   type PolicyDraft,
   type PolicyEffect,
@@ -64,12 +65,15 @@ const EFFECT_TEXT: Record<PolicyEffect, string> = {
   block: 'text-red-700 dark:text-red-400',
 }
 
-const MANAGED_LABEL: Record<string, { name: string; line: string }> = {
-  secret_guard: {
-    name: 'Secret guard',
-    line: 'Blocks calls that mint new credentials or assume another identity. It is always on and cannot be turned off.',
-  },
-}
+const MANAGED_NAME: Record<string, string> = { secret_guard: 'Secret guard' }
+
+const ALWAYS_ON = 'Always on and cannot be turned off.'
+
+// Said only when the server lists that rule for this Connection: not every provider has one.
+const managedLine = (entry: ManagedPolicy) =>
+  entry.rules.some((rule) => rule.class === 'credential_minting' && rule.effect === 'block')
+    ? 'Blocks calls that mint new credentials or assume another identity. It is always on and cannot be turned off.'
+    : ALWAYS_ON
 
 /**
  * Rules Phase applies to every Connection of a kind. They are listed, never
@@ -85,9 +89,11 @@ export function ManagedPolicies({ entries }: { entries: unknown }) {
       </h4>
       <ul className="space-y-1.5">
         {managed.map((entry) => {
-          const label = MANAGED_LABEL[entry.id] ?? {
-            name: entry.id.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase()),
-            line: 'Always on and cannot be turned off.',
+          const label = {
+            name:
+              MANAGED_NAME[entry.id] ??
+              entry.id.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase()),
+            line: managedLine(entry),
           }
           return (
             <li
