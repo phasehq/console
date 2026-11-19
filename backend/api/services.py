@@ -92,7 +92,8 @@ class Providers:
             "vault_secret_id",
         ],
         "optional_credentials": ["vault_namespace"],
-        "non_sensitive_credentials": ["vault_addr", "vault_role_id", "vault_namespace"],
+        # The role ID signs in on its own where an AppRole needs no secret ID.
+        "non_sensitive_credentials": ["vault_addr", "vault_namespace"],
         "endpoint_credentials": ["vault_addr"],
         "auth_scheme": "token",
     }

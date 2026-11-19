@@ -9,7 +9,7 @@ EXPECTED_NON_SENSITIVE_CREDENTIALS = {
     "postgres": {"username", "host", "port", "database"},
     "github": {"host_url", "api_url"},
     "gitlab": {"gitlab_host"},
-    "hashicorp_vault": {"vault_addr", "vault_role_id", "vault_namespace"},
+    "hashicorp_vault": {"vault_addr", "vault_namespace"},
     "hashicorp_nomad": {"nomad_addr"},
     "railway": set(),
     "vercel": set(),
