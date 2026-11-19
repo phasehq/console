@@ -8,8 +8,14 @@ from datetime import timedelta
 from uuid import uuid4
 
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
-from api.models import AgentConnection, AgentOrganisationSettings, AgentRequest
+from api.models import (
+    AgentConnection,
+    AgentOrganisationSettings,
+    AgentRequest,
+    AgentWorkflowGrant,
+)
 from api.utils.agent_access import (
     MIN_DURATION_SECONDS,
     access_record,
@@ -85,6 +91,22 @@ def write_expiry(grant, seconds, now):
     if grant.expires_at is not None and grant.expires_at < expires_at:
         expires_at = grant.expires_at
     return expires_at
+
+
+def write_access_ends(grant, now):
+    """When each write class a grant allows for a time ends: with its latest
+    temporary allow, never after the grant."""
+
+    ends = {}
+    for allow in live_temporary_allows(grant.temporary_allows, now):
+        name, end = allow.get("class"), parse_datetime(allow["expiresAt"])
+        if name not in WRITE_CLASSES:
+            continue
+        if grant.expires_at is not None and grant.expires_at < end:
+            end = grant.expires_at
+        if name not in ends or ends[name] < end:
+            ends[name] = end
+    return {name: ends[name] for name in WRITE_CLASSES if name in ends}
 
 
 class AppAccess(ActionHandler):
@@ -278,16 +300,14 @@ class AppAccess(ActionHandler):
             # What is left can no longer be asked for, so nothing is filed.
             # The reason would name what the approver cannot see.
             return None
-        title = request.title
-        if title == self.describe(request, request.action, None)["title"]:
-            # Not the Agent's own title: say what this request now covers.
-            title = self.describe(draft, checked, None)["title"]
         return file_action_request(
             draft,
             workflow=request.workflow,
-            title=title,
+            # Its own title and no text: what the Agent wrote for the whole
+            # request can name the environments this one leaves out.
+            title=self.describe(draft, checked, None)["title"],
             action=checked,
-            markdown=request.markdown,
+            markdown="",
             # A request is approved once, under its row lock, so this is
             # filed once.
             dedup_key=f"follow-on-{request.id}",
@@ -317,7 +337,25 @@ class AppAccess(ActionHandler):
         connection = reusable_connection(
             request.organisation_id, app, environments, lock=True
         )
-        temporary = WRITE_CLASSES if writes else ()
+        temporary = set(WRITE_CLASSES if writes else ())
+        held = connection and (
+            AgentWorkflowGrant.objects.active()
+            .filter(workflow=request.workflow, connection=connection)
+            .first()
+        )
+        if (
+            held
+            and held.expires_at is not None
+            and (expires_at is None or expires_at > held.expires_at)
+        ):
+            # Extending the grant extends any temporary allow it still has, so
+            # the approver must be able to give those classes too.
+            temporary.update(
+                allow.get("class")
+                for allow in live_temporary_allows(
+                    held.temporary_allows, timezone.now()
+                )
+            )
         try:
             require_member_can_release(
                 member, app, environments, released_classes(DEFAULT_POLICY, temporary)
@@ -359,9 +397,15 @@ class AppAccess(ActionHandler):
                 grant, WRITE_CLASSES, write_until, str(request.id), now
             )
             grant.save(update_fields=["temporary_allows", "updated_at"])
+            # A class keeps a longer allow it already had, so each is reported
+            # as it stands, and the whole as the last of them.
+            ends = write_access_ends(grant, now)
             applied["writeAccess"] = {
                 "grantedDurationSeconds": write_seconds,
-                "expiresAt": iso_timestamp(write_until),
+                "expiresAt": iso_timestamp(max(ends.values(), default=write_until)),
+                "expiresAtByClass": {
+                    name: iso_timestamp(end) for name, end in ends.items()
+                },
             }
         _refresh_after_commit(request.workflow_id)
         request.connection = connection
