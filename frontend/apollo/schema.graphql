@@ -101,6 +101,7 @@ type OrganisationType {
   role: RoleType
   memberId: ID
   memberScimManaged: Boolean
+  individualAppIds: [ID!]
   keyring: String
   recovery: String
   planDetail: OrganisationPlanType
