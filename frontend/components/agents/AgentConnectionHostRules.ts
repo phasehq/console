@@ -22,7 +22,7 @@ export const configuredAgentHostRules = (config: unknown): unknown[] => {
 export const presentAgentHostRule = (rule: unknown): AgentHostRulePresentation | null => {
   if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return null
 
-  const { match, value, port } = rule as Record<string, unknown>
+  const { match, value, port, path } = rule as Record<string, unknown>
   if (typeof value !== 'string' || !value.trim()) return null
 
   const normalizedHost = value.trim()
@@ -35,8 +35,10 @@ export const presentAgentHostRule = (rule: unknown): AgentHostRulePresentation |
   const normalizedPort =
     typeof port === 'number' && Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null
 
+  // A path narrows the rule, so review must show it.
+  const shownPath = typeof path === 'string' ? path.trim() : ''
   return {
-    endpoint: normalizedPort ? `${displayHost}:${normalizedPort}` : displayHost,
+    endpoint: `${normalizedPort ? `${displayHost}:${normalizedPort}` : displayHost}${shownPath}`,
     matchLabel:
       match === 'exact' ? 'Exact host' : match === 'suffix' ? 'Domain and subdomains' : 'Host',
   }

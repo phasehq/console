@@ -53,6 +53,9 @@ describe('Agent connection host-rule modes', () => {
       endpoint: '[::1]:5432',
       matchLabel: 'Exact host',
     })
+    expect(
+      presentAgentHostRule({ match: 'exact', value: 'api.example.com', port: 443, path: '/v1/*' })
+    ).toEqual({ endpoint: 'api.example.com:443/v1/*', matchLabel: 'Exact host' })
     expect(presentAgentHostRule({ match: 'exact', value: '' })).toBeNull()
     expect(configuredAgentDatabase({ database: ' phase ' })).toBe('phase')
     expect(configuredAgentDatabase({ database: 42 })).toBeNull()
