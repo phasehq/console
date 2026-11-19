@@ -238,6 +238,12 @@ def test_a_value_is_never_released_for_an_expired_grant(space):
 
 
 def test_an_expired_grant_takes_no_requests_but_keeps_its_late_events(space):
+    from api.models import AgentSession
+
+    # The session opened while the grant was in force.
+    AgentSession.objects.filter(pk=space.session["sessionUid"]).update(
+        created_at=timezone.now() - timedelta(hours=1)
+    )
     _expire(space.grant)
     other = workspace("other-tenant")
     foreign = grant(other, custom_connection(other))
