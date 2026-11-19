@@ -55,6 +55,44 @@ _MAX_POSITIVE_INTEGER = (1 << 31) - 1
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9._:/-]+$")
 _CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
 
+# Event types only the Console writes, which a proxy may not report.
+_CONSOLE_EVENT_TYPES = frozenset({"app_secrets", "credential_resolution_error"})
+# The detail members the CLI sends, as the parser spells them, by the kind of
+# value each holds. ``rule`` is checked on its own. Any other member is
+# dropped, so an event stores nothing the Console does not know how to read.
+_DETAIL_TEXT = frozenset(
+    {
+        "aws_sigv4_failure",
+        "capture",
+        "class",
+        "connection_id",
+        "connection_name",
+        "harness",
+        "labels",
+        "method",
+        "mode",
+        "operation",
+        "path",
+        "placeholders",
+        "scope",
+        "severity",
+        "where",
+    }
+)
+_DETAIL_NUMBERS = frozenset(
+    {
+        "inventory_hits",
+        "placeholder_count",
+        "replaced_count",
+        "rule_alerts",
+        "rule_redactions",
+        "scrubbed_values",
+        "signed_findings",
+        "window_seconds",
+    }
+)
+_DETAIL_FLAGS = frozenset({"placeholders_capped"})
+
 _TOP_LEVEL_FIELDS = {"schema_version", "batch_id", "events"}
 _EVENT_FIELDS = {
     "event_id",
@@ -224,10 +262,29 @@ def _policy_rule(value):
     return rule
 
 
+def _path(value):
+    """A path without its query string, which can carry a credential."""
+
+    return value.split("?", 1)[0]
+
+
+def _known_detail(key, item):
+    """Whether a detail member is one the CLI sends, holding its kind of value."""
+
+    if key == "rule":
+        return isinstance(item, (str, dict))
+    if key in _DETAIL_TEXT:
+        return isinstance(item, str)
+    if key in _DETAIL_NUMBERS:
+        return isinstance(item, int) and not isinstance(item, bool)
+    return key in _DETAIL_FLAGS and item is True
+
+
 def _detail(event, *, index):
     """A flat object of short scalar values for an event's metadata.
 
-    ``rule`` is the only field that may be an object.
+    ``rule`` is the only field that may be an object. Only the members the CLI
+    sends are kept.
     """
 
     value = event.get("detail")
@@ -278,7 +335,11 @@ def _detail(event, *, index):
                 index=index,
                 field="detail",
             )
-    return value
+    return {
+        key: _path(item) if key == "path" else item
+        for key, item in value.items()
+        if _known_detail(key, item)
+    }
 
 
 def _timestamp(event, *, index):
@@ -336,19 +397,26 @@ def _validate_event(event, index):
             index=index,
             field="proxy_decision",
         )
+    event_type = _string(
+        event,
+        "event_type",
+        index=index,
+        maximum=64,
+        required=True,
+        identifier=True,
+    )
+    if event_type in _CONSOLE_EVENT_TYPES:
+        _invalid(
+            "event_type names an event only the Console records.",
+            index=index,
+            field="event_type",
+        )
 
     return {
         "event_id": event_id,
         "proxy_created_at": _timestamp(event, index=index),
         "grant_id": grant_id,
-        "event_type": _string(
-            event,
-            "event_type",
-            index=index,
-            maximum=64,
-            required=True,
-            identifier=True,
-        ),
+        "event_type": event_type,
         "protocol": _string(
             event,
             "protocol",
@@ -371,7 +439,9 @@ def _validate_event(event, index):
         "port": _integer(
             event, "port", index=index, minimum=1, maximum=65535
         ),
-        "path": _string(event, "path", index=index, maximum=_MAX_PATH_LENGTH),
+        "path": _path(
+            _string(event, "path", index=index, maximum=_MAX_PATH_LENGTH)
+        ),
         "provider": _string(
             event,
             "provider",
