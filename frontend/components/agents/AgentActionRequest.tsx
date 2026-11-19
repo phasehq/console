@@ -544,6 +544,8 @@ export function AgentActionApproveDialog({
         : null
     setEditable(!!form)
     editor.reset(form ?? emptyCustomConnectionForm(requested?.name || ''))
+    // A secret typed for an edited host must not be sealed to the requested one.
+    setSecrets({})
   }
   const begin = () => {
     reviewing.current = true

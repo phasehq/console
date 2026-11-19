@@ -409,6 +409,16 @@ describe('reviewing a request that carries an action', () => {
     )
   })
 
+  test('resetting to the request clears a secret typed for an edited host', async () => {
+    await open(createRequest())
+    await click(container, 'Edit request')
+    await type(field(container, 'Host 1'), 'api.production.example.com')
+    await type(secretInputs()[0], 'production-token-value')
+    await click(container, 'Reset to the request')
+    expect(field(container, 'Host 1').value).toBe('api.example.com')
+    expect(secretInputs()[0].value).toBe('')
+  })
+
   describe('on the request card', () => {
     const show = async (request: AgentActionRequest) =>
       act(async () => root.render(<AgentActionReview request={request} />))
