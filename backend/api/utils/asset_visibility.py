@@ -6,6 +6,7 @@ that returns a name asks here.
 
 from dataclasses import dataclass, field
 
+from api.models import Environment
 from api.utils.access.permissions import (
     role_has_global_access,
     user_can_access_app,
@@ -78,6 +79,7 @@ class AssetVisibility:
         self.sees_all = member is not None and role_has_global_access(member.role)
         self._apps = {}
         self._environments = {}
+        self._unseen_names = {}
 
     def can_see_app(self, app_id):
         if self.sees_all:
@@ -119,7 +121,27 @@ class AssetVisibility:
             app=app,
             environments=tuple(visible),
             hidden_environment_count=len(hidden),
-            withheld_names=tuple(hidden),
+            withheld_names=(*hidden, *self._other_unseen_names(app, environments)),
+        )
+
+    def _other_unseen_names(self, app, environments):
+        """The names of the app's other environments this member cannot see.
+        Text written while an asset covered one of them can still name it."""
+
+        if self.sees_all:
+            return ()
+        key = str(app.id)
+        if key not in self._unseen_names:
+            self._unseen_names[key] = {
+                str(env.id): env.name
+                for env in Environment.objects.filter(app_id=app.id).only("id", "name")
+                if not self.can_see_environment(app.id, env.id)
+            }
+        listed = {str(env.id) for env in environments}
+        return tuple(
+            name
+            for env_id, name in self._unseen_names[key].items()
+            if env_id not in listed
         )
 
 
