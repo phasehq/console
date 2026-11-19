@@ -376,7 +376,7 @@ const Sidebar = () => {
     <>
       <div
         className={clsx(
-          'hidden h-dvh flex-col pt-12 transition-all duration-300 md:flex',
+          'hidden h-dvh flex-col pt-12 pb-[var(--bottom-banner-height)] transition-all duration-300 md:flex',
           collapsed ? 'w-16' : 'w-64'
         )}
       >
