@@ -62,6 +62,20 @@ export const filterEnvSelection = <T extends Partial<EnvironmentType>>(
   return filtered.length > 0 ? filtered : envs
 }
 
+/**
+ * The envs the grid shows in full and edits: the selection among those it has decrypted. One still
+ * decrypting is left out like an env that isn't there, since what it holds isn't known yet.
+ */
+export const loadedEnvSelection = <T extends Partial<EnvironmentType>>(
+  envs: T[],
+  selection: string[] | null,
+  pendingEnvIds: readonly string[]
+): T[] =>
+  filterEnvSelection(
+    pendingEnvIds.length > 0 ? envs.filter((env) => !pendingEnvIds.includes(env.id!)) : envs,
+    selection
+  )
+
 type EnvSelectionContextType = {
   /** Checked env ids; null = all envs */
   selectedEnvIds: string[] | null

@@ -1,5 +1,8 @@
 import { EnvironmentType } from '@/apollo/graphql'
-import { filterEnvSelection } from '@/app/[team]/apps/[app]/_components/EnvSelectionProvider'
+import {
+  filterEnvSelection,
+  loadedEnvSelection,
+} from '@/app/[team]/apps/[app]/_components/EnvSelectionProvider'
 
 const envs = [
   { id: 'dev', name: 'Development' },
@@ -22,5 +25,26 @@ describe('filterEnvSelection', () => {
 
   it('falls back to every env when the selection only names unknown envs', () => {
     expect(filterEnvSelection(envs, ['deleted-env'])).toEqual(envs)
+  })
+})
+
+describe('loadedEnvSelection', () => {
+  const ids = (shown: EnvironmentType[]) => shown.map((env) => env.id)
+
+  it('is the selection once every env is decrypted', () => {
+    expect(ids(loadedEnvSelection(envs, ['dev', 'staging'], []))).toEqual(['dev', 'staging'])
+    expect(loadedEnvSelection(envs, null, [])).toEqual(envs)
+  })
+
+  it('leaves out a selected env that is still decrypting', () => {
+    expect(ids(loadedEnvSelection(envs, ['dev', 'staging'], ['staging', 'prod']))).toEqual(['dev'])
+  })
+
+  it('leaves it out of the whole-app view too', () => {
+    expect(ids(loadedEnvSelection(envs, null, ['prod']))).toEqual(['dev', 'staging'])
+  })
+
+  it('shows the decrypted envs when the selection names only ones still decrypting', () => {
+    expect(ids(loadedEnvSelection(envs, ['prod'], ['staging', 'prod']))).toEqual(['dev'])
   })
 })

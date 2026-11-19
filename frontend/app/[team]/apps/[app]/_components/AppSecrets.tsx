@@ -182,7 +182,7 @@ import { DynamicSecretActions, RotationStatusCell } from './GroupCells'
 import { AppSecretsSkeleton } from './AppSecretsSkeleton'
 import { EnvironmentsMenu } from './EnvironmentsMenu'
 import { SecretWithFlags } from './EnvValueCell'
-import { useEnvSelection, filterEnvSelection } from './EnvSelectionProvider'
+import { useEnvSelection, loadedEnvSelection } from './EnvSelectionProvider'
 import { RowSelection, SecretsGridHeader } from './SecretsGridHeader'
 import { GridScrollControls } from './GridScrollControls'
 import { SelectionBar } from './SelectionBar'
@@ -521,8 +521,8 @@ export const AppSecrets = ({
   }, [environments, envOrderOverride])
 
   const checkedEnvironments = useMemo(
-    () => filterEnvSelection(orderedEnvironments, selectedEnvIds),
-    [orderedEnvironments, selectedEnvIds]
+    () => loadedEnvSelection(orderedEnvironments, selectedEnvIds, pendingEnvIds),
+    [orderedEnvironments, selectedEnvIds, pendingEnvIds]
   )
   // A .env file dropped on the editor opens the import dialog on it
   const fileDrop = useFileDrop(
