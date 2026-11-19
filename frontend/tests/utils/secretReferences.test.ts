@@ -1229,6 +1229,13 @@ describe('validateSecretReferences', () => {
       expect(errors[0].deleted).toBe(true)
     })
 
+    test('flags a reference into another env to a key staged for deletion there', () => {
+      const errors = validateSecretReferences(inDev('${production.RETIRED}'), held)
+      expect(errors).toHaveLength(1)
+      expect(errors[0].deleted).toBe(true)
+      expect(errors[0].error).toContain('staged for deletion in "production"')
+    })
+
     test('flags a reference into another env to a key it lacks, and accepts one it has', () => {
       expect(validateSecretReferences(inDev('${production.PROD_KEY}'), held)).toEqual([])
       const errors = validateSecretReferences(inDev('${production.DB_HOST}'), held)

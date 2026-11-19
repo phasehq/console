@@ -681,6 +681,17 @@ describe('deployReferenceErrors', () => {
     expect(references(errors)).toEqual(['URL in Development: ${HOST}'])
   })
 
+  it('asks about a reference into another env to a key staged for deletion there', () => {
+    const saved = [host, url({ dev: '${production.HOST}' })]
+    const deleted = row('HOST', {
+      dev: secret('d1', 'HOST', 'db'),
+      prod: { ...secret('p1', 'HOST', 'db'), stagedForDelete: true } as SecretType,
+    })
+    const errors = deployReferenceErrors([deleted, saved[1]], saved, shown, context)
+    expect(references(errors)).toEqual(['URL in Development: ${production.HOST}'])
+    expect(errors[0].deleted).toBe(true)
+  })
+
   it('stays quiet about a reference that was broken already and is not touched', () => {
     const saved = [host, url({ dev: '${NOWHERE}' }), row('B', { dev: secret('b1', 'B', '1') })]
     const edited = [saved[0], saved[1], row('B', { dev: secret('b1', 'B', '2') })]

@@ -907,6 +907,14 @@ export function validateSecretReferences(
                   reference: ref.fullMatch,
                   error: `Referenced key "${key}" does not exist in "${ref.env}"`,
                 })
+              } else if (state === 'deleted') {
+                errors.push({
+                  secretKey: secret.key,
+                  envName,
+                  reference: ref.fullMatch,
+                  error: `Referenced key "${key}" is staged for deletion in "${ref.env}"`,
+                  deleted: true,
+                })
               }
             }
             break
