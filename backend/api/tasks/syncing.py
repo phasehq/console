@@ -662,11 +662,15 @@ def perform_gcp_sm_sync(environment_sync):
     handle_sync_event(environment_sync, sync)
 
 
-def trigger_syncs_for_referencing_envs(changed_env):
+def trigger_syncs_for_referencing_envs(changed_env, also_changed=()):
     """
     Finds environments with active syncs whose secrets reference the changed
     environment — directly or transitively through a chain of references — and
     triggers those syncs to keep the resolved values up to date.
+
+    `also_changed` are the ids of other environments of the same organisation
+    that changed with it (an app restore): one pass covers them all, so the
+    reference graph is built once and each sync is triggered once.
 
     Reference resolution is recursive (see decrypt_secret_value), so a sync's
     resolved output can depend on the changed environment through intermediate
@@ -688,15 +692,15 @@ def trigger_syncs_for_referencing_envs(changed_env):
     App = apps.get_model("api", "App")
 
     org = changed_env.app.organisation
-    changed_env_id = str(changed_env.id)
+    changed_env_ids = {str(changed_env.id), *(str(i) for i in also_changed)}
 
-    # Find all active syncs in the org, excluding the changed environment
+    # Find all active syncs in the org, excluding the changed environments
     candidate_syncs = EnvironmentSync.objects.filter(
         environment__app__organisation=org,
         is_active=True,
         deleted_at=None,
     ).exclude(
-        environment=changed_env
+        environment_id__in=changed_env_ids
     ).select_related("environment", "environment__app")
 
     # Group syncs by environment to avoid redundant reference checks
@@ -747,7 +751,7 @@ def trigger_syncs_for_referencing_envs(changed_env):
                 continue
             visited.add(current)
             refs = direct_refs(current)
-            if changed_env_id in refs:
+            if changed_env_ids & refs:
                 return True
             stack.extend(refs - visited)
         return False
@@ -756,8 +760,9 @@ def trigger_syncs_for_referencing_envs(changed_env):
         try:
             if references_changed_env(env_id):
                 logger.info(
-                    f"Environment {env_id} references changed environment "
-                    f"{changed_env.id} (directly or transitively), triggering syncs"
+                    f"Environment {env_id} references changed environment(s) "
+                    f"{sorted(changed_env_ids)} (directly or transitively), "
+                    "triggering syncs"
                 )
                 for sync in syncs:
                     trigger_sync_tasks(sync)
@@ -788,3 +793,20 @@ def detect_and_trigger_referencing_syncs(changed_env_id):
     except Environment.DoesNotExist:
         return
     trigger_syncs_for_referencing_envs(changed_env)
+
+
+@job("default", timeout=DEFAULT_TIMEOUT, retry=Retry(max=3, interval=[10, 30, 60]))
+def detect_and_trigger_referencing_syncs_for(changed_env_ids):
+    """As detect_and_trigger_referencing_syncs, for environments of one
+    organisation that changed together, in a single pass."""
+    Environment = apps.get_model("api", "Environment")
+    changed_envs = list(
+        Environment.objects.select_related("app", "app__organisation").filter(
+            id__in=changed_env_ids
+        )
+    )
+    if not changed_envs:
+        return
+    trigger_syncs_for_referencing_envs(
+        changed_envs[0], also_changed=[env.id for env in changed_envs[1:]]
+    )
