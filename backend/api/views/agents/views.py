@@ -309,7 +309,26 @@ def _request_approval_url(agent_request):
     return f"{origin}/{organisation_path}/agents/requests?{query}"
 
 
-def _session_response(session, config, *, session_credential=None):
+# Only Agent and User tokens reach these views (AgentAPIAuthentication).
+_PRINCIPAL_TYPES = (
+    ("Agent", "agent", "agent"),
+    ("User", "user", "org_member"),
+)
+
+
+def _session_identity(request, session):
+    """Ids of the caller's own session, so a client can keep organisations apart."""
+
+    identity = {"organisation": {"id": str(session.organisation_id)}}
+    auth_type = request.auth.get("auth_type")
+    for wire_auth_type, principal_type, auth_key in _PRINCIPAL_TYPES:
+        principal = request.auth.get(auth_key)
+        if auth_type == wire_auth_type and principal is not None:
+            identity["principal"] = {"type": principal_type, "id": str(principal.id)}
+    return identity
+
+
+def _session_response(request, session, config, *, session_credential=None):
     payload = {
         "schema_version": SCHEMA_VERSION,
         "session_uid": str(session.session_uid),
@@ -317,6 +336,7 @@ def _session_response(session, config, *, session_credential=None):
         "max_expires_at": session.max_expires_at,
         "config_generation": session.config_generation,
         **config,
+        **_session_identity(request, session),
     }
     if session_credential is not None:
         payload["session_credential"] = session_credential
@@ -468,7 +488,7 @@ class AgentSessionCollectionView(AgentRuntimeAPIView):
             ) from exc
         return Response(
             _session_response(
-                session, config, session_credential=session_credential
+                request, session, config, session_credential=session_credential
             ),
             status=status.HTTP_201_CREATED,
         )
@@ -492,7 +512,7 @@ class AgentSessionConfigView(AgentRuntimeAPIView):
             **update
         )
         session.refresh_from_db()
-        return Response(_session_response(session, config))
+        return Response(_session_response(request, session, config))
 
 
 class AgentSessionContextView(AgentRuntimeAPIView):
@@ -583,6 +603,7 @@ class AgentSessionDiscoverView(AgentRuntimeAPIView):
                 "session_uid": str(session.session_uid),
                 "config_generation": session.config_generation,
                 **config,
+                **_session_identity(request, session),
             }
         )
 
