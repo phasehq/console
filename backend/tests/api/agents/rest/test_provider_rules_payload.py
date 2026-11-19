@@ -39,6 +39,7 @@ MATERIAL = {
         "host": "db.internal.example",
         "database": "app",
     },
+    "render": {"api_key": "live-render-key"},
     "vercel": {"api_token": "live-vercel-token"},
 }
 WITHOUT_PROVIDER_RULES = [
@@ -105,7 +106,10 @@ def test_each_connection_carries_exactly_its_manifests_rules(space):
         "secretGuard",
     }
     assert set(_rules(connections["postgres"])) == {"credentialEnvironment"}
-    assert set(_rules(connections["vercel"])) == {"credentialEnvironment"}
+    assert set(_rules(connections["vercel"])) == {
+        "credentialEnvironment",
+        "secretGuard",
+    }
     # The data maps reach the client under the provider's own names.
     aws = connections["aws"]
     assert "cognito-identity" in aws["secretGuard"]["operations"]
@@ -172,12 +176,12 @@ def test_a_client_without_the_feature_cannot_open_a_workflow_with_github(space):
 
 
 def test_guarded_connections_granted_later_are_left_out_for_that_client(space):
-    for service_type in ("postgres", "vercel"):
+    for service_type in ("postgres", "render"):
         _connect(space, service_type)
     grant(space, custom_connection(space))
     old_client = member_client(space)
     old = open_session(old_client, space.workflow, features=WITHOUT_PROVIDER_RULES)
-    assert set(_by_service(old)) == {"postgres", "vercel", "http"}
+    assert set(_by_service(old)) == {"postgres", "render", "http"}
 
     _connect(space, "aws")
     _connect(space, "github")
@@ -185,7 +189,7 @@ def test_guarded_connections_granted_later_are_left_out_for_that_client(space):
     for endpoint in ("config", "discover"):
         assert set(_by_service(session_get(old_client, old, endpoint))) == {
             "postgres",
-            "vercel",
+            "render",
             "http",
         }
     current_client = member_client(space)
@@ -194,7 +198,7 @@ def test_guarded_connections_granted_later_are_left_out_for_that_client(space):
         "aws",
         "github",
         "postgres",
-        "vercel",
+        "render",
         "http",
     }
 

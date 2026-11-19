@@ -599,7 +599,7 @@ class AgentConnectionType(AppVisibilityFields, DjangoObjectType):
         # The secret guard is the proxy's; app secrets never pass through it.
         if is_app_service(self.service_type) or not connection_takes_policy(self):
             return []
-        return managed_policies()
+        return managed_policies(self.service_type)
 
 
 class AgentWorkflowGrantType(AppVisibilityFields, DjangoObjectType):

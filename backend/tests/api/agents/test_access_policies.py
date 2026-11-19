@@ -361,6 +361,7 @@ query Grants($organisationId: ID!) {
 def test_the_console_reads_a_connections_policy_and_its_locked_secret_guard(space):
     _set_policy(space, ASK_DELETES)
     postgres = packaged_connection(space, "postgres")
+    packaged_connection(space, "aws")
     GrantAgentWorkflowMutation.mutate(
         None, space.info, workflow_id=space.workflow.id, connection_id=postgres.id
     )
@@ -389,7 +390,9 @@ def test_the_console_reads_a_connections_policy_and_its_locked_secret_guard(spac
     # The same Connection, read from the list or through a grant.
     assert grants["http"]["connection"] == connections["http"]
     assert connections["http"]["policy"] == ASK_DELETES
-    assert connections["http"]["managedPolicies"] == [SECRET_GUARD]
+    # The guard is listed only for a service whose manifest gives it rules.
+    assert connections["http"]["managedPolicies"] == []
+    assert connections["aws"]["managedPolicies"] == [SECRET_GUARD]
     assert connections["http"]["takesPolicy"] is True
     assert connections["postgres"]["policy"] == {
         "version": 1,
@@ -1074,7 +1077,7 @@ def test_an_aws_connection_takes_rules_by_action(aws):
         "default": "allow",
         "rules": [
             {"operation": TERMINATE, "effect": "ask"},
-            {"operation": "s3:DeleteBucket", "effect": "block"},
+            {"operation": "dynamodb:DeleteTable", "effect": "block"},
             {"class": "admin", "effect": "block"},
         ],
     }
