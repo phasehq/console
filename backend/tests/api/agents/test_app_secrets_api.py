@@ -791,21 +791,42 @@ def test_a_write_never_reads_back_what_the_workflow_may_not_read(lab):
         "default": "allow",
         "rules": [{"class": "read", "effect": "block"}],
     }
-    secret = put_secret(lab.dev, "K", "existing-value", comment="a comment")
+    secret = put_secret(lab.dev, "HIDDEN_NAME", "existing-value", path="/folder", comment="a comment")
     grant_app(lab, app_connection(lab, [lab.dev], policy=policy))
     client = token_client(lab)
+    url = secrets_url(lab.app, "Development")
 
-    response = client.put(
+    updated = client.put(
+        url, {"secrets": [{"id": secret.id, "comment": "x"}]}, format="json"
+    )
+    created = client.post(
+        url, {"secrets": [{"key": "NEW", "value": "v", "tags": ["t"]}]}, format="json"
+    )
+
+    # Ids alone: not the value or comment, nor a key name, path or tag.
+    assert updated.status_code == 200, updated.content
+    assert updated.json() == [{"id": str(secret.id)}]
+    assert created.status_code == 200, created.content
+    [item] = created.json()
+    assert set(item) == {"id"}
+    assert Secret.objects.filter(id=item["id"], environment=lab.dev).exists()
+    refusal(client.get(url), 403, "agent_access_blocked")
+
+
+@pytest.mark.django_db
+def test_a_write_reads_back_the_secret_where_the_workflow_may_read(lab):
+    secret = put_secret(lab.dev, "K", "existing-value", path="/folder")
+    grant_app(lab, app_connection(lab, [lab.dev], policy=ALLOW_ALL))
+
+    response = token_client(lab).put(
         secrets_url(lab.app, "Development"),
-        {"secrets": [{"id": secret.id, "key": "RENAMED"}]},
+        {"secrets": [{"id": secret.id, "comment": "x"}]},
         format="json",
     )
 
     assert response.status_code == 200, response.content
     [item] = response.json()
-    assert item["key"] == "RENAMED"
-    assert item["value"] is None and item["comment"] is None
-    refusal(client.get(secrets_url(lab.app, "Development")), 403, "agent_access_blocked")
+    assert (item["key"], item["path"], item["value"]) == ("K", "/folder", "existing-value")
 
 
 # --- What the Workflow can use: GET /v1/agents/app-access/ ------------------------
