@@ -99,6 +99,9 @@ type DeployRecord = {
 
 const isPending = (run: SyncRun) => run.state === 'queued' || run.state === 'running'
 
+const isFailing = (sync: EnvironmentSyncType) =>
+  sync.status === Status.Failed || sync.status === Status.TimedOut
+
 const runOf = (sync: EnvironmentSyncType, record: DeployRecord): SyncRun | null => {
   // A deploy runs the active syncs of the envs it changed
   if (!sync.isActive || !record.envIds.has(sync.environment.id)) return null
@@ -106,11 +109,17 @@ const runOf = (sync: EnvironmentSyncType, record: DeployRecord): SyncRun | null 
   const run = sync.history
     .filter((event) => !prior?.has(event.id))
     .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))[0]
-  if (!run)
-    return record.settled
-      ? { sync, state: 'skipped', status: Status.Cancelled }
-      : { sync, state: 'queued', status: Status.Queued }
+  // With no run to speak for it, the sync's own status does: its job couldn't be queued, or was held back
+  const unqueued = (): SyncRun =>
+    !record.settled
+      ? { sync, state: 'queued', status: Status.Queued }
+      : isFailing(sync)
+        ? { sync, state: 'failed', status: sync.status }
+        : { sync, state: 'skipped', status: Status.Cancelled }
+  if (!run) return unqueued()
   if (!run.completedAt) {
+    // Cancelled to make way for a newer run, which then couldn't be queued
+    if (run.status === EventStatus.Cancelled && isFailing(sync)) return unqueued()
     const queued = run.status === EventStatus.Queued
     return {
       sync,
@@ -245,9 +254,13 @@ const syncsDetail = (syncs: EnvironmentSyncType[]) => {
 const runDetail = (phase: DeployPhase, runs: SyncRun[]) => {
   const done = runs.filter((run) => !isPending(run)).length
   const failed = runs.filter((run) => run.state === 'failed').length
+  const synced = runs.filter((run) => run.state === 'completed').length
   if (phase === 'syncing') return `${done} of ${plural(runs.length, 'sync')} done`
   if (phase === 'failed') return `${failed} of ${plural(runs.length, 'sync')} failed`
-  return `${plural(runs.length, 'sync')} done`
+  // A sync that wasn't run hasn't delivered anything
+  return synced === runs.length
+    ? `${plural(runs.length, 'sync')} done`
+    : `${synced} of ${plural(runs.length, 'sync')} done`
 }
 
 const runWhen = (run: SyncRun) =>
@@ -534,11 +547,16 @@ const SettledFace = ({ run, syncs }: { run: DeployRun; syncs: EnvironmentSyncTyp
       </>
     )
   }
-  if (run.phase === 'synced' && run.runs.length > 0)
+  // Only runs that delivered count: one that wasn't run leaves the plain "Deployed"
+  const synced = run.runs.filter((r) => r.state === 'completed').length
+  if (run.phase === 'synced' && synced > 0)
     return (
       <>
         <FaCheckCircle className="shrink-0 text-emerald-500" />
-        Synced {progress}
+        Synced{' '}
+        <span className="tabular-nums text-neutral-500">
+          {synced}/{run.runs.length}
+        </span>
       </>
     )
   return (

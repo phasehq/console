@@ -3,26 +3,46 @@ import { createRoot, Root } from 'react-dom/client'
 
 import {
   ApiEnvironmentSyncEventStatusChoices as EventStatus,
+  ApiEnvironmentSyncStatusChoices as Status,
   EnvironmentSyncType,
 } from '@/apollo/graphql'
 import {
+  DeployControls,
   DeployRun,
   FOLLOW_LIMIT_MS,
   useDeployRun,
 } from '@/components/environments/secrets/DeployControls'
+import { SecretChanges } from '@/components/environments/secrets/DeployPreview'
 ;(
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
+// Browser APIs the control and Headless UI use that jsdom lacks
+const globals = globalThis as unknown as Record<string, unknown>
+globals.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+const elementPrototype = Element.prototype as unknown as Record<string, unknown>
+elementPrototype.getAnimations ??= () => []
 
 type Event = { id: string; status: EventStatus; completedAt?: string | null }
 
-const makeSync = (id: string, history: Event[]): EnvironmentSyncType =>
+const makeSync = (
+  id: string,
+  history: Event[],
+  status: Status = Status.Completed
+): EnvironmentSyncType =>
   ({
     id,
     isActive: true,
+    status,
     environment: { id: 'dev', name: 'Development', index: 0 },
     history: history.map((event) => ({ createdAt: '2026-01-01T00:00:00Z', ...event })),
   }) as unknown as EnvironmentSyncType
+
+const SETTLE_MS = 5000
+const NO_CHANGES = { changes: [], groups: [], kindCounts: [] } as unknown as SecretChanges
 
 describe('useDeployRun', () => {
   let container: HTMLDivElement
@@ -31,8 +51,24 @@ describe('useDeployRun', () => {
 
   const Probe = ({ syncs }: { syncs: EnvironmentSyncType[] }) => {
     run = useDeployRun(syncs)
-    return null
+    return (
+      <DeployControls
+        changes={NO_CHANGES}
+        dirty={false}
+        deploying={false}
+        run={run}
+        syncs={syncs}
+        syncsByEnvId={new Map()}
+        environments={[]}
+        manageSyncsHref="/acme/apps/app/syncing"
+        onReview={() => {}}
+        onDiscard={() => {}}
+        onDeploy={() => {}}
+      />
+    )
   }
+  /** What the control's button reads */
+  const face = () => container.querySelector('button')?.textContent?.replace(/\s+/g, ' ').trim()
   const render = async (syncs: EnvironmentSyncType[]) => {
     await act(async () => root.render(<Probe syncs={syncs} />))
   }
@@ -100,5 +136,45 @@ describe('useDeployRun', () => {
     await act(async () => jest.advanceTimersByTime(FOLLOW_LIMIT_MS))
     expect(run.phase).toBe('failed')
     expect(run.runs.map((r) => r.state)).toEqual(['failed', 'running'])
+  })
+
+  it('reports a sync whose job could not be queued as failed, not synced', async () => {
+    // The server marks the sync failed and records no run
+    await deploy([makeSync('s1', [])], [makeSync('s1', [], Status.Failed)])
+    expect(run.phase).toBe('syncing')
+
+    await act(async () => jest.advanceTimersByTime(SETTLE_MS))
+    expect(run.runs.map((r) => r.state)).toEqual(['failed'])
+    expect(run.phase).toBe('failed')
+    expect(face()).toBe('1 sync failed')
+  })
+
+  it('reports a run cancelled for a newer one that could not be queued as failed', async () => {
+    await deploy(
+      [makeSync('s1', [])],
+      [makeSync('s1', [{ id: 'e1', status: EventStatus.Cancelled }], Status.Failed)]
+    )
+    await act(async () => jest.advanceTimersByTime(SETTLE_MS))
+    expect(run.phase).toBe('failed')
+  })
+
+  it('counts only the syncs that ran as synced', async () => {
+    const ran = { id: 'e1', status: EventStatus.Completed, completedAt: '2026-01-01T00:00:05Z' }
+    // s2 is held back: no run, and its status isn't a failure
+    await deploy(
+      [makeSync('s1', []), makeSync('s2', [])],
+      [makeSync('s1', [ran]), makeSync('s2', [], Status.Cancelled)]
+    )
+    await act(async () => jest.advanceTimersByTime(SETTLE_MS))
+    expect(run.runs.map((r) => r.state)).toEqual(['completed', 'skipped'])
+    expect(run.phase).toBe('synced')
+    expect(face()).toBe('Synced 1/2')
+  })
+
+  it('says only "Deployed" when no sync ran', async () => {
+    await deploy([makeSync('s1', [])], [makeSync('s1', [], Status.Cancelled)])
+    await act(async () => jest.advanceTimersByTime(SETTLE_MS))
+    expect(run.phase).toBe('synced')
+    expect(face()).toBe('Deployed')
   })
 })
