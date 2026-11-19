@@ -1,8 +1,7 @@
 """Request actions that change the Connections of an Agent Workflow.
 
-Each handler finds its own target from the request's Workflow. A request can
-only name a Connection that Workflow is granted, and never carries a secret:
-the member approving it enters one where the action needs it.
+A request can only name a Connection its Workflow is granted, and never carries a secret:
+the approver enters one where needed.
 """
 
 from contextlib import contextmanager

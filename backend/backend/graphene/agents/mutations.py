@@ -259,9 +259,7 @@ def _audit(info, organisation, event_type, resource_type, instance, description,
 def _audited_title(agent_request, member):
     """The title an audit entry names a request by, and the metadata to add.
 
-    A request that carries an action is named by the title its handler computes
-    from the action, the one a reviewer sees; the Agent's own title, which is
-    free text, is kept apart as ``requested_title`` when it differs.
+    A request with an action is named by its handler's title; the Agent's free text goes in ``requested_title``.
     """
 
     if agent_request.action:
@@ -975,9 +973,7 @@ class UpdateAgentConnectionMutation(graphene.Mutation):
 class CreateCustomAgentConnectionMutation(graphene.Mutation):
     """Create a Connection for an HTTP service Phase has no integration for.
 
-    The browser generates the Connection keypair, seals the secret to it and
-    wraps the private key to the server, so the secret never arrives in the
-    clear. No integration credential is involved.
+    The browser seals the secret to a new keypair, so it never arrives in the clear.
     """
 
     class Arguments:
@@ -1035,13 +1031,9 @@ class CreateCustomAgentConnectionMutation(graphene.Mutation):
 
 
 class UpdateCustomAgentConnectionMutation(graphene.Mutation):
-    """Rename a custom Connection, change its definition, replace its secret,
-    or any of these together.
+    """Rename a custom Connection, change its definition, replace its secret, or any of these.
 
-    ``sealedValue`` is the secret sealed again; nothing is ever read back. A
-    definition that changes the bound hosts or the set of secret fields must
-    come with it, sealed over the new definition. A call that changes nothing
-    returns the Connection as it is and records nothing.
+    A changed host or secret field set needs a new ``sealedValue``. The secret is never read back.
     """
 
     class Arguments:
@@ -1114,10 +1106,7 @@ def _live_allow_classes(connection):
 class CreateAgentAppConnectionMutation(graphene.Mutation):
     """Create a Connection to an app's secrets, for some of its environments.
 
-    The app must have server-side encryption. ``policy`` takes rules by the
-    classes read, create, update and delete; without it reads are allowed and
-    writes ask. The member must reach the app and every environment, and hold
-    the ``Secrets`` permissions for what the policy allows.
+    The member must reach the app and every environment, and hold the ``Secrets`` permissions.
     """
 
     class Arguments:
@@ -1180,9 +1169,7 @@ class CreateAgentAppConnectionMutation(graphene.Mutation):
 class UpdateAgentAppConnectionMutation(graphene.Mutation):
     """Rename an app Connection or change the environments it covers.
 
-    Nothing ends by itself: every Workflow granted the Connection is held to
-    the new environments from its next call. Adding an environment needs what
-    creating the Connection needs, for what its grants allow.
+    Each granted Workflow is held to the new environments from its next call.
     """
 
     class Arguments:
@@ -1593,9 +1580,7 @@ def _connection_policy(connection, policy):
 class SetAgentConnectionPolicyMutation(graphene.Mutation):
     """Set the access policy of an HTTP Connection.
 
-    ``policy`` is ``{version: 1, default, rules}``; null or an empty object
-    clears it. One policy applies to every Workflow granted the Connection.
-    A call that changes nothing records nothing.
+    ``policy`` is ``{version: 1, default, rules}``; null or an empty object clears it.
     """
 
     class Arguments:
@@ -1667,10 +1652,7 @@ class SetAgentConnectionPolicyMutation(graphene.Mutation):
 class GrantAgentWorkflowMutation(graphene.Mutation):
     """Give a Workflow a Connection, or change the grant it already has.
 
-    ``expiresAt`` is when access stops; a grant a member creates has no expiry
-    unless they give one. On a Workflow that already has the Connection, an
-    ``expiresAt`` that is given replaces what the grant has, and an explicit
-    null removes its expiry.
+    A given ``expiresAt`` replaces the grant's expiry; an explicit null removes it.
     """
 
     class Arguments:
@@ -1777,8 +1759,7 @@ class GrantAgentWorkflowMutation(graphene.Mutation):
 class RemoveAgentWorkflowGrantAllowMutation(graphene.Mutation):
     """End one temporary allow of a grant early.
 
-    Needs what granting the Connection to the Workflow needs. An id that is
-    not among the grant's live allows is reported as not found.
+    An id that is not among the grant's live allows is reported as not found.
     """
 
     class Arguments:
@@ -1895,12 +1876,9 @@ class SetAgentWorkflowContextMutation(graphene.Mutation):
 
 
 class UpdateAgentSettingsMutation(graphene.Mutation):
-    """Change the organisation's Agent settings.
+    """Change the organisation's Agent settings. Needs ``update`` on AgentRequests.
 
-    Both durations must lie between 300 and 2592000 seconds, and the default
-    must not exceed the maximum. Needs ``update`` on AgentRequests: the
-    settings bound what a request may ask for, and that is the permission of
-    the members who resolve requests.
+    Durations must be 300 to 2592000 seconds, with the default not above the maximum.
     """
 
     class Arguments:
@@ -2474,10 +2452,7 @@ class FulfillAgentRequestMutation(graphene.Mutation):
 class ApproveAgentRequestActionMutation(graphene.Mutation):
     """Approve a request that carries a typed action, and carry the action out.
 
-    ``action`` is the reviewer's edited version of what was requested; without
-    it the request is applied as it stands. ``inputs`` holds what the action's
-    handler needs from the reviewer and is never stored, for example a secret
-    sealed in their browser.
+    ``inputs`` is never stored, for example a secret sealed in the reviewer's browser.
     """
 
     class Arguments:

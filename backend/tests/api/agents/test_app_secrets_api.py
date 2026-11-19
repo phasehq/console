@@ -1,9 +1,7 @@
 """Agent tokens on the public secrets API, through app Connections.
 
-Every call is decided from the active grants of the token's Workflow: the
-class comes from the method, a policy answers allow, ask or block per class,
-a temporary allow lifts an ask and never a block, and expiry or revocation
-applies to the next call.
+Each call is decided from the token's Workflow grants. A temporary allow lifts an ask but
+never a block, and expiry or revocation applies to the next call.
 """
 
 import json
@@ -567,11 +565,8 @@ def test_overrides_are_refused_on_write_and_absent_on_read(lab):
     assert PersonalSecret.objects.count() == 1
 
 
-# --- Writing references -------------------------------------------------------
-#
-# Other readers of an environment (a sync, a member's run) resolve references
-# without checking the Agent's access, so an Agent may write a reference only
-# to an environment its Workflow can read.
+# --- Writing references ---
+# Other readers skip the access check, so an Agent may write a reference only where it can read.
 
 
 @pytest.fixture

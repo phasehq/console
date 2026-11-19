@@ -1,10 +1,7 @@
 """Application secrets for Agents, through app Connections.
 
-An app Connection (``phase_app``) covers one server-side encrypted app and
-some of its environments. The Console serves those secrets itself, through the
-public secrets API, and decides every call an Agent token makes there from the
-active grants of the token's Workflow. No proxy and no key is involved, so an
-expiry, a revocation or a changed rule applies to the next call.
+The Console decides each Agent token call from the active grants, so a revocation
+applies to the next call.
 """
 
 from dataclasses import dataclass
@@ -137,8 +134,7 @@ def _allow_expiry(entry):
 def grant_access(grant, now=None):
     """The effect of each class on one grant at this moment.
 
-    ``{class: {"effect": ...}}``, with ``until`` where a temporary allow
-    lifts an ``ask``. A temporary allow never changes a ``block``.
+    A temporary allow lifts an ``ask`` (reported with ``until``) but never a ``block``.
     """
 
     now = now or timezone.now()
@@ -288,8 +284,7 @@ class Decision:
 def decide(workflow, environment, access_class, now=None):
     """Decide one call of a class in an environment for a Workflow.
 
-    Allowed when any covering grant allows it, otherwise ``ask`` when any
-    asks, otherwise blocked.
+    Allowed if any covering grant allows it, else ``ask`` if any asks, else blocked.
     """
 
     now = now or timezone.now()
@@ -510,10 +505,7 @@ def check_app_connection(connection):
 def require_member_can_release(member, app, environments, classes):
     """A member may give an Agent only secrets they can reach themselves.
 
-    The member needs access to the app and to every environment, as granting a
-    service account server-side access does, and the ``Secrets`` permission
-    for reading and for every write class the Agent would be given. A role
-    with global access reaches every app and environment.
+    That needs access to the app and every environment, and the ``Secrets`` permission per class.
     """
 
     if member is None:

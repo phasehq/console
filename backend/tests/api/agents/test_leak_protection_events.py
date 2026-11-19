@@ -1,10 +1,7 @@
 """Leak protection events in an Agent's log.
 
-The Phase CLI reports what it replaced in a request to a model provider as
-``leak_protection`` events, naming the placeholders it used. The log can be
-narrowed to them, and a placeholder that carries the id of one of the
-organisation's secrets is shown with the app and environment the secret is
-in, to a member who can access them. A secret's key and value never leave.
+A placeholder carrying a secret's id shows that secret's app and environment, and only to
+a member who can access them. A key or value never appears.
 """
 
 import json

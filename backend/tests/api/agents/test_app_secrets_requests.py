@@ -1,8 +1,7 @@
 """Asking for an app's secrets, and who may give them.
 
-A member may never give an Agent secrets they cannot reach themselves: every
-path that creates, widens, grants or approves app access checks the member's
-access to the app and its environments and their ``Secrets`` permissions.
+A member may never give an Agent secrets they cannot reach themselves. Every path that
+grants app access checks that.
 """
 
 from datetime import timedelta

@@ -1,8 +1,6 @@
-"""A member who can access only some of the environments an Agent asked for
-approves those, and never learns the names of the others.
+"""A partial approval grants only the environments the approver can access.
 
-The environments they cannot access go into a new pending request for someone
-who can. The ones they could see and left out are simply not granted.
+Names of the others are never shown. The rest go into a new pending request.
 """
 
 import json

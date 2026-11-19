@@ -226,9 +226,7 @@ def resolve_agent_requests(
 def resolve_agent_request_queue(root, info, organisation_id, limit=None):
     """Pending requests across the organisation that the caller may resolve.
 
-    Resolving a request takes ``update`` on AgentRequests and update access to
-    its Workflow, so the queue holds exactly those. A member who may only read
-    requests gets an empty queue.
+    Resolving takes ``update`` on AgentRequests and access to the Workflow, and the queue matches that.
     """
 
     member = organisation_member(info, organisation_id)
@@ -498,8 +496,7 @@ def resolve_agent_connection_presets(root, info, organisation_id, preset_id=None
 
 
 def resolve_app_agent_access(root, info, app_id):
-    """Every Agent Workflow with access to an app's secrets, one row per
-    active grant of an app Connection on the app.
+    """Every Agent Workflow with access to an app's secrets, one row per active grant.
 
     Visible to whoever may see the app's service accounts.
     """

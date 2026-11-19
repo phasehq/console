@@ -6,9 +6,8 @@ import { FaCheckCircle } from 'react-icons/fa'
 import { AGENT_HARNESS_META } from '@/components/agents/AgentBrandIcons'
 
 /**
- * Visual harness selector for the Create/Edit Agent dialogs: a radio-card
- * grid with each harness's brand mark, replacing the plain select. Values are
- * the lowercase model values (`claude_code`, `codex`, ...).
+ * Visual harness selector for the Agent dialogs. Values are the lowercase harness
+ * ids, for example `codex`.
  */
 export function AgentHarnessPicker({
   value,

@@ -78,8 +78,7 @@ def file_action_request(
 ):
     """File a pending request that carries an action its handler has checked.
 
-    Every such request is filed here, whether an Agent sent it or it carries
-    on what an approval left undecided. Call inside a transaction.
+    Call inside a transaction. Used for Agent requests and for approvals left undecided.
     """
 
     draft.workflow = workflow
@@ -137,8 +136,7 @@ def retire_member_agent_authentication(
 ):
     """Permanently retire a member's Agent tokens and live sessions in scope.
 
-    Membership rows may be reactivated by a later assignment. Token rows must
-    never be: a newly assigned member has to mint a new bearer token.
+    Membership rows may be reactivated, but tokens must never be: a reassigned member needs a new token.
     """
 
     from api.utils.agent_sessions import revoke_agent_sessions
@@ -298,10 +296,7 @@ def mint_agent_token(
 ):
     """Mint a v1 token carrying a share of the Agent's key exchange private key.
 
-    The Agent, not the Workflow, is the cryptographic principal. Tokens for
-    every Workflow carry shares of the same key, so the token's Workflow
-    binding is enforced by the server. Only the bearer digest and the wrapped
-    server share are stored.
+    The server enforces the token's Workflow binding; only the digest and wrapped share are stored.
     """
 
     try:

@@ -1,9 +1,7 @@
 """Loader and schema guards for the packaged Agent service registry.
 
-Every definition under ``api/utils/agent_config/services/v1`` is validated at
-import time, so these tests corrupt copies of the real packaged files rather
-than hand-written fixtures: a rule that stops rejecting bad input is a rule
-that would let a permissive definition ship.
+Tests corrupt copies of the real packaged files: a rule that stops rejecting bad input
+would let a permissive definition ship.
 """
 
 import json
@@ -47,8 +45,7 @@ def test_packaged_registry_loads_every_shipped_definition():
 def test_only_services_with_a_credential_provider_are_connectable():
     """`credential_providers` is what admits a service to the runtime.
 
-    A definition may ship before its provider exists; declaring none is what
-    keeps it out of capabilities, Connection creation, and scoped context.
+    A service declaring none stays out of capabilities, Connection creation and scoped context.
     """
 
     connectable = {
@@ -129,8 +126,7 @@ def test_registry_capabilities_summarise_the_packaged_definitions():
 def test_loader_supplies_the_fields_definitions_no_longer_author():
     """Fixed-value fields are resolved, not authored.
 
-    They stay on the resolved service because the runtime and the CLI read
-    them; dropping them from the definitions only removes the ceremony.
+    They stay on the resolved service because the runtime and the CLI read them.
     """
 
     aws = REGISTRY.get_service("aws")

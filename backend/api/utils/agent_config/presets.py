@@ -1,10 +1,7 @@
 """Provider presets for custom HTTP Connections.
 
-A preset pre-fills the custom HTTP form for a well-known provider: its hosts,
-where the secret goes, a suggested environment name and how its calls are
-classified. It never holds a secret and uses no stored integration credential.
-Presets are data files, validated when this module loads, so a broken one
-fails at startup.
+A preset pre-fills the custom HTTP form. It holds no secret and no stored credential,
+and a broken preset file fails at startup.
 """
 
 from __future__ import annotations
@@ -192,8 +189,7 @@ def get_preset(preset_id: Any) -> dict[str, Any]:
 def expand_preset(preset_id: Any, hosts: Any = None) -> dict[str, Any]:
     """The full definition a preset stands for, validated.
 
-    ``hosts`` replaces the preset's own, and is accepted only for a preset
-    whose hosts may be changed.
+    ``hosts`` is accepted only for a preset whose hosts may be changed.
     """
 
     preset = get_preset(preset_id)

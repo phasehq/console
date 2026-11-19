@@ -1,12 +1,7 @@
 """Sealed values and key copies for custom HTTP Connections.
 
-Each custom Connection has one X25519 keypair. Its value is stored once, sealed
-to the public key, and the private key is wrapped once per reader in
-``AgentConnectionKeyCopy``. A writer needs only the public key.
-
-Plaintext values and private keys live in local variables of this module. They
-are never logged or stored, and only the runtime resolver receives an opened
-value.
+A value is sealed once to the Connection's public key. Plaintext and private keys
+stay in local variables and are never logged or stored.
 """
 
 import json
@@ -152,8 +147,7 @@ def _checked_fields(payload, definition):
 def _refuse_agent_visible_secrets(fields, definition):
     """Refuse a secret that also occurs in text the Agent can read.
 
-    Checked whenever a value or a definition is written and the server can open
-    the value. The message names the place, never the secret.
+    The message names the place, never the secret.
     """
 
     for label, text in agent_visible_texts(definition):
@@ -269,9 +263,7 @@ def activate_custom_connection(
 ):
     """Give a new custom Connection its definition, keys and first value.
 
-    The browser made the keypair, sealed the value and wrapped the private key
-    to the server. Nothing is stored unless the wrapped key opens, matches the
-    public key, and opens a value that fits the definition.
+    Nothing is stored unless the wrapped key matches the public key and opens a valid value.
     """
 
     definition = validate_definition(definition)
@@ -318,13 +310,9 @@ def activate_custom_connection(
 def update_custom_connection(
     connection, *, member, name=None, definition=None, sealed_value=None
 ):
-    """Change a custom Connection's name, definition or value.
+    """Change a custom Connection's name, definition or value. Call with the Connection row locked.
 
-    A change to the bound hosts or to the set of secret fields, or turning on
-    plain HTTP, must arrive with a value sealed over the new definition: the server could re-seal the stored
-    one, but the rule is that a person enters the secret again. Returns what
-    changed; when nothing differs from what is stored, nothing is saved and no
-    session is refreshed. Call with the Connection row locked.
+    A changed host or secret field set needs a freshly sealed value. Returns what changed.
     """
 
     current = load_definition(connection.config)
@@ -416,8 +404,7 @@ def write_custom_connection_value(connection, sealed_value, member):
 def ensure_agent_key_copy(connection, agent):
     """Wrap a custom Connection's key to an Agent that was just granted it.
 
-    The server opens its own copy to do this. Does nothing for a packaged
-    Connection.
+    The server opens its own copy to do this. Packaged Connections have no key.
     """
 
     if not is_custom_service(connection.service_type) or not connection.key_version:
@@ -472,9 +459,7 @@ def discard_connection_secrets(connection):
 def sealed_material_for_agent(connection_id, agent_id):
     """The stored ciphertext with this Agent's wrapped key, for the proxy to open.
 
-    One statement reads the copy and its Connection, so both come from the same
-    committed state. Returns ``(connection, material)``, or None when the Agent
-    holds no copy of the current key.
+    One statement reads the copy and its Connection. Returns ``(connection, material)``, or None.
     """
 
     copy = (

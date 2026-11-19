@@ -1,7 +1,6 @@
 /**
- * App Connections: an app's secrets, for some of its environments, served
- * by the Console itself. The backend (`api/utils/agent_app_access.py`) is
- * the authority; this file only reads what it sends and words it.
+ * App Connections: an app's secrets, for some environments, served by the Console. The
+ * backend is the authority; this file reads what it sends and words it.
  */
 
 import { draftFromPolicy, type PolicyEffect } from '@/utils/agents/accessPolicy'
@@ -185,9 +184,8 @@ export const appPolicySummary = (policy: unknown): string => {
 export const defaultAppConnectionName = (appName: string) => `${appName} secrets`
 
 /**
- * What the viewer may not see of an app. The backend withholds the name of an
- * app, or of an environment, the viewer cannot access, and says so here; the
- * item itself stays listed. `WithheldApp` and `AppEnvironments` show it.
+ * What the viewer may not see of an app. A name the viewer cannot access is withheld, but
+ * the item stays listed.
  */
 export type AppVisibility = { appRestricted: boolean; hiddenEnvironmentCount: number }
 
@@ -213,9 +211,8 @@ export const hiddenEnvironmentsLabel = (count: number, afterNames: boolean) =>
     : `${count} environment${count === 1 ? '' : 's'} you can't access`
 
 /**
- * Why a member cannot approve a request about what they cannot see; '' when they can.
- * A request for an app's secrets passes how many of its environments the member can
- * access: they may approve those and leave the rest.
+ * Why a member cannot approve a request, or '' when they can. Partial approval covers the
+ * environments they can reach.
  */
 export const withheldReviewLine = (
   visibility: AppVisibility,

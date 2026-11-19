@@ -1,14 +1,7 @@
 """Wire guards for the environment the Agent runtime hands the CLI.
 
-These assert against live `POST /v1/agents/sessions/` and
-`GET /v1/agents/sessions/<uid>/discover/` responses rather than checked-in
-sample payloads, so the contract cannot drift away from what the views
-actually serialize.
-
-The invariant under test is that an environment binding is a *recipe*, never a
-value: the CLI resolves each binding out of a named plane it was handed
-separately, so a binding that carried its own value would let the response
-smuggle material past the identifier/decoy/config split.
+An environment binding is a recipe, never a value, so it cannot smuggle material
+past the identifier/decoy/config split.
 """
 
 import pytest

@@ -1,12 +1,7 @@
 /**
- * Leak protection events, in words.
- *
- * The Phase CLI reads what AI coding tools send to model providers and
- * replaces known secret values, and token-shaped strings, with placeholders
- * (`ph:<type>:<id>`) before they leave the machine. It reports what it did as
- * Agent events of type `leak_protection`: counts, labels and placeholders,
- * never a secret value. This is the one place that words such an event; the
- * log lays the words out.
+ * Leak protection events, in words. The CLI replaces secret values with
+ * `ph:<type>:<id>` placeholders and reports them as `leak_protection` events,
+ * never with the value itself.
  */
 
 import { AGENT_WORD_SPELLINGS } from '@/components/agents/AgentEnums'

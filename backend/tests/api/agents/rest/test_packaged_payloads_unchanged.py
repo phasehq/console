@@ -1,20 +1,6 @@
-"""The runtime responses for packaged services, held to a recorded copy.
+"""Packaged-service session responses, compared with a recorded copy.
 
-``golden/packaged_session_payloads.json`` was recorded from these same
-exchanges before custom Connections existed. Every response for a Workflow
-that only uses AWS and PostgreSQL must still match it byte for byte, once the
-values that differ on every run (session identifiers, timestamps and decoys)
-are replaced by placeholders.
-
-Access policies, time-limited access, app Connections and the provider rules
-moved out of the CLI added keys to a session payload after the recording. A Connection with no policy and a grant with no expiry gain
-exactly those: they are checked for their one expected value here and taken
-out, and everything else is still compared with the recording.
-
-The capabilities catalog lists every packaged service whether or not the
-Workflow has a Connection for it, so the services packaged after the recording
-appear there, each with no Connection. They are checked and taken out the same
-way; the AWS and PostgreSQL entries are still compared with the recording.
+Fields added after the recording are checked for one value and removed first.
 """
 
 import json

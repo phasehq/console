@@ -1,16 +1,6 @@
 """Strict, versioned loader for the AI Agents service registry.
 
-A service owns host matching, provider compatibility, protocol behavior and
-wire injection. Live material comes only from the bound ``ProviderCredentials``
-row.
-
-Every service definition is validated while the registry is loaded so an
-invalid packaged definition fails closed instead of becoming a permissive
-runtime configuration.
-
-Definitions are plain JSON under ``services/v1``. Fields whose value is
-currently fixed for every packaged service are not authored at all; the loader
-supplies them so a definition states only what distinguishes it.
+Definitions are validated at load time, so a bad packaged definition fails closed.
 """
 
 from __future__ import annotations
@@ -44,17 +34,8 @@ CLIENT_MATCHER_SCHEMA_VERSION = 1
 DEFAULT_SERVICE_ROOT = Path(__file__).with_name("services") / "v1"
 
 PROTOCOLS = frozenset({"http", "postgres"})
-# Where a Connection's hosts come from:
-# - required_endpoint: the service has no hosts of its own, so each Connection
-#   names its endpoint.
-# - optional_override: the service's hosts, unless a member overrides them,
-#   which a second member has to approve.
-# - credential_endpoint: the service lists its public hosts, and each
-#   Connection takes its own from its integration credential, which may name
-#   another endpoint (a self-hosted instance). A member cannot enter them.
-# - fixed: the service's hosts and no others. A service that puts a token on
-#   a request uses this or credential_endpoint, so the token only ever goes
-#   where the service or the token's own credential says.
+# Host modes: fixed or credential_endpoint for services that send a token, so the
+# token only goes where the service or its own credential names.
 HOST_RULES_MODES = frozenset(
     {"required_endpoint", "optional_override", "credential_endpoint", "fixed"}
 )
@@ -279,10 +260,7 @@ def _string_list(
 def _validate_client_matchers(value: Any, location: str) -> list[dict[str, Any]]:
     """Validate exact, data-only hints used by local Agent clients.
 
-    Templates deliberately cannot supply regular expressions, paths, shell
-    fragments, or arguments. The local client owns parsing and decides whether
-    to use Phase; this registry only declares exact executable basenames and
-    URI schemes associated with a service.
+    Templates cannot supply regexes, paths, shell fragments or arguments.
     """
 
     matchers = _list(value, location)
@@ -492,9 +470,7 @@ def _validate_value_format(value: Any, location: str) -> None:
 def _validate_value_formats(value: Any, value_format: str, location: str) -> None:
     """Other forms a request may present the credential in.
 
-    The proxy swaps a decoy presented in ``value_format`` or in any of these,
-    and writes the live value back in the form it found. Attaching to a
-    request that carries nothing always uses ``value_format``.
+    The proxy swaps a decoy in any of these and writes the live value back in the same form.
     """
 
     formats = _list(value, location)
@@ -750,10 +726,7 @@ def _validate_environment_bindings(
 ) -> list[dict[str, Any]]:
     """Validate the declarative provider-to-process environment contract.
 
-    Service templates own connection configuration, identifier, decoy, and
-    conditional cleanup bindings. Proxy URLs and CA paths are intentionally
-    reserved for the CLI because their values and paths exist only on the
-    machine hosting the proxy.
+    Proxy URLs and CA paths are reserved for the CLI, which alone knows the proxy machine.
     """
 
     bindings = _list(value, location)
@@ -1090,8 +1063,7 @@ def _validate_secret_guard(
 ) -> dict[str, Any]:
     """The calls that would hand back a new credential, which the proxy blocks.
 
-    ``operations`` and a path rule's ``services`` name AWS calls, which only
-    a client signing for AWS can tell apart.
+    ``operations`` and path ``services`` name AWS calls, which only an AWS-signing client can tell apart.
     """
 
     guard = _mapping(value, location)

@@ -1,10 +1,7 @@
 """Bounded, idempotent audit-event ingestion for Agent proxy sessions.
 
-The proxy delivers this stream at least once.  We therefore serialize writes
-per AgentSession, de-duplicate by the client-generated event ID, and commit the
-batch before returning 202.  Keeping the durable write synchronous avoids an
-acknowledged-but-lost gap when Redis/RQ is unavailable; ``bulk_create`` keeps
-the bounded hot path inexpensive.
+Writes are serialized per session and deduplicated by event ID. The batch commits before the
+202, so no acknowledged event is lost if Redis is down.
 """
 
 from __future__ import annotations
@@ -228,13 +225,9 @@ def _policy_rule(value):
 
 
 def _detail(event, *, index):
-    """A flat object of short scalar values, e.g. ``{"aws_sigv4_failure": ...}``.
+    """A flat object of short scalar values for an event's metadata.
 
-    An event for a call an access policy stopped carries the contract's
-    fields here: ``connectionId``, ``connectionName``, ``class``, ``method``,
-    ``path`` and ``rule``. ``rule`` is ``"default"``, ``"secret_guard"`` or the
-    matched rule itself, the one member that may be an object; ``path`` may be
-    as long as an event's own path.
+    ``rule`` is the only field that may be an object.
     """
 
     value = event.get("detail")

@@ -1,14 +1,7 @@
 """The request action that gives a Workflow an app's secrets.
 
-The Agent names an app and some of its environments and asks to read, or to
-read and write. A member approving it may narrow the environments, change the
-access level and set how long it lasts. Approval grants the Workflow an app
-Connection covering exactly those environments with the default rules,
-reusing one the organisation already has only when its rules are still the
-default, so the Agent gets what the reviewer saw.
-
-A member who can access only some of the environments approves those. The
-ones they cannot access go into a new pending request for someone who can.
+An existing app Connection is reused only while its rules are the default, so the
+Agent gets what the reviewer saw.
 """
 
 from datetime import timedelta
@@ -251,12 +244,9 @@ class AppAccess(ActionHandler):
         return value
 
     def _file_unseen(self, request, member):
-        """File a request for the environments asked for that the approver
-        cannot access, and return it; None when they can access them all.
+        """File a request for the environments the approver cannot access, and return it.
 
-        It asks what the Agent asked: the same app, access and duration, with
-        the Agent's own words. Environments the approver could see and left
-        out are their decision and are not asked for again.
+        None when they can access them all; the rest are not asked for again.
         """
 
         app, asked = self._target(request, request.action)

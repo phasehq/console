@@ -1,9 +1,7 @@
 """Whether a member may see an asset's name.
 
-Agent screens and Change Requests show apps and environments an Agent can
-reach. A member who cannot reach one themselves still sees that something is
-there, never its name. Every place that returns such a name to a member asks
-here, so the rule lives in one place; a new kind of asset adds a view here.
+A member who cannot reach an app still sees that it exists, never its name. Every place
+that returns a name asks here.
 """
 
 from dataclasses import dataclass, field
@@ -23,9 +21,7 @@ WITHHELD_CONNECTION = "App secrets"
 class AppView:
     """An app and some of its environments as one member may see them.
 
-    ``app`` is None when the member cannot access the app (``app_restricted``)
-    or it no longer exists. ``environments`` are the ones they can access;
-    ``hidden_environment_count`` counts the rest.
+    ``app`` is None when the member cannot access it or it no longer exists.
     """
 
     app: object = None

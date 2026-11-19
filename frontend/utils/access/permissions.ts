@@ -23,9 +23,8 @@ export const AGENT_PERMISSION_RESOURCES = [
 const agentPermissionResources = new Set<string>(AGENT_PERMISSION_RESOURCES)
 
 /**
- * The policy map a resource's grants live in. App resources need the explicit
- * flag because their names collide with organisation ones (`Members`, `Logs`);
- * Agent resources are uniquely named, so they route by name.
+ * The policy map a resource's grants live in. App resources need the explicit flag because
+ * their names collide with organisation ones; Agent resources route by name.
  */
 export const permissionKeyFor = (resource: string, isAppResource = false): PermissionKey => {
   if (isAppResource) return 'app_permissions'

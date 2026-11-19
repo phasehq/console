@@ -21,11 +21,8 @@ ORGANISATION_PERMISSIONS_KEY = "permissions"
 APP_PERMISSIONS_KEY = "app_permissions"
 AGENT_PERMISSIONS_KEY = "agent_permissions"
 
-# Resources that act *within* an Agent, kept apart from organisation-wide ones
-# the same way app_permissions sits beside permissions. Agent lifecycle
-# (`Agents`), the reusable Connections and the org-wide request queue stay
-# organisation scoped, exactly as `Apps` does for apps. This is the seam
-# team-owned Agents will resolve through, like `_check_app_permission`.
+# Agent resources act within an Agent and are routed by name, as app_permissions is.
+# Agent lifecycle and Connections stay organisation scoped.
 AGENT_PERMISSION_RESOURCES = frozenset(
     {"AgentWorkflows", "AgentMemberships", "AgentTokens", "AgentSessions"}
 )
@@ -34,10 +31,7 @@ AGENT_PERMISSION_RESOURCES = frozenset(
 def permission_key_for(resource, is_app_resource=False):
     """Return the policy map a resource's grants live in.
 
-    Apps need an explicit flag because app and organisation resources share
-    names (`Members`, `Logs`, `Teams`, `ServiceAccounts`). Agent resources are
-    uniquely named, so they route by name and no call site can read the wrong
-    map. A test pins that the names stay disjoint.
+    Apps need an explicit flag because their names collide with organisation resources.
     """
     if is_app_resource:
         return APP_PERMISSIONS_KEY

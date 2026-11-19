@@ -292,8 +292,7 @@ class AgentMembershipType(DjangoObjectType):
 def _viewer_workflow_ids(agent, member, action="read"):
     """Workflow IDs of this Agent the member may act on, cached on the instance.
 
-    Resolvers receive the Agent model instance, so this cannot be a method of
-    AgentType.
+    Resolvers receive the model instance, so this cannot be a method of AgentType.
     """
 
     cache_name = f"_viewer_{action}_workflow_ids_{member.id}"

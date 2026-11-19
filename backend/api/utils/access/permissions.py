@@ -486,8 +486,7 @@ def account_can_access_agent(
 ):
     """Require both RBAC permission and an active human Agent assignment.
 
-    Managed Owner and Admin roles have implicit organisation-wide assignment.
-    Service Accounts are deliberately excluded from the v1 Agent access model.
+    Owner and Admin roles have implicit assignment; Service Accounts are excluded.
     """
     AgentMembership = apps.get_model("api", "AgentMembership")
 

@@ -1,7 +1,7 @@
-"""How a Workflow's access to a Connection starts, is limited in time, and ends.
+"""How a Workflow's access to a Connection starts, is time-limited and ends.
 
-``end_connection_access`` is the one path that ends a grant, and
-``grant_connection_access`` the one path that starts one or extends it.
+``end_connection_access`` is the one path that ends a grant; ``grant_connection_access``
+is the one that starts or extends it.
 """
 
 from datetime import timedelta
@@ -38,14 +38,7 @@ class DurationError(ValueError):
 
 
 def end_connection_access(grants, *, ended_at=None):
-    """End the grants in a queryset that have not been ended yet.
-
-    Everything that takes a Connection away from a Workflow goes through here:
-    a grant revoked by a member or at an Agent's request, a grant past its
-    expiry, a deleted Connection, a deleted Workflow or Agent. It soft-deletes
-    the grants, removes an Agent's copy of a custom Connection's key once its
-    last grant on that Connection is gone, and tells the live sessions of the
-    affected Workflows to fetch their config again.
+    """End the open grants in a queryset, and tell the sessions of their Workflows to refetch.
 
     Call inside a transaction. Returns the grants it ended.
     """
@@ -76,9 +69,7 @@ def end_connection_access(grants, *, ended_at=None):
 def end_lapsed_access(grants, *, now=None):
     """End the grants in a queryset whose expiry has passed.
 
-    There is no scheduler: this runs whenever a Workflow's or a Connection's
-    grants are next looked at. Reads never depend on it, since an expired
-    grant is already left out of ``active()``. Returns the grants it ended.
+    Run whenever grants are next read, since there is no scheduler.
     """
 
     now = now or timezone.now()
@@ -92,8 +83,7 @@ def end_lapsed_access(grants, *, now=None):
 def prune_temporary_allows(grants, *, now=None):
     """Drop expired temporary allows from the grants in a queryset.
 
-    Expired allows are already ignored wherever a policy is read, so this
-    only keeps the stored list short.
+    Expired allows are ignored wherever a policy is read; this only keeps the list short.
     """
 
     now = now or timezone.now()
@@ -121,15 +111,9 @@ def prune_temporary_allows(grants, *, now=None):
 def grant_connection_access(
     workflow, connection, member, *, expires_at=None, extend=False
 ):
-    """Give a Workflow a Connection, or return the grant it already has.
+    """Give a Workflow a Connection, or return its existing grant. Call with the Connection row locked.
 
-    A lapsed grant of the same pair is ended first, so it never stands in the
-    way of a new one. With ``extend`` an existing grant's expiry is moved to
-    ``expires_at`` when that is later (None meaning no expiry), and never
-    brought forward. The Agent gets its copy of a custom Connection's key.
-
-    Call inside a transaction with the Connection row locked. Returns
-    ``(grant, created)``.
+    With ``extend``, an expiry only moves later. Returns ``(grant, created)``.
     """
 
     now = timezone.now()
@@ -248,11 +232,9 @@ def requested_duration(organisation, value):
 def granted_duration(
     request, inputs, *, allow_until_revoked=True, organisation_maximum=False
 ):
-    """What a member approving a request grants.
+    """Return ``(seconds, expires_at)`` for what a member approves; both None means until revoked.
 
-    ``inputs`` may carry ``durationSeconds`` or ``untilRevoked``; without
-    either, the requested duration is granted. Returns ``(seconds,
-    expires_at)``, both None for access that lasts until it is revoked.
+    Without ``durationSeconds`` or ``untilRevoked`` in ``inputs``, the requested duration is used.
     """
 
     until_revoked = inputs.get("untilRevoked")

@@ -1,9 +1,7 @@
 """Resolve third-party integration credentials for Agent proxy runtimes.
 
-Credential ciphertext remains in ``ProviderCredentials``. Only this server-side
-runtime boundary decrypts it, after rechecking the persistent Workflow Grant,
-Connection, session, and organisation bindings under row locks. A custom
-Connection's sealed value is released here too, behind the same rechecks.
+Only this boundary decrypts credential ciphertext, after rechecking the grant, Connection,
+session and organisation bindings under row locks.
 """
 
 from collections import OrderedDict
@@ -165,8 +163,7 @@ def _token_material(provider, service, material):
 def _https_endpoint(value, label):
     """The host, port and path of an HTTPS endpoint a credential names.
 
-    The proxy never puts a credential on a plain-HTTP request, so an endpoint
-    that is not HTTPS could not be used and is refused here.
+    The proxy never sends a credential over plain HTTP, so other endpoints are refused.
     """
 
     text = value.strip()
@@ -492,11 +489,7 @@ def _recheck_membership(locked_token, locked_session):
 def resolve_custom_connection(session, grant, definition, *, sealed):
     """Release a custom Connection's value to its proxy session.
 
-    ``definition`` is the one the caller is about to hand the proxy. With
-    ``sealed`` the stored ciphertext is released with the Agent's wrapped key,
-    which only the Agent token's holder can open; otherwise, or when the Agent
-    holds no current key copy, the server opens the value itself. Both lanes
-    sit behind the rechecks that guard integration credentials.
+    With ``sealed``, the ciphertext goes out under the Agent's wrapped key, behind the rechecks.
     """
 
     locked_token, locked_session, locked_grant = _recheck_bindings(

@@ -1,12 +1,6 @@
 /**
- * Access policies on a Connection, and the temporary allows on a Workflow's
- * grant of it.
- *
- * The backend validator (`api/utils/agent_config/access_policy.py`) is the
- * authority; the limits and rules here mirror it so the editor can say what
- * is wrong before a round trip. A policy only narrows what the Connection
- * allows. The secret guard is not part of any stored policy, so
- * `credential_minting` is never read into a draft and never written out.
+ * Access policies on a Connection, and temporary allows on a Workflow's grant.
+ * The backend validator is the authority; `credential_minting` is never edited here.
  */
 
 export const POLICY_VERSION = 1
@@ -231,10 +225,8 @@ const strongest = (left: PolicyEffect, right: PolicyEffect) =>
   STRENGTH[right] > STRENGTH[left] ? right : left
 
 /**
- * A policy as the editor shows it. Class rules fill the class rows (several
- * for one class mean the strongest, which is how the proxy reads them); a
- * class with no rule follows "Everything else". Rules the editor cannot
- * express, such as `credential_minting`, are left out.
+ * A policy as the editor shows it. Several rules for one class mean the strongest, as the proxy reads them.
+ * Rules the editor cannot express, such as `credential_minting`, are left out.
  */
 export const draftFromPolicy = (value: unknown): PolicyDraft => {
   const policy = readPolicy(value)

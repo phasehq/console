@@ -1,9 +1,7 @@
 """Sealed Integration Credential fields are write-only.
 
-Every declared field that is not non-sensitive is sealed: the console never
-receives its value, an update that omits it keeps the stored value, and moving
-an endpoint requires re-entering it so an editor cannot point a stored secret
-at a server they control.
+Sealed fields are never sent to the browser. Moving an endpoint requires re-entering its
+secret, so an editor cannot point it at a server they control.
 """
 
 import json

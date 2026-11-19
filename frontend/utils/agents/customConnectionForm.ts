@@ -1,10 +1,6 @@
 /**
- * The custom Connection form: its state, how it becomes a definition, and how
- * a stored or requested definition becomes form state again.
- *
- * The form covers the common shapes (one token, Basic auth, a query parameter,
- * a set of headers). A definition it cannot express reads back as null, so a
- * caller shows it read-only instead of silently rewriting it.
+ * The custom Connection form: its state, and its conversion to and from a definition.
+ * A definition it cannot express reads back as null and is shown read-only.
  */
 
 import isEqual from 'lodash/isEqual'
@@ -100,9 +96,8 @@ const blankCredential = (): CredentialRow => ({
 })
 
 /**
- * The starting row for a preset. `keep` carries over the secret's identity
- * (field name, environment name, decoy prefix), so changing only where a
- * secret goes does not ask for the secret again.
+ * The starting row for a preset. `keep` carries the secret's identity over, so changing only
+ * where a secret goes does not ask for it again.
  */
 export const presetCredential = (preset: HttpPreset, keep?: CredentialRow): CredentialRow => {
   const row: CredentialRow = {
@@ -564,9 +559,8 @@ const inferPreset = (definition: HttpDefinition): HttpPreset | null => {
 }
 
 /**
- * Read a definition into form state. Returns null when the form cannot
- * express it exactly (for example one secret used in two places, or a mix of
- * headers and query parameters).
+ * Read a definition into form state. Returns null when the form cannot express it exactly,
+ * so the caller shows it read-only.
  */
 export const customConnectionFormFromDefinition = (
   name: string,

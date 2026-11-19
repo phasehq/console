@@ -109,9 +109,8 @@ export function ManagedPolicies({ entries }: { entries: unknown }) {
 }
 
 /**
- * The rules of one Connection: an effect for each class of call, one for
- * everything else, and rules by method and path (and, on AWS, by AWS action)
- * under Advanced.
+ * The rules of one Connection: an effect per class of call, a default for the rest, and
+ * method/path rules under Advanced.
  */
 export function PolicyEditor({
   draft,

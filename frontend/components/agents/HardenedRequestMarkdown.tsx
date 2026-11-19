@@ -3,9 +3,8 @@
 import ReactMarkdown from 'react-markdown'
 
 /**
- * Agent supplied Markdown is untrusted. ReactMarkdown does not execute raw HTML
- * by default; links and images are also replaced so the request cannot trigger
- * navigation, tracking pixels, or external fetches.
+ * Agent-supplied Markdown is untrusted. Raw HTML is not run, and links and images are
+ * replaced so a request cannot trigger navigation, tracking or external fetches.
  */
 export function HardenedRequestMarkdown({ text }: { text: string }) {
   return (

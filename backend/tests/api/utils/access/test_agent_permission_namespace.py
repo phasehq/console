@@ -1,9 +1,7 @@
 """Guards for the agent permission namespace.
 
-Per-Agent resources live in `agent_permissions`, beside `permissions` and
-`app_permissions`. Unlike app resources, they are routed by *name* rather than
-by an explicit flag at each call site, which is only safe while their names
-stay disjoint from every organisation and app resource. These tests pin that.
+Agent resources are routed by name, which is only safe while their names stay disjoint
+from organisation and app resources.
 """
 
 from unittest.mock import MagicMock

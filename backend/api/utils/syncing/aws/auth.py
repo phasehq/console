@@ -68,16 +68,9 @@ def assume_aws_role(
 
 
 def get_aws_sts_session(role_arn, region=None, external_id=None):
-    """
-    Create a boto3 session using STS assume role.
+    """Create a boto3 session that assumes a role through STS.
 
-    Args:
-        role_arn (str): The ARN of the role to assume
-        region (str, optional): AWS region
-        external_id (str, optional): External ID for cross-account access
-
-    Returns:
-        boto3.Session: Session with temporary credentials
+    Returns a session holding temporary credentials.
     """
     credentials = assume_aws_role(role_arn, region, external_id)
 

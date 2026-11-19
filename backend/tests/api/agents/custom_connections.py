@@ -204,8 +204,7 @@ def add_member(organisation, label, *, permissions=None, agent_permissions=None)
 def workspace(label="workspace"):
     """An organisation with one member, one Agent and its default Workflow.
 
-    The member's role has no IntegrationCredentials permission: custom
-    Connections must never need it.
+    The member has no IntegrationCredentials permission, which custom Connections must never need.
     """
 
     organisation = Organisation.objects.create(
@@ -280,8 +279,7 @@ def member_client(space, member=None):
 def agent_client(space, workflow=None):
     """A client authenticated with a freshly minted Agent token.
 
-    Returns the client and the full token string, which the proxy needs to
-    rebuild the Agent's key.
+    Returns the client and the full token, which the proxy needs to rebuild the Agent's key.
     """
 
     workflow = workflow or space.workflow
