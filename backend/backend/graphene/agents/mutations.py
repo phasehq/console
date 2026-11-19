@@ -1195,7 +1195,10 @@ class CreateAgentAppConnectionMutation(graphene.Mutation):
         )
         name = _text(name, "name")
         with transaction.atomic(), _app_access_errors():
-            app = require_sse(resolve_app(organisation.id, app_id=str(app_id)))
+            app = resolve_app(organisation.id, app_id=str(app_id))
+            # Before any message can name the app: the member must reach it.
+            require_member_can_release(member, app, [], ())
+            require_sse(app)
             environments = resolve_environments(
                 app, [str(value) for value in environment_ids]
             )
