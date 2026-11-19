@@ -957,6 +957,7 @@ type DeletedAppType {
   deletionScheduledFor: DateTime!
   deletionDelayed: Boolean!
   canRestore: Boolean!
+  viewerCanDelete: Boolean!
 }
 
 type SecretLogsResponseType {

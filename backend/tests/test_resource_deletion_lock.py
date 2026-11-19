@@ -264,7 +264,22 @@ class TestPendingDeletionTypes:
                 "deletion_scheduled_for",
                 "deletion_delayed",
                 "can_restore",
+                "viewer_can_delete",
             }
+
+    @pytest.mark.parametrize("allowed", [True, False])
+    def test_an_app_says_whether_the_caller_may_restore_it_or_delete_it_now(
+        self, allowed
+    ):
+        # Worked out for each app, as the mutations do: the role can come
+        # from a team, which the caller's organisation role doesn't show.
+        info, app = _info(), MagicMock()
+        with patch.object(
+            types, "user_can_delete_app", return_value=allowed
+        ) as may_delete:
+            assert types.DeletedAppType.resolve_viewer_can_delete(app, info) is allowed
+
+        may_delete.assert_called_once_with(info.context.user, app)
 
 
 class TestPendingDeletionQueries:
@@ -310,7 +325,10 @@ class TestPendingDeletionQueries:
         scheduled = pending.filter.return_value
         accessible = str(scheduled.filter.call_args.args[0])
         assert "members" in accessible and "id__in" in accessible
-        listed = scheduled.filter.return_value.distinct.return_value
+        accessible_apps = scheduled.filter.return_value
+        # Each app's viewerCanDelete reads its organisation.
+        accessible_apps.select_related.assert_called_once_with("organisation")
+        listed = accessible_apps.select_related.return_value.distinct.return_value
         assert result is listed.order_by.return_value
         schema.TeamAppEnvironment.objects.filter.assert_called_once_with(
             team__memberships__org_member=member, team__deleted_at__isnull=True

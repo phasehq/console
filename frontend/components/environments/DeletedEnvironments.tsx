@@ -68,7 +68,7 @@ export const DeletedEnvironments = ({
       kind="Environment"
       description={`Deleted Environments are kept for ${DELETION_GRACE_PERIOD}, then permanently deleted. Their secrets are unavailable until restored.`}
       items={environments}
-      allowRestore={allowRestore}
+      allowRestore={() => allowRestore}
       restoringId={restoringId}
       onRestore={handleRestore}
       onDeleteNow={handleDeleteNow}

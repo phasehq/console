@@ -954,6 +954,8 @@ class Query(graphene.ObjectType):
         return (
             pending_deletion(App.all_objects.filter(organisation_id=organisation_id))
             .filter(Q(members=org_member) | Q(id__in=team_app_ids))
+            # For viewerCanDelete, which checks the caller's role for each app.
+            .select_related("organisation")
             .distinct()
             .order_by("deleted_at")
         )

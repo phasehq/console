@@ -6,6 +6,7 @@ from api.utils.access.permissions import (
     check_caller_can_grant_environments,
     role_has_global_access,
     user_can_access_app,
+    user_can_delete_app,
     user_has_permission,
     user_is_org_member,
 )
@@ -237,17 +238,6 @@ class UpdateAppInfoMutation(graphene.Mutation):
 logger = logging.getLogger(__name__)
 
 
-def _may_delete_app(user, app):
-    """Whether `user` may undo or bring forward the deletion of `app`: by
-    their organisation role, as deleteApp checks it, or by their role for
-    this app, as the REST API does. Whoever could have asked for the deletion
-    through either may follow it up."""
-    organisation = app.organisation
-    return user_has_permission(
-        user, "delete", "Apps", organisation
-    ) or user_has_permission(user, "delete", "Apps", organisation, app=app)
-
-
 def _log_app_deletion_requested(info, app):
     """Audit a delete request. The purge is later logged as this actor's."""
     if app.skip_grace_period:
@@ -338,7 +328,7 @@ class DeleteAppNowMutation(graphene.Mutation):
         if not user_can_access_app(user.userId, app.id, include_deleted=True):
             raise GraphQLError("You don't have access to this app")
 
-        if not _may_delete_app(user, app):
+        if not user_can_delete_app(user, app):
             raise GraphQLError("You don't have permission to delete Apps")
 
         try:
@@ -373,7 +363,7 @@ class RestoreAppMutation(graphene.Mutation):
             raise GraphQLError("You don't have access to this app")
 
         # Whoever may delete an app may undo the deletion.
-        if not _may_delete_app(user, app):
+        if not user_can_delete_app(user, app):
             raise GraphQLError("You don't have permission to restore Apps")
 
         try:

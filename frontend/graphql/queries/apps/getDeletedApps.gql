@@ -6,5 +6,6 @@ query GetDeletedApps($organisationId: ID!) {
     deletionScheduledFor
     deletionDelayed
     canRestore
+    viewerCanDelete
   }
 }

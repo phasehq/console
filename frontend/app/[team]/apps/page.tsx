@@ -24,7 +24,6 @@ export default function AppsHome() {
   // Permissions
   const userCanViewApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'read')
   const userCanCreateApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'create')
-  const userCanDeleteApps = userHasPermission(organisation?.role?.permissions, 'Apps', 'delete')
 
   const dialogRef = useRef<{ openModal: () => void }>(null)
 
@@ -107,7 +106,7 @@ export default function AppsHome() {
 
           <AppsView loading={loading} apps={apps} />
 
-          <DeletedApps organisationId={organisation.id} allowRestore={userCanDeleteApps} />
+          <DeletedApps organisationId={organisation.id} />
 
           {!loading && apps?.length === 0 && userCanCreateApps && (
             <div className="xl:col-span-2 1080p:col-span-3 justify-center p-8 sm:p-10 lg:p-14">

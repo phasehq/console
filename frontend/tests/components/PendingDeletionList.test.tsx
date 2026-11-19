@@ -24,14 +24,18 @@ describe('PendingDeletionList', () => {
   const onRestore = jest.fn()
   const onDeleteNow = jest.fn(async () => {})
 
-  const render = async (items: PendingDeletion[], allowRestore = true, restoringId?: string) => {
+  const render = async (
+    items: PendingDeletion[],
+    allowRestore: boolean | ((item: PendingDeletion) => boolean) = true,
+    restoringId?: string
+  ) => {
     await act(async () => {
       root.render(
         <PendingDeletionList
           kind="App"
           description="Kept for 24 hours"
           items={items}
-          allowRestore={allowRestore}
+          allowRestore={typeof allowRestore === 'function' ? allowRestore : () => allowRestore}
           restoringId={restoringId}
           onRestore={onRestore}
           onDeleteNow={onDeleteNow}
@@ -92,6 +96,19 @@ describe('PendingDeletionList', () => {
     expect(deleteNowButton()).toBeUndefined()
   })
 
+  it('offers them only for the items the viewer may delete', async () => {
+    // The role can come from a team, so it differs from one App to the next.
+    const payments = { ...pending, id: 'app-2', name: 'payments' }
+    await render([pending, payments], (item) => item.id === 'app-2')
+
+    expect(buttons('Restore')).toHaveLength(1)
+    expect(buttons('Delete now')).toHaveLength(1)
+
+    await act(async () => restoreButton()!.click())
+
+    expect(onRestore).toHaveBeenCalledWith(payments)
+  })
+
   it('offers neither once the deletion is under way', async () => {
     await render([{ ...pending, canRestore: false }])
 
@@ -108,6 +125,16 @@ describe('PendingDeletionList', () => {
     expect(container.textContent).not.toContain('Will be deleted on')
     expect(restoreButton()).toBeDefined()
     // It is already past its time: there is nothing to bring forward.
+    expect(deleteNowButton()).toBeUndefined()
+  })
+
+  it('says so when a deletion that can no longer be undone is delayed', async () => {
+    // Part of it is gone, and a credential that can't be revoked holds up the rest.
+    await render([{ ...pending, canRestore: false, deletionDelayed: true }])
+
+    expect(container.textContent).toContain('Deletion delayed')
+    expect(container.textContent).not.toContain('Being deleted')
+    expect(restoreButton()).toBeUndefined()
     expect(deleteNowButton()).toBeUndefined()
   })
 
@@ -154,5 +181,6 @@ describe('isBeingDeleted', () => {
     expect(isBeingDeleted({ canRestore: false, deletionDelayed: false })).toBe(true)
     expect(isBeingDeleted({ canRestore: true, deletionDelayed: false })).toBe(false)
     expect(isBeingDeleted({ canRestore: true, deletionDelayed: true })).toBe(false)
+    expect(isBeingDeleted({ canRestore: false, deletionDelayed: true })).toBe(false)
   })
 })

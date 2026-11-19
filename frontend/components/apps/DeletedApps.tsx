@@ -13,13 +13,7 @@ import { usePendingDeletionRefresh } from '@/hooks/usePendingDeletionRefresh'
 import { DELETION_GRACE_PERIOD } from '@/constants'
 
 /** The organisation's apps that are scheduled for deletion. Each can be restored, or deleted now. */
-export const DeletedApps = ({
-  organisationId,
-  allowRestore,
-}: {
-  organisationId: string
-  allowRestore: boolean
-}) => {
+export const DeletedApps = ({ organisationId }: { organisationId: string }) => {
   const { data, refetch, startPolling, stopPolling } = useQuery(GetDeletedApps, {
     variables: { organisationId },
     fetchPolicy: 'cache-and-network',
@@ -68,7 +62,8 @@ export const DeletedApps = ({
       kind="App"
       description={`Deleted Apps are kept for ${DELETION_GRACE_PERIOD}, then permanently deleted. Their secrets are unavailable until restored.`}
       items={apps}
-      allowRestore={allowRestore}
+      // From the server, for each App: a team can give its members a role for its Apps.
+      allowRestore={(app) => app.viewerCanDelete}
       restoringId={restoringId}
       onRestore={handleRestore}
       onDeleteNow={handleDeleteNow}

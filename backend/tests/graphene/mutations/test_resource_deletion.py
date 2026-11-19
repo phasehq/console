@@ -68,6 +68,9 @@ def app_mocks():
         m.access = stack.enter_context(
             patch(f"{APP}.user_can_access_app", return_value=True)
         )
+        m.may_delete = stack.enter_context(
+            patch(f"{APP}.user_can_delete_app", return_value=True)
+        )
         m.schedule = stack.enter_context(
             patch(f"{APP}.schedule_app_deletion", side_effect=_schedules)
         )
@@ -246,25 +249,17 @@ class TestDeleteAppNow:
         app_mocks.enqueue_purge.assert_called_once_with("app-1")
 
     def test_requires_the_permission_that_deleting_needs(self, app_mocks):
-        app_mocks.permission.return_value = False
+        # By the organisation role or a team's role for the app: whoever
+        # could schedule the deletion through REST may bring it forward here.
+        app_mocks.may_delete.return_value = False
 
         with pytest.raises(GraphQLError, match="permission to delete"):
             _delete_app_now()
 
-        assert app_mocks.permission.call_args.args[1:3] == ("delete", "Apps")
+        assert app_mocks.may_delete.call_args.args[1] is app_mocks.app
+        # The organisation role alone is not asked for.
+        app_mocks.permission.assert_not_called()
         app_mocks.delete_now.assert_not_called()
-
-    def test_a_team_role_for_the_app_is_enough(self, app_mocks):
-        # As the REST API checks a delete: whoever could schedule the deletion
-        # there may bring it forward here.
-        app_mocks.permission.side_effect = [False, True]
-
-        _delete_app_now()
-
-        by_org_role, by_app_role = app_mocks.permission.call_args_list
-        assert "app" not in by_org_role.kwargs
-        assert by_app_role.kwargs == {"app": app_mocks.app}
-        app_mocks.delete_now.assert_called_once_with("app-1")
 
     def test_requires_access_to_the_app(self, app_mocks):
         app_mocks.access.return_value = False
@@ -319,23 +314,14 @@ class TestRestoreApp:
         app_mocks.audit.assert_not_called()
 
     def test_requires_the_permission_that_deleting_needs(self, app_mocks):
-        app_mocks.permission.return_value = False
+        app_mocks.may_delete.return_value = False
 
         with pytest.raises(GraphQLError, match="permission to restore"):
             _restore_app()
 
-        assert app_mocks.permission.call_args.args[1:3] == ("delete", "Apps")
+        assert app_mocks.may_delete.call_args.args[1] is app_mocks.app
+        app_mocks.permission.assert_not_called()
         app_mocks.restore.assert_not_called()
-
-    def test_a_team_role_for_the_app_is_enough(self, app_mocks):
-        app_mocks.permission.side_effect = [False, True]
-
-        _restore_app()
-
-        by_org_role, by_app_role = app_mocks.permission.call_args_list
-        assert "app" not in by_org_role.kwargs
-        assert by_app_role.kwargs == {"app": app_mocks.app}
-        app_mocks.restore.assert_called_once_with("app-1")
 
     def test_requires_access_to_the_app(self, app_mocks):
         app_mocks.access.return_value = False

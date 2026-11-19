@@ -85,7 +85,7 @@ const DeleteNowDialog = ({
 }
 
 /** Apps or environments that are scheduled for deletion. Each can be restored, or deleted now. */
-export const PendingDeletionList = ({
+export const PendingDeletionList = <T extends PendingDeletion>({
   kind,
   description,
   items,
@@ -97,9 +97,9 @@ export const PendingDeletionList = ({
   /** What an item is called in the confirmation, e.g. "App". */
   kind: string
   description: string
-  items: PendingDeletion[]
+  items: T[]
   /** Whoever may delete an item may restore it, or delete it now. */
-  allowRestore: boolean
+  allowRestore: (item: T) => boolean
   restoringId?: string | null
   onRestore: (item: PendingDeletion) => void
   onDeleteNow: (item: PendingDeletion) => Promise<void>
@@ -124,7 +124,7 @@ export const PendingDeletionList = ({
                 <span>{status(item)}</span>
               </div>
             </div>
-            {item.canRestore && allowRestore && (
+            {item.canRestore && allowRestore(item) && (
               <div className="flex items-center gap-2 shrink-0">
                 <Button
                   variant="secondary"

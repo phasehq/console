@@ -5,6 +5,7 @@ from api.utils import resource_deletion
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
+    user_can_delete_app,
     user_has_permission,
 )
 from ee.integrations.secrets.dynamic.graphene.queries import resolve_dynamic_secrets
@@ -1020,6 +1021,9 @@ class DeletedAppType(ObjectType):
     deletion_delayed = graphene.Boolean(required=True)
     # False once the grace period has ended and the purge may have begun.
     can_restore = graphene.Boolean(required=True)
+    # Whether the caller may restore it or delete it now. Their role for the
+    # app can come from a team, so it differs from one app to the next.
+    viewer_can_delete = graphene.Boolean(required=True)
 
     def resolve_deletion_scheduled_for(self, info):
         return resource_deletion.deletion_scheduled_for(self)
@@ -1029,6 +1033,9 @@ class DeletedAppType(ObjectType):
 
     def resolve_can_restore(self, info):
         return resource_deletion.can_restore(self)
+
+    def resolve_viewer_can_delete(self, info):
+        return user_can_delete_app(info.context.user, self)
 
 
 class DeletedEnvironmentType(ObjectType):
