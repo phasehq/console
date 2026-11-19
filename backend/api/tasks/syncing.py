@@ -50,6 +50,7 @@ from ..utils.syncing.cloudflare.workers import (
     sync_cloudflare_worker_secrets,
 )
 from django.apps import apps
+from django.db import transaction
 from ..utils.syncing.secrets import get_environment_secrets
 from django_rq import job
 from rq.timeouts import JobTimeoutException
@@ -178,9 +179,17 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
         sync_event.save()
 
     try:
-        secrets = get_environment_secrets(
-            environment_sync.environment, environment_sync.path
-        )
+        # The job holds the sync as it was queued. Its folder may have been renamed
+        # or moved since, and the old path would read as empty, which most providers
+        # take as "delete everything". Locking the row holds such a change off, so
+        # the path and the secrets under it are read as one.
+        with transaction.atomic():
+            path = (
+                EnvironmentSync.objects.select_for_update()
+                .values_list("path", flat=True)
+                .get(id=environment_sync.id)
+            )
+            secrets = get_environment_secrets(environment_sync.environment, path)
 
         if environment_sync.authentication is None:
             sync_data = (

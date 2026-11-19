@@ -364,16 +364,28 @@ def test_gitlab_sync_with_id_does_not_look_it_up(mock_handle, mock_resolve):
 # --- handle_sync_event: the job writes back only what it owns ---
 
 
-def _run_job(sync_function, locked=False):
-    """handle_sync_event on a sync as a worker holds it: the copy pickled when the job was queued."""
+def _run_job(sync_function, locked=False, env_sync=None, path_now="/", steps=None):
+    """handle_sync_event on a sync as a worker holds it: the copy pickled when the job was queued.
+
+    `path_now` is the path its row has by the time the job runs. `steps`, if given, collects what
+    the job does around its read of the secrets, in order.
+    """
     from api.tasks.syncing import handle_sync_event
 
-    env_sync = MagicMock()
+    env_sync = env_sync or MagicMock()
+    steps = [] if steps is None else steps
     with patch("api.tasks.syncing.apps.get_model") as mock_get_model, patch(
         "api.tasks.syncing.organisation_is_locked", return_value=locked
-    ), patch("api.tasks.syncing.get_environment_secrets", return_value=[]):
-        events = mock_get_model.return_value.objects.filter.return_value
-        events.order_by.return_value.first.return_value = MagicMock()
+    ), patch("api.tasks.syncing.transaction") as transaction, patch(
+        "api.tasks.syncing.get_environment_secrets",
+        side_effect=lambda environment, path: steps.append(("read", path)) or [],
+    ):
+        objects = mock_get_model.return_value.objects
+        objects.filter.return_value.order_by.return_value.first.return_value = MagicMock()
+        transaction.atomic.return_value.__enter__.side_effect = lambda: steps.append("begin")
+        transaction.atomic.return_value.__exit__.side_effect = lambda *exc: steps.append("commit")
+        row = objects.select_for_update.return_value.values_list.return_value
+        row.get.side_effect = lambda **kwargs: steps.append(("lock", kwargs)) or path_now
         handle_sync_event(env_sync, sync_function)
     return [call.kwargs for call in env_sync.save.call_args_list]
 
@@ -406,3 +418,34 @@ def test_sync_job_paused_for_a_locked_org_saves_its_status_and_nothing_else():
 
     assert saves == [{"update_fields": ["status", "updated_at"]}]
     sync_function.assert_not_called()
+
+
+def test_sync_job_reads_the_path_its_sync_has_now_not_the_one_it_was_queued_with():
+    """A job queued before its folder was renamed would find nothing at the old path, and
+    most providers delete what the source no longer has."""
+    queued = MagicMock(id="sync-1", path="/edge")
+    steps = []
+    sync_function = MagicMock(side_effect=lambda secrets: steps.append("push") or (True, {}))
+
+    _run_job(sync_function, env_sync=queued, path_now="/functions", steps=steps)
+
+    assert ("lock", {"id": "sync-1"}) in steps
+    assert ("read", "/functions") in steps
+    assert ("read", "/edge") not in steps
+
+
+def test_sync_job_reads_path_and_secrets_as_one_then_lets_go_before_pushing():
+    """The row lock holds a rename off between the two reads. The provider calls, which can
+    take minutes, run after it is released."""
+    steps = []
+    sync_function = MagicMock(side_effect=lambda secrets: steps.append("push") or (True, {}))
+
+    _run_job(sync_function, env_sync=MagicMock(id="sync-1"), path_now="/functions", steps=steps)
+
+    assert steps == [
+        "begin",
+        ("lock", {"id": "sync-1"}),
+        ("read", "/functions"),
+        "commit",
+        "push",
+    ]
