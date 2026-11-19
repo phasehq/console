@@ -1613,9 +1613,12 @@ class SetAgentConnectionPolicyMutation(graphene.Mutation):
             previous = connection.policy
             changed = previous != checked
             if changed and is_app_service(connection.service_type):
-                # Allowing a class outright gives it to every Workflow granted
-                # the Connection, so it needs what granting it would need.
-                opened = released_classes(checked) - released_classes(previous)
+                # Allowing a class, or lifting a block from one with a live
+                # temporary allow, needs what granting the Connection needs.
+                live = _live_allow_classes(connection)
+                opened = released_classes(checked, live) - released_classes(
+                    previous, live
+                )
                 if opened:
                     with _app_access_errors():
                         app, environments = check_app_connection(connection)
