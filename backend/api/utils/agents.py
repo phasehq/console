@@ -302,6 +302,15 @@ def mint_agent_token(
     The server enforces the token's Workflow binding; only the digest and wrapped share are stored.
     """
 
+    # Removing the creator from the Agent locks this row before it retires
+    # their tokens, so it either retires this one or is seen by the check below.
+    assigned = created_by is not None and not role_has_global_access(created_by.role)
+    if assigned:
+        membership = (
+            AgentMembership.objects.select_for_update(of=("self",))
+            .filter(agent=agent, member=created_by, deleted_at__isnull=True)
+            .first()
+        )
     try:
         workflow = (
             AgentWorkflow.objects.select_for_update(of=("self",))
@@ -317,6 +326,13 @@ def mint_agent_token(
         )
     except AgentWorkflow.DoesNotExist as exc:
         raise ValueError("Workflow does not belong to an active Agent") from exc
+    if assigned and not (
+        membership is not None
+        and membership.workflow_memberships.filter(
+            workflow=workflow, deleted_at__isnull=True
+        ).exists()
+    ):
+        raise ValueError("You no longer have access to this Workflow")
 
     try:
         keyring = unwrap_server_managed_sa_keyring(
