@@ -13,8 +13,11 @@ from api.models import (
     Agent,
     AgentConnection,
     AgentMembership,
+    AgentRequest,
     AgentToken,
     AgentWorkflow,
+    AgentWorkflowGrant,
+    AgentWorkflowMembership,
 )
 from api.utils.agents import (
     create_agent_with_default_workflow,
@@ -23,6 +26,7 @@ from api.utils.agents import (
 )
 from backend.graphene.agents import mutations
 from backend.graphene.agents.mutations import (
+    FulfillAgentRequestMutation,
     MintAgentTokenMutation,
     UpdateAgentConnectionMutation,
     UpdateAgentMutation,
@@ -30,8 +34,11 @@ from backend.graphene.agents.mutations import (
 )
 
 from .custom_connections import (
+    ACTIONS,
     add_member,
+    info,
     live_packaged_connection,
+    provider_credential,
     use_test_server_keypair,
     workspace,
 )
@@ -207,22 +214,27 @@ def test_minting_checks_the_creators_assignment_under_its_lock():
 # --- Hosts whose author has left ----------------------------------------------
 
 
+DATABASE = {"username": "app", "password": "p", "host": "db.example.com"}
+
+
+def _connection_without_its_host_author(space):
+    author = add_member(space.organisation, "author")
+    connection = live_packaged_connection(space, "postgres", DATABASE)
+    AgentConnection.objects.filter(id=connection.id).update(
+        host_rules_authored_by=author
+    )
+    # Deleting the account, unlike removing the member, clears the author.
+    author.user.delete()
+    connection.refresh_from_db()
+    assert connection.host_rules_authored_by_id is None
+    return connection
+
+
 @pytest.mark.django_db
 def test_a_connection_whose_host_author_is_gone_can_still_be_renamed(monkeypatch):
     use_test_server_keypair(monkeypatch)
     space = workspace("author-gone")
-    author = add_member(space.organisation, "author")
-    connection = live_packaged_connection(
-        space,
-        "postgres",
-        {"username": "app", "password": "p", "host": "db.example.com"},
-    )
-    AgentConnection.objects.filter(id=connection.id).update(
-        host_rules_authored_by=author
-    )
-    author.user.delete()
-    connection.refresh_from_db()
-    assert connection.host_rules_authored_by_id is None
+    connection = _connection_without_its_host_author(space)
     version = connection.host_rules_version
 
     UpdateAgentConnectionMutation.mutate(
@@ -233,4 +245,70 @@ def test_a_connection_whose_host_author_is_gone_can_still_be_renamed(monkeypatch
     assert connection.name == "Renamed database"
     assert str(connection.host_rules_authored_by_id) == str(space.member.id)
     # The hosts did not change, so nothing about them is reviewed again.
+    assert connection.host_rules_version == version
+
+
+@pytest.mark.django_db
+def test_a_credential_update_is_fulfilled_when_the_host_author_is_gone(monkeypatch):
+    use_test_server_keypair(monkeypatch)
+    space = workspace("author-gone-fulfil")
+    connection = _connection_without_its_host_author(space)
+    version = connection.host_rules_version
+    grant = AgentWorkflowGrant.objects.create(
+        organisation=space.organisation,
+        workflow=space.workflow,
+        connection=connection,
+        created_by=space.member,
+    )
+    agent_request = AgentRequest.objects.create(
+        organisation=space.organisation,
+        workflow=space.workflow,
+        connection=connection,
+        grant=grant,
+        kind=AgentRequest.CREDENTIAL_UPDATE,
+        service_type="postgres",
+        credential_provider="postgres",
+        credential_name="Rotated database",
+        markdown="Rotate the database password.",
+        progress={
+            "stage": "awaiting_credentials",
+            "baseline_authentication_id": str(connection.authentication_id),
+            "baseline_grant_id": str(grant.id),
+        },
+    )
+    # The same database with a new password, so the hosts do not change.
+    replacement = provider_credential(
+        space, "postgres", {**DATABASE, "password": "rotated"}, "Rotated database"
+    )
+    replacement.refresh_from_db()
+    integrator = add_member(
+        space.organisation,
+        "integrator",
+        permissions={
+            "Agents": ACTIONS,
+            "AgentConnections": ACTIONS,
+            "AgentRequests": ACTIONS,
+            "IntegrationCredentials": ACTIONS,
+        },
+    )
+    membership = AgentMembership.objects.create(
+        agent=space.agent, member=integrator, assigned_by=space.member
+    )
+    AgentWorkflowMembership.objects.create(
+        workflow=space.workflow, agent_membership=membership, assigned_by=space.member
+    )
+
+    fulfilled = FulfillAgentRequestMutation.mutate(
+        None,
+        info(integrator),
+        request_id=agent_request.id,
+        expected_revision=str(agent_request.revision),
+        credential_id=replacement.id,
+        expected_credential_revision=str(replacement.revision),
+    )
+
+    assert fulfilled.request.status == AgentRequest.APPROVED
+    connection.refresh_from_db()
+    assert str(connection.authentication_id) == str(replacement.id)
+    assert str(connection.host_rules_authored_by_id) == str(integrator.id)
     assert connection.host_rules_version == version
