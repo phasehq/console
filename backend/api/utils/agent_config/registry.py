@@ -1559,6 +1559,10 @@ class ConfigRegistry:
     operation_service_types: frozenset[str] = frozenset()
     # The services whose manifest gives the secret guard rules.
     guarded_service_types: frozenset[str] = frozenset()
+    # What the client can name of an AWS call: every action of these services,
+    # and these lower-cased ``service:Action`` REST calls of the others.
+    named_action_services: frozenset[str] = frozenset()
+    named_rest_operations: frozenset[str] = frozenset()
     # {credential provider: the service whose ``credential_fields`` read it}
     _token_services: Mapping[str, str] = MappingProxyType({})
 
@@ -1572,6 +1576,8 @@ class ConfigRegistry:
         minting_operations: set[str] = set()
         operation_service_types: set[str] = set()
         guarded_service_types: set[str] = set()
+        named_action_services: set[str] = set()
+        named_rest_operations: set[str] = set()
         token_services: dict[str, str] = {}
         for path, document in raw_services:
             checked = _validate_service(document, path)
@@ -1594,6 +1600,15 @@ class ConfigRegistry:
             )
             if "action_classes" in checked:
                 operation_service_types.add(service_type)
+                classes = checked["action_classes"]
+                named_action_services.update(
+                    classes["query_protocol_services"],
+                    classes["json_target_services"],
+                )
+                named_rest_operations.update(
+                    f"{operation['service']}:{operation['action']}".lower()
+                    for operation in classes["rest_operations"]
+                )
             if "credential_fields" in checked:
                 provider = checked["provider"]
                 if provider in token_services:
@@ -1642,6 +1657,8 @@ class ConfigRegistry:
             minting_operations=frozenset(minting_operations),
             operation_service_types=frozenset(operation_service_types),
             guarded_service_types=frozenset(guarded_service_types),
+            named_action_services=frozenset(named_action_services),
+            named_rest_operations=frozenset(named_rest_operations),
             _token_services=MappingProxyType(token_services),
         )
 

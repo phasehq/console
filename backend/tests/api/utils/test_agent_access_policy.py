@@ -203,7 +203,7 @@ def test_a_rule_may_name_one_aws_action_on_a_connection_that_takes_them():
         default="allow",
         rules=[
             {"operation": TERMINATE, "effect": "ask"},
-            {"operation": "s3:DeleteBucket", "effect": "block"},
+            {"operation": "dynamodb:DeleteTable", "effect": "block"},
             {"class": "admin", "effect": "block"},
         ],
     )
@@ -359,7 +359,7 @@ def test_an_allow_for_an_action_is_held_against_the_rules_that_name_it():
             rules=[
                 {"operation": TERMINATE, "effect": "block"},
                 {"operation": "ec2:StopInstances", "effect": "ask"},
-                {"operation": "s3:DeleteBucket", "effect": "allow"},
+                {"operation": "dynamodb:DeleteTable", "effect": "allow"},
                 {"class": "admin", "effect": "block"},
                 {"match": {"methods": ["POST"], "path": "/"}, "effect": "block"},
             ]
@@ -371,7 +371,7 @@ def test_an_allow_for_an_action_is_held_against_the_rules_that_name_it():
     assert allow_is_blocked(policy, {"operation": "ec2:terminateinstances"}) is True
     # Only a block refuses; an ask is what an allow is for.
     assert allow_is_blocked(policy, {"operation": "ec2:StopInstances"}) is False
-    assert allow_is_blocked(policy, {"operation": "s3:DeleteBucket"}) is False
+    assert allow_is_blocked(policy, {"operation": "dynamodb:DeleteTable"}) is False
     # The Console cannot tell an action's class or path: the proxy classifies
     # an AWS call, so a class or match block does not refuse an action here.
     assert allow_is_blocked(policy, {"operation": "iam:ListUsers"}) is False
