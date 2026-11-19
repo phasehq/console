@@ -102,24 +102,35 @@ def test_a_partial_approval_grants_what_the_approver_can_access(scene):
     assert follow_on.kind == lab.request.kind
     assert follow_on.action == _narrowed(lab, lab.prod)
     assert follow_on.duration_seconds == 3600
-    assert follow_on.markdown == "For the nightly deploy."
+    # The Agent's text was written for the whole request and is not copied.
+    assert follow_on.markdown == ""
     assert follow_on.title == f"Read and write secrets in {APP} (Production)"
     assert follow_on.expires_at is not None
     assert lab.request.resolution["follow_on_request_id"] == str(follow_on.id)
 
 
 @pytest.mark.django_db
-def test_the_agents_own_title_is_kept(lab):
+def test_a_follow_on_says_what_it_covers_in_place_of_the_agents_own_words(lab):
     client, _ = agent_client(lab)
     open_session(client, lab.workflow)
-    lab.request = _ask(lab, client, title="Secrets for the nightly deploy")
-    partial = member(lab, "partial", app=lab.app, environments=[lab.dev])
+    lab.request = _ask(
+        lab,
+        client,
+        title="Development for tests, Production for the release",
+        markdown="Development for tests, Production for the release.",
+    )
+    prod_only = member(lab, "prodonly", app=lab.app, environments=[lab.prod])
+    dev_only = member(lab, "devonly", app=lab.app, environments=[lab.dev])
 
-    approve(lab, lab.request, info(partial), action=_narrowed(lab, lab.dev))
+    approve(lab, lab.request, info(prod_only), action=_narrowed(lab, lab.prod))
 
     [follow_on] = _follow_ons(lab)
-    assert follow_on.title == "Secrets for the nightly deploy"
-    assert follow_on.action["environmentIds"] == _ids(lab.staging, lab.prod)
+    assert follow_on.title == f"Read and write secrets in {APP} (Development, Staging)"
+    assert follow_on.markdown == ""
+    assert follow_on.action["environmentIds"] == _ids(lab.dev, lab.staging)
+    # A member who can access only one of them is shown no other name.
+    assert "Production" not in json.dumps(_seen(lab, dev_only, follow_on))
+    assert "Staging" not in json.dumps(_seen(lab, dev_only, follow_on))
 
 
 @pytest.mark.django_db
