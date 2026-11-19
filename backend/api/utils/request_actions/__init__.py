@@ -15,13 +15,16 @@ ACTION_VERSION = 1
 # clear, so none of their free text or requested settings may carry one.
 CREDENTIAL_TEXT = re.compile(
     r"(?:pss_(?:agent|user|service):v[0-9]+:[A-Za-z0-9:]+|"
+    # An Agent token as it is sent in an Authorization header.
+    r"\bAgent [0-9a-f]{64}\b|"
     r"psx_sess_[A-Za-z0-9_-]+|"
     r"AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9_]{20,}|"
     r"github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|"
     r"xox[abprs]-[A-Za-z0-9-]{10,}|[rs]k_(?:live|test)_[A-Za-z0-9]{16,}|"
     r"\b(?:rnd|sbp)_[A-Za-z0-9]{20,}|\blin_api_[A-Za-z0-9]{20,}|"
     r"\bsk-(?:proj-|admin-)?[A-Za-z0-9_-]{16,}|"
-    r"-----BEGIN [A-Z ]+PRIVATE KEY-----|"
+    # A private key of any kind, PKCS#8 (no algorithm named) and PGP included.
+    r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|"
     r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})"
 )
 
