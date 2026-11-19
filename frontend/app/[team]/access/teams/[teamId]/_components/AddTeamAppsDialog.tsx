@@ -45,8 +45,14 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
   const [searchQuery, setSearchQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
 
-  // Build the initial state from existing team app-environment assignments
-  const existingAppIds = new Set(team.apps?.map((a) => a!.id) || [])
+  // Build the initial state from existing team app-environment assignments.
+  // Not from team.apps: that also has an app the team reaches only through an
+  // environment scheduled for deletion, which has nothing to edit here.
+  const existingAppIds = new Set(
+    ((team.appEnvironments || []) as TeamAppEnvironmentType[])
+      .map((tae) => tae?.app?.id)
+      .filter(Boolean)
+  )
 
   const getInitialEnvs = (): Record<string, Set<string>> => {
     const initial: Record<string, Set<string>> = {}
