@@ -765,6 +765,26 @@ export const deployReferenceErrors = (
   return [...inEdited, ...newlyBroken]
 }
 
+/**
+ * What exporting the selected rows writes for one env, as deployed: the secrets, a key two of
+ * them share (a .env holds a key once), and the ids whose values the file reveals.
+ */
+export const selectionExport = (savedRows: (AppSecret | undefined)[], envId: string) => {
+  const secrets = savedRows.flatMap((row) => {
+    const secret = entryFor(row, envId)?.secret
+    return secret ? [{ ...secret, key: secret.key || row!.key }] : []
+  })
+  const keys = secrets.map((secret) => secret.key)
+  return {
+    secrets,
+    repeatedKey: keys.find((key, at) => keys.indexOf(key) !== at) ?? null,
+    // A sealed value never reaches the browser, so exporting its key reads nothing
+    readIds: secrets
+      .filter((secret) => secret.type !== ApiSecretTypeChoices.Sealed)
+      .map((secret) => secret.id),
+  }
+}
+
 export type RowListItem =
   | { kind: 'single'; secret: AppSecret }
   | { kind: 'group'; groupKey: string; rotatingSecretIds: string[]; appSecrets: AppSecret[] }

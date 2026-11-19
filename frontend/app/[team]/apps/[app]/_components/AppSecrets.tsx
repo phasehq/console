@@ -139,6 +139,7 @@ import {
   mergeImportedRows,
   moveAppSecretRows,
   repeatedKeyToFix,
+  selectionExport,
   selectionTraits,
   restoreAppSecretEntries,
   revertAppSecretEntries,
@@ -1485,17 +1486,23 @@ export const AppSecrets = ({
   const handleExportSelected = (envId: string) => {
     const env = environmentsRef.current.find((e) => e.id === envId)
     if (!env) return
-    const secrets = selection.flatMap((rowId) => {
-      const row = serverByIdRef.current.get(rowId)
-      const secret = entryFor(row, envId)?.secret
-      return secret ? [{ ...secret, key: secret.key || row!.key }] : []
-    })
+    const { secrets, repeatedKey, readIds } = selectionExport(
+      selection.map((rowId) => serverByIdRef.current.get(rowId)),
+      envId
+    )
     if (secrets.length === 0) {
       toast.info(`None of the selected secrets is deployed in ${env.name}`)
       return
     }
+    // The selection can span folders, and a .env file holds a key once
+    if (repeatedKey !== null) {
+      toast.error(
+        `${repeatedKey} is selected more than once, and a .env file holds a key once. Export one folder at a time.`
+      )
+      return
+    }
     exportToEnvFile(secrets, appName ?? 'app', env.name, secretPath)
-    readSecrets({ variables: { ids: secrets.map((secret) => secret.id) } })
+    if (readIds.length > 0) readSecrets({ variables: { ids: readIds } })
   }
 
   // A copy of one env, narrowed to the selected keys: the dialog asks which env's values

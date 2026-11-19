@@ -18,6 +18,7 @@ import {
   repeatedKeyToFix,
   restoreAppSecretEntries,
   revertAppSecretEntries,
+  selectionExport,
   selectionTraits,
   snapshotHasDeploy,
   staleAppSecretEntries,
@@ -836,6 +837,45 @@ describe('deployReferenceErrors', () => {
       context
     )
     expect(references(errors)).toEqual(['URL in Production: ${development.HOST}'])
+  })
+})
+
+describe('selectionExport', () => {
+  const inFolder = (path: string, values: Record<string, SecretType | null>) => ({
+    ...row('TOKEN', values),
+    id: `app:${path}:TOKEN`,
+    path,
+  })
+
+  it('lists the saved values of one env, skipping rows that have none there', () => {
+    const rows = [
+      row('A', { dev: secret('d1', 'A', '1') }),
+      row('B', { prod: secret('p1', 'B', '2') }),
+      undefined,
+    ]
+    const { secrets, repeatedKey, readIds } = selectionExport(rows, 'dev')
+    expect(secrets.map((s) => [s.key, s.value])).toEqual([['A', '1']])
+    expect(repeatedKey).toBeNull()
+    expect(readIds).toEqual(['d1'])
+  })
+
+  it('names a key that two of the rows share: the same key in two folders', () => {
+    const rows = [
+      inFolder('/api', { dev: secret('d1', 'TOKEN', '1', { path: '/api' }) }),
+      inFolder('/worker', { dev: secret('d2', 'TOKEN', '2', { path: '/worker' }) }),
+    ]
+    expect(selectionExport(rows, 'dev').repeatedKey).toBe('TOKEN')
+    expect(selectionExport(rows, 'prod').repeatedKey).toBeNull()
+  })
+
+  it('counts no read for a sealed value, which the file cannot hold', () => {
+    const rows = [
+      row('A', { dev: secret('d1', 'A', '', { type: ApiSecretTypeChoices.Sealed }) }),
+      row('B', { dev: secret('d2', 'B', '2') }),
+    ]
+    const { secrets, readIds } = selectionExport(rows, 'dev')
+    expect(secrets.map((s) => s.key)).toEqual(['A', 'B'])
+    expect(readIds).toEqual(['d2'])
   })
 })
 
