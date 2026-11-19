@@ -19,6 +19,11 @@ def _info(user_id="user-1"):
     return info
 
 
+def _environment_state_lookups(lookup):
+    """The filter keys that would drop a scope row for its environment's state."""
+    return [key for key in lookup if "environment__deleted_at" in key]
+
+
 @contextmanager
 def _permission_models(**models):
     real_get_model = permissions.apps.get_model
@@ -73,8 +78,10 @@ class TestAccessChecks:
         app_model.objects.get.assert_not_called()
 
     @pytest.mark.parametrize("helper", ["user", "service_account"])
-    def test_a_team_reaches_an_app_only_through_a_live_environment(self, helper):
-        # Its scope rows for environments pending deletion don't count.
+    def test_a_team_reaches_an_app_through_an_environment_pending_deletion(
+        self, helper
+    ):
+        # Its members open the app to find that environment and restore it.
         app_model, member_model, membership_model = self._app_models()
         app = app_model.objects.get.return_value
         app.members.all.return_value = []
@@ -94,28 +101,22 @@ class TestAccessChecks:
 
         lookup = membership_model.objects.filter.call_args.kwargs
         assert lookup["team__app_environments__app"] is app
-        assert lookup["team__app_environments__environment__deleted_at__isnull"] is True
+        assert _environment_state_lookups(lookup) == []
 
-    @pytest.mark.parametrize("include_deleted", [False, True])
-    def test_team_permissions_count_a_pending_environment_only_for_restoring_it(
-        self, include_deleted
-    ):
-        # A team may reach the app only through the environment it deleted.
+    def test_team_permissions_count_an_environment_pending_deletion(self):
+        # A team may reach the app only through the environment it deleted,
+        # and its role for the app decides who may restore it.
         team_model = MagicMock()
         team_model.objects.filter.return_value.distinct.return_value = []
         account, app = MagicMock(), MagicMock()
         app.members.all.return_value = []
 
         with _permission_models(Team=team_model):
-            permissions._check_app_permission(
-                account, "delete", "Environments", app, include_deleted=include_deleted
-            )
+            permissions._check_app_permission(account, "delete", "Environments", app)
 
         lookup = team_model.objects.filter.call_args.kwargs
         assert lookup["app_environments__app"] is app
-        assert (
-            "app_environments__environment__deleted_at__isnull" in lookup
-        ) is not include_deleted
+        assert _environment_state_lookups(lookup) == []
 
     def test_environment_access_looks_it_up_among_live_environments(self):
         environment_model, member_model = MagicMock(), MagicMock()
@@ -406,9 +407,8 @@ class TestQueriesLeaveOutLockedEnvironments:
         scope = team.app_environments.select_related.return_value.filter
         assert scope.call_args.kwargs["environment__deleted_at__isnull"] is True
 
-    def test_team_apps(self):
-        # A team that reaches an app only through an environment pending
-        # deletion has no access to the app.
+    def test_team_apps_include_one_reached_through_a_pending_environment(self):
+        # The console reads the team's role for the app from this list.
         team = MagicMock()
 
         with patch.object(types, "App") as app_model, patch.object(
@@ -416,19 +416,18 @@ class TestQueriesLeaveOutLockedEnvironments:
         ):
             types.TeamType.resolve_apps(team, _info())
 
-        team.app_environments.filter.assert_called_once_with(
-            environment__deleted_at__isnull=True
-        )
-        live_scope = team.app_environments.filter.return_value
-        app_ids = live_scope.values_list.return_value.distinct.return_value
+        team.app_environments.filter.assert_not_called()
+        app_ids = team.app_environments.values_list.return_value.distinct.return_value
         assert app_model.objects.filter.call_args.kwargs["id__in"] is app_ids
 
-    def test_apps_reached_through_a_team(self):
+    def test_apps_include_one_reached_through_a_pending_environment(self):
         from backend import schema
 
         with patch.object(schema, "App"), patch.object(
             schema, "OrganisationMember"
-        ), patch.object(schema, "TeamAppEnvironment") as scope_model, patch.object(
+        ) as member_model, patch.object(
+            schema, "TeamAppEnvironment"
+        ) as scope_model, patch.object(
             schema, "user_has_permission", return_value=True
         ):
             schema.Query.resolve_apps(
@@ -436,7 +435,9 @@ class TestQueriesLeaveOutLockedEnvironments:
             )
 
         lookup = scope_model.objects.filter.call_args.kwargs
-        assert lookup["environment__deleted_at__isnull"] is True
+        member = member_model.objects.get.return_value
+        assert lookup["team__memberships__org_member"] is member
+        assert _environment_state_lookups(lookup) == []
 
     @pytest.mark.parametrize(
         "scope",

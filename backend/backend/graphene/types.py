@@ -1555,11 +1555,9 @@ class TeamType(DjangoObjectType):
     def resolve_apps(self, info):
         # Gate to apps the caller can access, including through teams.
         user_id = info.context.user.userId
-        app_ids = (
-            self.app_environments.filter(environment__deleted_at__isnull=True)
-            .values_list("app_id", flat=True)
-            .distinct()
-        )
+        # An app reached only through an environment pending deletion is
+        # still the team's: its members open it to restore that environment.
+        app_ids = self.app_environments.values_list("app_id", flat=True).distinct()
         return [
             app
             for app in App.objects.filter(id__in=app_ids, is_deleted=False)

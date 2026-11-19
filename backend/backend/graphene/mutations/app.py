@@ -245,9 +245,7 @@ def _may_delete_app(user, app):
     organisation = app.organisation
     return user_has_permission(
         user, "delete", "Apps", organisation
-    ) or user_has_permission(
-        user, "delete", "Apps", organisation, app=app, include_deleted=True
-    )
+    ) or user_has_permission(user, "delete", "Apps", organisation, app=app)
 
 
 def _log_app_deletion_requested(info, app):

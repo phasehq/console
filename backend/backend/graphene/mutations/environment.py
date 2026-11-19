@@ -414,15 +414,7 @@ def _check_may_delete_environment(
     app = environment.app
     org = app.organisation
 
-    if not user_has_permission(
-        user,
-        "delete",
-        "Environments",
-        org,
-        True,
-        app=app,
-        include_deleted=include_deleted,
-    ):
+    if not user_has_permission(user, "delete", "Environments", org, True, app=app):
         raise GraphQLError(f"You do not have permission to {verb} environments")
 
     if not user_can_access_environment(
@@ -437,13 +429,7 @@ def _check_may_delete_environment(
         environment=environment, deleted_at__isnull=True
     ).exists():
         if not user_has_permission(
-            user,
-            "delete",
-            "RotatingSecrets",
-            org,
-            True,
-            app=app,
-            include_deleted=include_deleted,
+            user, "delete", "RotatingSecrets", org, True, app=app
         ):
             raise GraphQLError(
                 "This environment contains rotating secrets. You need "

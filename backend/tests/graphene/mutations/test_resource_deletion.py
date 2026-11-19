@@ -263,7 +263,7 @@ class TestDeleteAppNow:
 
         by_org_role, by_app_role = app_mocks.permission.call_args_list
         assert "app" not in by_org_role.kwargs
-        assert by_app_role.kwargs == {"app": app_mocks.app, "include_deleted": True}
+        assert by_app_role.kwargs == {"app": app_mocks.app}
         app_mocks.delete_now.assert_called_once_with("app-1")
 
     def test_requires_access_to_the_app(self, app_mocks):
@@ -334,7 +334,7 @@ class TestRestoreApp:
 
         by_org_role, by_app_role = app_mocks.permission.call_args_list
         assert "app" not in by_org_role.kwargs
-        assert by_app_role.kwargs == {"app": app_mocks.app, "include_deleted": True}
+        assert by_app_role.kwargs == {"app": app_mocks.app}
         app_mocks.restore.assert_called_once_with("app-1")
 
     def test_requires_access_to_the_app(self, app_mocks):
@@ -432,8 +432,8 @@ class TestDeleteEnvironmentNow:
 
         call = env_mocks.permission.call_args
         assert call.args[1:3] == ("delete", "Environments")
-        # A team may reach the app only through this pending environment.
-        assert call.kwargs["include_deleted"] is True
+        # By the member's role for the app, team roles included.
+        assert call.kwargs == {"app": env_mocks.env.app}
         env_mocks.delete_now.assert_not_called()
 
     def test_requires_a_key_for_the_environment(self, env_mocks):
@@ -509,7 +509,7 @@ class TestRestoreEnvironment:
 
         rotating = env_mocks.permission.call_args
         assert rotating.args[1:3] == ("delete", "RotatingSecrets")
-        assert rotating.kwargs["include_deleted"] is True
+        assert rotating.kwargs == {"app": env_mocks.env.app}
         env_mocks.restore.assert_not_called()
 
     def test_requires_the_permission_that_deleting_needs(self, env_mocks):

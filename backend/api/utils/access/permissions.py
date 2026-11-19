@@ -25,20 +25,13 @@ def user_is_org_member(user_id, org_id):
     ).exists()
 
 
-def _team_scope_filter(app, include_deleted, prefix="team__app_environments__"):
-    """Match the team's scope rows for `app`. Environments pending deletion
-    don't count unless `include_deleted`, so a team whose only environment in
-    the app is pending deletion has no access to the app."""
-    scope = {f"{prefix}app": app}
-    if not include_deleted:
-        scope[f"{prefix}environment__deleted_at__isnull"] = True
-    return scope
-
-
 def user_can_access_app(user_id, app_id, include_deleted=False):
-    """`include_deleted` also reaches an app pending deletion, and counts a
-    team's access through an environment pending deletion. Both are
-    otherwise refused; only listing and restoring those need them."""
+    """`include_deleted` also reaches an app pending deletion, which is
+    otherwise refused; only listing and restoring those need it.
+
+    A team reaches an app through any environment in its scope, also one
+    pending deletion: its members can still open the app to find and restore
+    it. The environment itself stays locked."""
     OrganisationMember = apps.get_model("api", "OrganisationMember")
     App = apps.get_model("api", "App")
     TeamMembership = apps.get_model("api", "TeamMembership")
@@ -59,8 +52,8 @@ def user_can_access_app(user_id, app_id, include_deleted=False):
     # Team access
     return TeamMembership.objects.filter(
         org_member=org_member,
+        team__app_environments__app=app,
         team__deleted_at__isnull=True,
-        **_team_scope_filter(app, include_deleted),
     ).exists()
 
 
@@ -84,8 +77,8 @@ def service_account_can_access_app(account_id, app_id):
 
     return TeamMembership.objects.filter(
         service_account=sa,
+        team__app_environments__app=app,
         team__deleted_at__isnull=True,
-        **_team_scope_filter(app, include_deleted=False),
     ).exists()
 
 
@@ -176,20 +169,12 @@ def role_has_permission(role, action, resource, is_app_resource=False):
 
 
 def _check_app_permission(
-    account,
-    action,
-    resource,
-    app,
-    is_service_account=False,
-    is_app_resource=True,
-    include_deleted=False,
+    account, action, resource, app, is_service_account=False, is_app_resource=True
 ):
     """Union check across individual + team access paths. `is_app_resource`
     selects which permission map to look in (app_permissions vs the
     top-level permissions map) — Apps/EncryptionMode/Members live at
-    the top level even when contextualised to a specific app.
-    `include_deleted` also counts a team's access through an environment
-    pending deletion; only listing and restoring those need that."""
+    the top level even when contextualised to a specific app."""
     Team = apps.get_model("api", "Team")
 
     if is_service_account:
@@ -208,8 +193,8 @@ def _check_app_permission(
             return True
 
     teams = Team.objects.filter(
+        app_environments__app=app,
         deleted_at__isnull=True,
-        **_team_scope_filter(app, include_deleted, prefix="app_environments__"),
         **membership_filter,
     ).distinct()
 
@@ -239,7 +224,6 @@ def user_has_permission(
     is_app_resource=False,
     is_service_account=False,
     app=None,
-    include_deleted=False,
 ):
     OrganisationMember = apps.get_model("api", "OrganisationMember")
 
@@ -264,13 +248,7 @@ def user_has_permission(
         # each effective role (Apps/EncryptionMode live at the top
         # level even when scoped to a specific app).
         return _check_app_permission(
-            org_member,
-            action,
-            resource,
-            app,
-            is_service_account,
-            is_app_resource,
-            include_deleted,
+            org_member, action, resource, app, is_service_account, is_app_resource
         )
 
     except OrganisationMember.DoesNotExist:

@@ -232,10 +232,11 @@ class TestPublicAppsViewList:
     @patch("api.views.apps.user_has_permission", return_value=True)
     @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.apps.IsIPAllowed.has_permission", return_value=True)
-    def test_list_leaves_out_apps_a_team_reaches_only_through_a_pending_environment(
+    def test_list_includes_apps_a_team_reaches_only_through_a_pending_environment(
         self, _ip, _throttle, _perm, _app_model, scope_model, mock_serializer,
         auth_type, principal,
     ):
+        # The app is still the team's until that environment is purged.
         mock_serializer.return_value.data = []
 
         request = _build_list_request(
@@ -246,7 +247,7 @@ class TestPublicAppsViewList:
         assert response.status_code == status.HTTP_200_OK
         lookup = scope_model.objects.filter.call_args.kwargs
         assert principal in lookup
-        assert lookup["environment__deleted_at__isnull"] is True
+        assert [key for key in lookup if "environment__deleted_at" in key] == []
 
     @patch("api.views.apps.AppSerializer")
     @patch("api.views.apps.App")

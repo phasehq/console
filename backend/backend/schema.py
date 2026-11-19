@@ -912,12 +912,12 @@ class Query(graphene.ObjectType):
         # Individual app IDs
         individual_ids = set(org_member.apps.values_list("id", flat=True))
 
-        # Team app IDs
+        # Team app IDs. An environment pending deletion still counts: the
+        # team's members open the app to restore it.
         team_ids = set(
             TeamAppEnvironment.objects.filter(
                 team__memberships__org_member=org_member,
                 team__deleted_at__isnull=True,
-                environment__deleted_at__isnull=True,
             ).values_list("app_id", flat=True)
         )
 
@@ -963,22 +963,12 @@ class Query(graphene.ObjectType):
         caller could access before."""
         app = App.objects.get(id=app_id)
 
-        # include_deleted: a team may reach the app only through the
-        # environment that is pending deletion.
         if not user_has_permission(
-            info.context.user,
-            "read",
-            "Environments",
-            app.organisation,
-            True,
-            app=app,
-            include_deleted=True,
+            info.context.user, "read", "Environments", app.organisation, True, app=app
         ):
             return []
 
-        if not user_can_access_app(
-            info.context.user.userId, app_id, include_deleted=True
-        ):
+        if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
 
         accessible_env_ids = EnvironmentKey.objects.filter(
