@@ -128,6 +128,7 @@ import {
   appSecretRowIsEdited,
   carryRowKeys,
   DeployedChanges,
+  deployIsShown,
   dirtyEnvIds,
   duplicateKeyRowIds,
   flattenAppSecrets,
@@ -1781,13 +1782,19 @@ export const AppSecrets = ({
         }
         landed = new Promise((resolve) => (deployLandedRef.current = resolve))
       }
-      await refetch()
+      if (!landed) await refetch()
       // Until the snapshot replaces the staged rows, deploying again would send their creates twice
-      if (landed)
-        await Promise.race([
-          landed,
-          new Promise((resolve) => setTimeout(resolve, DEPLOY_LANDS_WITHIN)),
-        ])
+      else if (
+        !(await deployIsShown(refetch, landed, DEPLOY_LANDS_WITHIN)) &&
+        deployedRef.current
+      ) {
+        // So when it can't be read back the staged rows go, and the deploy is no longer waited for:
+        // the snapshot that shows it would otherwise replace edits made in the meantime
+        deployedRef.current = null
+        deployLandedRef.current = null
+        setClientAppSecrets(serverSnapshotRef.current)
+        toast.info('Your changes are deployed. They will show here once the page can load them.')
+      }
     }
   }
 

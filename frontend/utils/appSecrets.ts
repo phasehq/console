@@ -526,6 +526,25 @@ export const snapshotHasDeploy = (snapshot: AppSecret[], deployed: DeployedChang
   return true
 }
 
+/**
+ * Reads the saved secrets again and waits, up to `within` ms, for the snapshot that has the deploy.
+ * False when that read fails or no such snapshot comes in time: the deploy is saved all the same.
+ */
+export const deployIsShown = async (
+  read: () => Promise<unknown>,
+  landed: Promise<unknown>,
+  within: number
+): Promise<boolean> => {
+  try {
+    await read()
+  } catch {
+    return false
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<boolean>((resolve) => (timer = setTimeout(() => resolve(false), within)))
+  return Promise.race([landed.then(() => true), late]).finally(() => clearTimeout(timer))
+}
+
 /** React keys for a deployed snapshot's rows: each takes over from the client row it replaces, keeping its DOM */
 export const carryRowKeys = (
   before: AppSecret[],

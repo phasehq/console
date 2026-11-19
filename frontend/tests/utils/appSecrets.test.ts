@@ -5,6 +5,7 @@ import {
   appSecretRowIsEdited,
   buildAppSecretRows,
   carryRowKeys,
+  deployIsShown,
   dirtyEnvIds,
   duplicateKeyRowIds,
   envSecretsEqual,
@@ -451,6 +452,44 @@ describe('snapshotHasDeploy', () => {
 
   it('accepts an edited secret that someone else has since deleted', () => {
     expect(snapshotHasDeploy([], { createdIds: [], deletedIds: [], editedAt: new Map([['d1', 't1']]) })).toBe(true)
+  })
+})
+
+describe('deployIsShown', () => {
+  const WITHIN = 60000
+  const never = new Promise<void>(() => {})
+
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  it('is true once the snapshot with the deploy lands', async () => {
+    let land = () => {}
+    const landed = new Promise<void>((resolve) => (land = resolve))
+    const shown = deployIsShown(async () => {}, landed, WITHIN)
+
+    await jest.advanceTimersByTimeAsync(WITHIN / 2)
+    land()
+
+    await expect(shown).resolves.toBe(true)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('is false, without waiting, when the read after the deploy fails', async () => {
+    const read = jest.fn().mockRejectedValue(new Error('Failed to fetch'))
+
+    await expect(deployIsShown(read, never, WITHIN)).resolves.toBe(false)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('is false when no snapshot shows the deploy within the limit', async () => {
+    let settled: boolean | undefined
+    deployIsShown(async () => {}, never, WITHIN).then((shown) => (settled = shown))
+
+    await jest.advanceTimersByTimeAsync(WITHIN - 1)
+    expect(settled).toBeUndefined()
+
+    await jest.advanceTimersByTimeAsync(1)
+    expect(settled).toBe(false)
   })
 })
 
