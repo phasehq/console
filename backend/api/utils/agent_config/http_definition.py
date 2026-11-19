@@ -599,6 +599,19 @@ def agent_visible_texts(definition: Mapping[str, Any]) -> list[tuple[str, str]]:
             texts.append(
                 (f"the prefix of the {injection['name']} header", injection["prefix"])
             )
+        if injection["type"] == "header":
+            texts.append(("a header name", injection["name"]))
+        elif injection["type"] == "query":
+            texts.append(("a query parameter name", injection["name"]))
+    for number, host in enumerate(definition["hosts"], start=1):
+        texts.append((f"host {number}", host["value"]))
+        if host.get("path"):
+            texts.append((f"the path of host {number}", host["path"]))
+    classes = definition.get("operationClasses", [])
+    for number, entry in enumerate(classes, start=1):
+        path = entry["match"].get("path")
+        if path:
+            texts.append((f"the path of call class {number}", path))
     return texts
 
 
