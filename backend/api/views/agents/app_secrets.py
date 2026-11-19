@@ -277,7 +277,10 @@ def record_agent_secrets_call(request, response):
     try:
         decision = call.get("decision")
         environment = call.get("environment")
-        code = response.data.get("code", "") if isinstance(response.data, dict) else ""
+        # The secrets views answer some failures with a plain JsonResponse,
+        # which carries no parsed data.
+        data = getattr(response, "data", None)
+        code = data.get("code", "") if isinstance(data, dict) else ""
         if call.get("refused"):
             # Allowed by the grant, refused for what the call carries.
             proxy_decision = AgentEvent.BLOCK
