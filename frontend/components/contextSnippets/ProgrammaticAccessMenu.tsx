@@ -9,6 +9,7 @@ import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments
 import { EnvironmentType } from '@/apollo/graphql'
 import { useLazyQuery } from '@apollo/client'
 import { CommandAuth } from '@/utils/contextSnippets'
+import { foldersFromRoute } from '@/utils/appLinks'
 import {
   filterEnvSelection,
   useEnvSelection,
@@ -32,11 +33,13 @@ export const ProgrammaticAccessMenu = () => {
   // The first env the secrets grid shows: the one in view once it's narrowed to one
   const env = filterEnvSelection(envs, selectedEnvIds)[0]
 
-  const pathString = path?.join('/')
+  // The folders themselves: the URL may lead with the escape that keeps one apart from an app page
+  const folders = foldersFromRoute(path)
+  const pathString = folders.join('/')
   const displayPathString = pathString
-    ? pathString?.length < 25
+    ? pathString.length < 25
       ? pathString
-      : `.../${path![path!.length - 1]}`
+      : `.../${folders[folders.length - 1]}`
     : ''
 
   useEffect(() => {
