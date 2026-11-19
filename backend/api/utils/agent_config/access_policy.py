@@ -52,6 +52,7 @@ _METHOD_CLASSES = {
     "DELETE": "delete",
 }
 _CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_PERCENT_ESCAPE = re.compile(r"%[0-9A-Fa-f]{2}")
 _GLOB_CHARACTERS = frozenset("*?[")
 
 
@@ -85,6 +86,13 @@ def validate_path_glob(value: Any, location: str) -> str:
         raise PolicyError(
             f"{location}: expected at most {MAX_PATH_LENGTH} characters without "
             "control characters"
+        )
+    # The proxy decodes a request's path before comparing it, so an escaped
+    # path would not match the request it was written for.
+    if _PERCENT_ESCAPE.search(value):
+        raise PolicyError(
+            f"{location}: write the path decoded, for example a space instead "
+            "of %20; paths are compared after decoding"
         )
     return value
 
@@ -176,6 +184,21 @@ def is_minting_operation(value: Any) -> bool:
     return isinstance(value, str) and value.lower() in _registry().minting_operations
 
 
+def proxy_names_operation(value: str) -> bool:
+    """Whether the proxy can tell this action from its service's other calls.
+
+    It can when every request to the service names its action, or the manifest
+    gives the call's method and path. A request to any other service, S3 among
+    them, names none.
+    """
+
+    registry = _registry()
+    return (
+        value.partition(":")[0] in registry.named_action_services
+        or value.lower() in registry.named_rest_operations
+    )
+
+
 def validate_operation(value: Any, location: str) -> str:
     """One exact operation a rule or an allow names, returned as it is stored."""
 
@@ -243,9 +266,17 @@ def validate_policy(policy: Any, *, operations: bool = False) -> dict[str, Any]:
             raise PolicyError(
                 f"{location}.effect: expected one of {', '.join(EFFECTS)}"
             )
-        rules.append(
-            {**_target(raw, location, operations), "effect": raw["effect"]}
-        )
+        target = _target(raw, location, operations)
+        # A rule the proxy can never match would look enforced and stop nothing.
+        operation = target.get("operation")
+        if operation is not None and not proxy_names_operation(operation):
+            service = operation.partition(":")[0]
+            raise PolicyError(
+                f"{location}.operation: a rule cannot name {operation}, because "
+                f"a request to {service} does not say which action it is. Use a "
+                "rule by method and path, or a rule for a class of calls, instead"
+            )
+        rules.append({**target, "effect": raw["effect"]})
     if default == "allow" and not rules:
         return {}
     return {"version": POLICY_VERSION, "default": default, "rules": rules}
