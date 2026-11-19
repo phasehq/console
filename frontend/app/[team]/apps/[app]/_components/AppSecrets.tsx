@@ -1432,10 +1432,18 @@ export const AppSecrets = ({
   }
 
   const moveDialogRef = useRef<MoveToFolderDialogHandle>(null)
-  const folderPaths = useMemo(
-    () => [...new Set(appFolders.map(folderFullPath))],
-    [appFolders]
-  )
+  // Every folder by full path, with the envs that have it
+  const folderEnvIds = useMemo(() => {
+    const byPath = new Map<string, Set<string>>()
+    for (const folder of appFolders) {
+      const fullPath = folderFullPath(folder)
+      const envIds = byPath.get(fullPath) ?? new Set<string>()
+      for (const entry of folder.envs) if (entry.folder) envIds.add(entry.env.id!)
+      byPath.set(fullPath, envIds)
+    }
+    return byPath
+  }, [appFolders])
+  const folderPaths = useMemo(() => [...folderEnvIds.keys()], [folderEnvIds])
   const handleMoveSelected = (path: string) => {
     setClientAppSecrets((prev) =>
       moveAppSecretRows(prev, serverRowsRef.current, selectedSet, path, editableEnvIdsRef.current)
@@ -2995,7 +3003,7 @@ export const AppSecrets = ({
           />
           <EditAppFolderDialog
             target={folderEditTarget}
-            folders={folderPaths}
+            folders={folderEnvIds}
             onClose={() => setFolderEditTarget(null)}
             onSave={handleEditFolders}
           />

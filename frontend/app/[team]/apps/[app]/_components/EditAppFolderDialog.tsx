@@ -28,8 +28,8 @@ export const EditAppFolderDialog = ({
   onSave,
 }: {
   target: FolderTarget | null
-  /** Every folder of the App, as full paths */
-  folders: string[]
+  /** Every folder of the App by full path, with the envs that have it */
+  folders: ReadonlyMap<string, ReadonlySet<string>>
   onClose: () => void
   onSave: (folders: FolderInEnv[], name: string, parent: string) => Promise<void>
 }) => {
@@ -54,7 +54,7 @@ export const EditAppFolderDialog = ({
   const destinations = useMemo(
     () =>
       shown
-        ? folders.filter(
+        ? [...folders.keys()].filter(
             (path) => path !== shown.fullPath && !path.startsWith(`${shown.fullPath}/`)
           )
         : [],
@@ -71,13 +71,18 @@ export const EditAppFolderDialog = ({
   const chosen = shown?.envs.filter((entry) => selected.has(entry.env.id)) ?? []
   const destination = childOf(parent, name)
   const changed = Boolean(shown) && destination !== shown!.fullPath
+  // Only an env being changed can clash: in any other, that path is its own folder
+  const takenIn = changed
+    ? chosen.filter((entry) => folders.get(destination)?.has(entry.env.id))
+    : []
+  const takenNames = takenIn.map((entry) => entry.env.name).join(', ')
   const problem =
     name === ''
       ? null
       : isReservedFolderName(name, parent)
         ? `"${name}" is a reserved name and cannot be used for root folders`
-        : changed && folders.includes(destination)
-          ? `A folder named ${name} is already there`
+        : takenIn.length > 0
+          ? `A folder named ${name} is already there in ${takenNames}`
           : null
 
   const handleSave = async () => {
