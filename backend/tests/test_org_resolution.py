@@ -310,6 +310,39 @@ class ResolveOrgIdTest(unittest.TestCase):
             self.assertEqual(result, "org-resolved")
             mock_get.assert_called_once_with("api", model_name)
 
+    def test_folder_id_alias_resolves(self):
+        """Regression: folder_id was unresolvable ('Folder' is not a model), so
+        renaming, moving or deleting a secret folder skipped SSO enforcement."""
+        from api.utils.access.org_resolution import (
+            _path_to_organisation,
+            model_for_kwarg,
+            resolve_org_id,
+        )
+
+        self.assertEqual(model_for_kwarg("folder_id"), "SecretFolder")
+        _path_to_organisation.cache_clear()
+        self.assertEqual(
+            _path_to_organisation("SecretFolder"),
+            "environment__app__organisation__id",
+        )
+
+        mock_model = MagicMock()
+        (
+            mock_model.objects.filter.return_value.values_list.return_value.first.return_value
+        ) = "org-for-folder"
+
+        with patch(
+            "api.utils.access.org_resolution.apps.get_model",
+            return_value=mock_model,
+        ) as mock_get, patch(
+            "api.utils.access.org_resolution._path_to_organisation",
+            return_value="environment__app__organisation__id",
+        ):
+            result = resolve_org_id("folder_id", "folder-1", {})
+
+        self.assertEqual(result, "org-for-folder")
+        mock_get.assert_called_once_with("api", "SecretFolder")
+
 
 class InvalidationTest(unittest.TestCase):
     """post_delete signal drops the cache entry so hard-deleted resources
@@ -569,6 +602,53 @@ class MiddlewareSCIMEnforcementTest(unittest.TestCase):
 
         # filter() called once across both resolves.
         self.assertEqual(mock_om_cls.objects.filter.call_count, 1)
+
+
+class MiddlewareFolderKwargTest(unittest.TestCase):
+    """updateSecretFolder and deleteSecretFolder name their target by
+    folder_id alone, so that kwarg has to lead to the folder's org."""
+
+    def setUp(self):
+        cache.clear()
+
+    @patch("backend.graphene.middleware.OrganisationMember")
+    @patch("backend.graphene.middleware.Organisation")
+    def test_password_session_refused_when_the_folders_org_requires_sso(
+        self, mock_org_cls, mock_om_cls
+    ):
+        from backend.graphene.middleware import (
+            OrgSSOEnforcementMiddleware,
+            SSORequiredError,
+        )
+
+        org = MagicMock(require_sso=True)
+        org.name = "acme"
+        mock_org_cls.objects.only.return_value.get.return_value = org
+        mock_om_cls.objects.filter.return_value.exists.return_value = False
+
+        folders = MagicMock()
+        (
+            folders.objects.filter.return_value.values_list.return_value.first.return_value
+        ) = "org-1"
+        info = MagicMock()
+        info.context = MiddlewareSCIMEnforcementTest._StubRequest(
+            {"auth_method": "password"}
+        )
+        info.return_type = MagicMock()
+        mutation = MagicMock(return_value="ran")
+
+        with patch(
+            "api.utils.access.org_resolution.apps.get_model", return_value=folders
+        ) as get_model, patch(
+            "api.utils.access.org_resolution._path_to_organisation",
+            return_value="environment__app__organisation__id",
+        ), self.assertRaises(SSORequiredError):
+            OrgSSOEnforcementMiddleware().resolve(
+                mutation, None, info, folder_id="folder-1", name="jobs"
+            )
+
+        get_model.assert_called_once_with("api", "SecretFolder")
+        mutation.assert_not_called()
 
 
 if __name__ == "__main__":

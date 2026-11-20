@@ -34,7 +34,7 @@ import { PhaseActor } from '../common/PhaseActor'
 import { DeletedActor } from '../common/DeletedActor'
 import { KeyringContext } from '@/contexts/keyringContext'
 import { organisationContext } from '@/contexts/organisationContext'
-import { usePathname } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   getUserKxPublicKey,
@@ -51,6 +51,7 @@ import { FaFilter } from 'react-icons/fa'
 import { GetAppAccounts } from '@/graphql/queries/apps/getAppAccounts.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { FaArrowRotateLeft } from 'react-icons/fa6'
+import { appSecretsUrl } from '@/utils/appLinks'
 
 // The historical start date for all log data (May 1st, 2023)
 const LOGS_START_DATE = 1682904457000
@@ -66,6 +67,7 @@ type EnvKey = {
 }
 
 export default function SecretLogs(props: { app: string }) {
+  const appId = props.app
   const DEFAULT_PAGE_SIZE = 25
   const loglistEndRef = useRef<HTMLTableCellElement>(null)
 
@@ -232,7 +234,7 @@ export default function SecretLogs(props: { app: string }) {
   const LogRow = (props: { log: SecretEventType }) => {
     const { log } = props
 
-    const appPath = usePathname()?.split('/').slice(0, -1).join('/')
+    const team = useParams<{ team: string }>()?.team ?? ''
 
     const [decryptedEvent, setDecryptedEvent] = useState<SecretEventType | null>(null)
 
@@ -539,11 +541,11 @@ export default function SecretLogs(props: { app: string }) {
                       <Button variant="outline">
                         <Link
                           className="flex items-center gap-2"
-                          href={
-                            log.secret
-                              ? `${appPath}/environments/${log.environment.id}${log.secret.path}?secret=${log.secret.id}`
-                              : `${appPath}/environments/${log.environment.id}${log.path ?? '/'}`
-                          }
+                          href={appSecretsUrl(team, appId, {
+                            envId: log.environment.id,
+                            path: log.secret ? log.secret.path : log.path,
+                            secretId: log.secret?.id,
+                          })}
                         >
                           View this secret
                           <FaExternalLinkAlt />

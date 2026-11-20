@@ -1,0 +1,304 @@
+"""UpdateSecretFolderMutation renames a folder or moves it under another.
+
+The folder's contents are linked to it by foreign key, so only the text paths
+of what's inside have to follow: subfolders, secrets, dynamic and rotating
+secrets, and the syncs that send the folder.
+"""
+
+from types import SimpleNamespace
+from unittest.mock import DEFAULT, MagicMock, patch
+
+import pytest
+from graphql import GraphQLError
+
+_M = "backend.graphene.mutations.environment"
+_MODELS = ("SecretFolder", "Secret", "DynamicSecret", "RotatingSecret", "EnvironmentSync")
+
+
+def _info():
+    info = MagicMock()
+    info.context.user.userId = "user-1"
+    return info
+
+
+def _folder(name="workers", path="/"):
+    env = SimpleNamespace(id="env-1", app=SimpleNamespace(organisation="org"), save=MagicMock())
+    return SimpleNamespace(id="folder-1", name=name, path=path, folder=None, environment=env, save=MagicMock())
+
+
+class _Run:
+    """Runs the mutation against mocked models; exposes them for assertions."""
+
+    def __init__(
+        self,
+        folder,
+        inside=None,
+        permitted=True,
+        has_access=True,
+        has_rotation=False,
+        conflict=False,
+        current=None,
+    ):
+        self.folder = folder
+        # The folder as found once the environment's folders are locked
+        self.current = current or folder
+        self.inside = inside or {}
+        self.permitted = permitted
+        self.has_access = has_access
+        self.has_rotation = has_rotation
+        self.conflict = conflict
+        self.models = {}
+        self.parent = object()
+        # What happened, in order: the transaction closing and the environment's save
+        self.events = []
+        # And before that: each read of the folder, the transaction opening, the lock
+        self.steps = []
+
+    def __call__(self, **kwargs):
+        from backend.graphene.mutations.environment import UpdateSecretFolderMutation
+
+        patches = [patch(f"{_M}.{name}") for name in _MODELS]
+        with patch(f"{_M}.user_has_permission", side_effect=self._permission), patch(
+            f"{_M}.user_can_access_environment", return_value=self.has_access
+        ), patch(f"{_M}._descendant_folder_ids", return_value={"folder-1"}), patch(
+            f"{_M}.create_environment_folder_structure", return_value=self.parent
+        ) as self.create_folders, patch(f"{_M}.transaction") as transaction:
+            transaction.atomic.return_value.__enter__.side_effect = (
+                lambda: self.steps.append("transaction")
+            )
+            transaction.atomic.return_value.__exit__.side_effect = (
+                lambda *exc: self.events.append("committed")
+            )
+            self.folder.environment.save.side_effect = lambda: self.events.append("env saved")
+            mocks = [p.start() for p in patches]
+            try:
+                for name, mock in zip(_MODELS, mocks):
+                    self.models[name] = mock
+                    found = mock.objects.filter.return_value
+                    found.values_list.return_value = self.inside.get(name, [])
+                    found.exclude.return_value.exists.return_value = self.conflict
+                    found.exists.return_value = self.has_rotation
+                folders = self.models["SecretFolder"].objects
+                folders.get.side_effect = self._read
+                folders.select_for_update.side_effect = self._lock
+                return UpdateSecretFolderMutation.mutate(None, _info(), "folder-1", **kwargs)
+            finally:
+                for p in patches:
+                    p.stop()
+
+    def _read(self, **kwargs):
+        self.steps.append("read")
+        return self.folder if self.steps.count("read") == 1 else self.current
+
+    def _lock(self):
+        self.steps.append("locked")
+        return DEFAULT
+
+    def _permission(self, user, action, resource, *args, **kwargs):
+        return self.permitted if resource == "Secrets" else False
+
+    def environments(self, name):
+        """The environment each query by path on a model was scoped to."""
+        return [
+            c.kwargs.get("environment")
+            for c in self.models[name].objects.filter.call_args_list
+            # The rotation gate looks rotations up by folder id, not by path
+            if c.args or "path" in c.kwargs
+        ]
+
+    def updates(self, name):
+        """(old path, new path) for each rewrite issued on a model."""
+        objects = self.models[name].objects
+        # The name-clash check filters by path and name; the rewrites by path alone
+        selected = [
+            c.kwargs["path"]
+            for c in objects.filter.call_args_list
+            if "path" in c.kwargs and "name" not in c.kwargs
+        ]
+        written = [c.kwargs["path"] for c in objects.filter.return_value.update.call_args_list]
+        return sorted(zip(selected, written))
+
+
+def test_path_under_swaps_the_leading_folder_only():
+    from backend.graphene.mutations.environment import _path_under
+
+    assert _path_under("/workers", "/workers", "/jobs") == "/jobs"
+    assert _path_under("/workers/queues/dlq", "/workers", "/jobs") == "/jobs/queues/dlq"
+    # A sibling that merely starts with the same letters is not inside it
+    assert _path_under("/workers-old", "/workers", "/jobs") is None
+    assert _path_under("/", "/workers", "/jobs") is None
+
+
+def test_rename_rewrites_the_paths_of_everything_inside():
+    folder = _folder(name="workers", path="/")
+    run = _Run(
+        folder,
+        inside={
+            "SecretFolder": ["/workers", "/workers/queues"],
+            "Secret": ["/workers", "/workers/queues"],
+            "EnvironmentSync": ["/workers"],
+        },
+    )
+
+    run(name="jobs")
+
+    assert (folder.name, folder.path, folder.folder) == ("jobs", "/", None)
+    folder.save.assert_called_once()
+    assert run.updates("SecretFolder") == [("/workers", "/jobs"), ("/workers/queues", "/jobs/queues")]
+    assert run.updates("Secret") == [("/workers", "/jobs"), ("/workers/queues", "/jobs/queues")]
+    assert run.updates("EnvironmentSync") == [("/workers", "/jobs")]
+    assert run.updates("DynamicSecret") == []
+    # One save of the env, after the paths, queues its syncs once
+    folder.environment.save.assert_called_once()
+
+
+def test_move_links_the_folder_under_its_new_parent():
+    folder = _folder(name="queues", path="/workers")
+    run = _Run(folder, inside={"Secret": ["/workers/queues"]})
+
+    run(path="/billing")
+
+    run.create_folders.assert_called_once_with("/billing", "env-1")
+    assert (folder.name, folder.path) == ("queues", "/billing")
+    assert folder.folder is run.parent
+    assert run.updates("Secret") == [("/workers/queues", "/billing/queues")]
+
+
+def test_same_name_and_place_changes_nothing():
+    folder = _folder(name="workers", path="/")
+    run = _Run(folder)
+
+    run(name="workers", path="/")
+
+    folder.save.assert_not_called()
+    folder.environment.save.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"name": "has space"}, "Folder names can only include"),
+        ({"name": ""}, "Folder names can only include"),
+        ({"name": "Settings"}, "reserved name"),
+        ({"path": "/workers"}, "moved into itself"),
+        ({"path": "/workers/queues"}, "moved into itself"),
+    ],
+)
+def test_rejects_names_and_places_a_folder_cannot_take(kwargs, message):
+    folder = _folder(name="workers", path="/")
+
+    with pytest.raises(GraphQLError, match=message):
+        _Run(folder)(**kwargs)
+
+    folder.save.assert_not_called()
+
+
+def test_rejects_a_name_another_folder_has_there():
+    folder = _folder(name="workers", path="/")
+
+    with pytest.raises(GraphQLError, match="already exists"):
+        _Run(folder, conflict=True)(name="jobs")
+
+    folder.save.assert_not_called()
+
+
+def test_needs_permission_to_update_secrets():
+    folder = _folder()
+
+    with pytest.raises(GraphQLError, match="permission to update folders"):
+        _Run(folder, permitted=False)(name="jobs")
+
+
+def test_needs_access_to_the_folders_environment():
+    folder = _folder()
+
+    with pytest.raises(GraphQLError, match="don't have access to this environment"):
+        _Run(folder, has_access=False)(name="jobs")
+
+    folder.save.assert_not_called()
+    folder.environment.save.assert_not_called()
+
+
+def test_only_the_folders_own_environment_is_rewritten():
+    folder = _folder(name="workers", path="/")
+    run = _Run(
+        folder,
+        inside={name: ["/workers"] for name in _MODELS},
+    )
+
+    run(name="jobs")
+
+    # Another environment's folder of the same path is a different folder
+    for name in _MODELS:
+        scoped_to = run.environments(name)
+        assert scoped_to and all(env is folder.environment for env in scoped_to), name
+
+
+def test_syncs_are_queued_once_the_new_paths_are_committed():
+    folder = _folder(name="workers", path="/")
+    run = _Run(folder, inside={"EnvironmentSync": ["/workers"]})
+
+    run(name="jobs")
+
+    # Saving the environment queues its sync jobs, which read the paths from the database
+    assert run.events == ["committed", "env saved"]
+
+
+def test_a_folder_holding_a_rotation_needs_permission_over_rotations():
+    folder = _folder()
+
+    with pytest.raises(GraphQLError, match="rotating secrets"):
+        _Run(folder, has_rotation=True)(name="jobs")
+
+    folder.save.assert_not_called()
+
+
+def test_the_environments_folders_are_locked_before_the_folder_is_read_to_act_on():
+    folder = _folder(name="workers", path="/")
+    run = _Run(folder, inside={"Secret": ["/workers"]})
+
+    run(name="jobs")
+
+    # The first read only finds whose folder it is, for the permission checks
+    assert run.steps == ["read", "transaction", "locked", "read"]
+    locked = run.models["SecretFolder"].objects.select_for_update.return_value.filter
+    locked.assert_called_once_with(environment=folder.environment)
+    # In one order, so two requests can't each hold a row the other waits for
+    locked.return_value.order_by.assert_called_once_with("id")
+
+
+def test_an_edit_that_landed_first_is_built_on_not_undone():
+    """Two edits at once would each move what they read at the start. The second waits for the
+    lock, then works from where the first left the folder."""
+    first_read = _folder(name="workers", path="/")
+    # Renamed by another request before this one got the lock
+    current = _folder(name="jobs", path="/")
+    current.environment = first_read.environment
+    run = _Run(
+        first_read,
+        current=current,
+        inside={"SecretFolder": ["/jobs/queues"], "Secret": ["/jobs"], "EnvironmentSync": ["/jobs"]},
+    )
+
+    result = run(name="tasks")
+
+    first_read.save.assert_not_called()
+    current.save.assert_called_once()
+    assert (current.name, current.path) == ("tasks", "/")
+    assert result.folder is current
+    # What is inside is looked for where the folder is now, not where it was first read
+    assert run.updates("SecretFolder") == [("/jobs/queues", "/tasks/queues")]
+    assert run.updates("Secret") == [("/jobs", "/tasks")]
+    assert run.updates("EnvironmentSync") == [("/jobs", "/tasks")]
+
+
+def test_an_edit_already_made_by_another_request_changes_nothing():
+    first_read = _folder(name="workers", path="/")
+    current = _folder(name="jobs", path="/")
+    current.environment = first_read.environment
+    run = _Run(first_read, current=current)
+
+    run(name="jobs")
+
+    current.save.assert_not_called()
+    current.environment.save.assert_not_called()

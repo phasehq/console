@@ -38,6 +38,7 @@ import { CreateServiceAccountDialog } from '../../service-accounts/_components/C
 import { DeleteServiceAccountDialog } from '../../service-accounts/_components/DeleteServiceAccountDialog'
 import { RemoveTeamAppDialog } from './_components/RemoveTeamAppDialog'
 import { TransferTeamOwnershipDialog } from './_components/TransferTeamOwnershipDialog'
+import { appSecretsUrl } from '@/utils/appLinks'
 
 export default function TeamDetail(props: { params: Promise<{ team: string; teamId: string }> }) {
   const params = use(props.params)
@@ -464,7 +465,7 @@ export default function TeamDetail(props: { params: Promise<{ team: string; team
                       {envs.map((tae, i) => (
                         <span key={tae.id}>
                           <Link
-                            href={`/${params.team}/apps/${appId}/environments/${tae.environment!.id}`}
+                            href={appSecretsUrl(params.team, appId, { envId: tae.environment!.id })}
                             className="hover:text-emerald-500 dark:hover:text-emerald-400 transition"
                           >
                             {tae.environment!.name}

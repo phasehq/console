@@ -10,8 +10,11 @@ export const CommentDialog = (props: {
   comment: string
   handlePropertyChange: Function
   userCanUpdateSecrets: boolean
+  /** A fixed "Comment" label (the comment shows in the tooltip) instead of the comment text */
+  compact?: boolean
 }) => {
-  const { secretId, secretName, comment, handlePropertyChange, userCanUpdateSecrets } = props
+  const { secretId, secretName, comment, handlePropertyChange, userCanUpdateSecrets, compact } =
+    props
 
   const [commentValue, setCommentValue] = useState<string>(comment)
 
@@ -36,14 +39,14 @@ export const CommentDialog = (props: {
             comment
           </h3>
         }
-        buttonVariant="outline"
+        buttonVariant="menu"
         buttonContent={
           <>
-            <span className="py-0.5 2xl:py-1">
+            <span className="flex h-6 items-center">
               <FaHashtag className={clsx(comment && 'text-emerald-500 ')} />
             </span>
             <span className="hidden 2xl:block text-xs max-w-[24ch] truncate">
-              {comment || 'Comment'}
+              {(!compact && comment) || 'Comment'}
             </span>
           </>
         }

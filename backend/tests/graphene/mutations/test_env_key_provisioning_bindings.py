@@ -252,6 +252,7 @@ def _patch_create_environment(monkeypatch, admin_members, global_access=True):
         identity_key="env-ik",
         wrapped_seed="env-seed",
         wrapped_salt="env-salt",
+        color=None,
     )
 
     return (

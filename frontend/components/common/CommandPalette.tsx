@@ -37,6 +37,8 @@ import { useSecretSearch } from '@/hooks/useSecretSearch'
 import debounce from 'lodash/debounce'
 import Spinner from './Spinner'
 import clsx from 'clsx'
+import { appSecretsUrl } from '@/utils/appLinks'
+import { navigateGuarded } from '@/utils/navigationGuard'
 
 type CommandItem = {
   id: string
@@ -92,8 +94,9 @@ const CommandPalette: React.FC = () => {
   })
 
   const handleNavigation = (url: string) => {
-    router.push(url)
     setIsOpen(false)
+    // A page with undeployed changes asks before it is left
+    navigateGuarded(url, () => router.push(url))
   }
 
   const navigationCommands: CommandItem[] = [
@@ -252,7 +255,9 @@ const CommandPalette: React.FC = () => {
           description: `Explore the ${env.name} environment of ${app.name}`,
           icon: <BsListColumnsReverse />,
           action: () =>
-            handleNavigation(`/${activeOrganisation?.name}/apps/${app.id}/environments/${env.id}`),
+            handleNavigation(
+              appSecretsUrl(activeOrganisation?.name ?? '', app.id, { envId: env.id })
+            ),
         })) || []),
         {
           id: `${app.id}-members`,
@@ -334,7 +339,11 @@ const CommandPalette: React.FC = () => {
     icon: <FaKey />,
     action: () =>
       handleNavigation(
-        `/${activeOrganisation?.name}/apps/${secret.appId}/environments/${secret.envId}${secret.path === '/' ? '' : secret.path}?secret=${secret.id}`
+        appSecretsUrl(activeOrganisation?.name ?? '', secret.appId, {
+          envId: secret.envId,
+          path: secret.path,
+          secretId: secret.id,
+        })
       ),
   }))
 

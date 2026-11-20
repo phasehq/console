@@ -50,6 +50,7 @@ from ..utils.syncing.cloudflare.workers import (
     sync_cloudflare_worker_secrets,
 )
 from django.apps import apps
+from django.db import transaction
 from ..utils.syncing.secrets import get_environment_secrets
 from django_rq import job
 from rq.timeouts import JobTimeoutException
@@ -63,6 +64,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 3600
+
+# A job holds the sync as it was queued: saving the whole row would undo a path or pause changed since
+_STATUS_FIELDS = ["status", "updated_at"]
 
 
 def trigger_sync_tasks(env_sync):
@@ -117,7 +121,7 @@ def _pause_if_org_locked(env_sync, sync_event=None):
 
     EnvironmentSync = apps.get_model("api", "EnvironmentSync")
     env_sync.status = EnvironmentSync.CANCELLED
-    env_sync.save()
+    env_sync.save(update_fields=_STATUS_FIELDS)
     if sync_event:
         sync_event.status = EnvironmentSync.CANCELLED
         sync_event.meta = {
@@ -169,15 +173,23 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
 
     # Mark as in-progress now that the worker has picked up the job
     environment_sync.status = EnvironmentSync.IN_PROGRESS
-    environment_sync.save()
+    environment_sync.save(update_fields=_STATUS_FIELDS)
     if sync_event:
         sync_event.status = EnvironmentSync.IN_PROGRESS
         sync_event.save()
 
     try:
-        secrets = get_environment_secrets(
-            environment_sync.environment, environment_sync.path
-        )
+        # The job holds the sync as it was queued. Its folder may have been renamed
+        # or moved since, and the old path would read as empty, which most providers
+        # take as "delete everything". Locking the row holds such a change off, so
+        # the path and the secrets under it are read as one.
+        with transaction.atomic():
+            path = (
+                EnvironmentSync.objects.select_for_update()
+                .values_list("path", flat=True)
+                .get(id=environment_sync.id)
+            )
+            secrets = get_environment_secrets(environment_sync.environment, path)
 
         if environment_sync.authentication is None:
             sync_data = (
@@ -227,7 +239,7 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
 
     finally:
         environment_sync.last_sync = timezone.now()
-        environment_sync.save()
+        environment_sync.save(update_fields=[*_STATUS_FIELDS, "last_sync"])
         sync_event.completed_at = timezone.now()
         sync_event.save()
 
