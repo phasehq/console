@@ -13,6 +13,7 @@ from rq.job import Job
 
 from api.models import App, Environment, Organisation
 from api.tasks import purge
+from api.tasks import recurring
 from api.tasks import resource_deletion as jobs
 from api.utils.resource_deletion import GRACE_PERIOD, PURGE_MARGIN
 
@@ -256,17 +257,38 @@ class TestSweep:
             getattr(jobs, purge_job), prefix, ["id-1"], jobs.PURGE_JOB_TIMEOUT
         )
 
-    def test_registration_replaces_the_schedule(self):
+    def test_the_sweep_is_scheduled_hourly(self):
         scheduler = MagicMock()
-        with patch.object(jobs.django_rq, "get_scheduler", return_value=scheduler):
+        scheduler.__contains__.return_value = False
+        with patch.object(
+            recurring.django_rq, "get_scheduler", return_value=scheduler
+        ):
             jobs.init_resource_deletion_sweeper()
 
-        scheduler.cancel.assert_called_once_with(jobs.SWEEP_JOB_ID)
         schedule = scheduler.schedule.call_args.kwargs
         assert schedule["func"] is jobs.sweep_resource_deletions
-        assert schedule["interval"] == jobs.SWEEP_INTERVAL_SECONDS
+        assert schedule["interval"] == jobs.SWEEP_INTERVAL_SECONDS == 60 * 60
         assert schedule["id"] == jobs.SWEEP_JOB_ID
-        assert schedule["repeat"] is None
+        assert schedule["queue_name"] == "scheduled-jobs"
+
+    def test_a_sweep_that_is_already_scheduled_keeps_its_time(self):
+        # Each worker start registers it: its next run must not move every
+        # time.
+        scheduler = MagicMock()
+        scheduler.__contains__.return_value = True
+        # As the release before this one stored it.
+        scheduler.job_class.fetch.return_value = MagicMock(
+            func_name="api.tasks.resource_deletion.sweep_resource_deletions",
+            meta={"interval": 60 * 60},
+            origin="scheduled-jobs",
+        )
+        with patch.object(
+            recurring.django_rq, "get_scheduler", return_value=scheduler
+        ):
+            jobs.init_resource_deletion_sweeper()
+
+        scheduler.schedule.assert_not_called()
+        scheduler.cancel.assert_not_called()
 
 
 class TestEnqueuePurges:

@@ -13,7 +13,6 @@ purge has started on what can't be undone.
 """
 
 import logging
-from datetime import timedelta
 
 import django_rq
 from django.apps import apps
@@ -39,6 +38,7 @@ from api.tasks.purge import (
     revoke_rotating_secret_credentials,
     stop_syncs,
 )
+from api.tasks.recurring import ensure_recurring_job
 from api.utils.audit_logging import (
     audit_app_cascade_envs,
     deletion_actor,
@@ -260,27 +260,7 @@ def _provision_team_keys(app):
 
 
 def init_resource_deletion_sweeper():
-    scheduler = django_rq.get_scheduler("scheduled-jobs")
-
-    try:
-        scheduler.cancel(SWEEP_JOB_ID)
-    except Exception:
-        logger.debug("No existing resource deletion sweep to cancel", exc_info=True)
-
-    scheduler.schedule(
-        scheduled_time=timezone.now() + timedelta(seconds=30),
-        func=sweep_resource_deletions,
-        interval=SWEEP_INTERVAL_SECONDS,
-        repeat=None,
-        # Never expire the job hash; see init_log_stream_sweeper.
-        result_ttl=-1,
-        id=SWEEP_JOB_ID,
-    )
-    logger.info(
-        "App and environment deletion sweeper scheduled every %ss (job id %s)",
-        SWEEP_INTERVAL_SECONDS,
-        SWEEP_JOB_ID,
-    )
+    ensure_recurring_job(SWEEP_JOB_ID, sweep_resource_deletions, SWEEP_INTERVAL_SECONDS)
 
 
 def enqueue_app_purge(app_id):
