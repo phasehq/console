@@ -7,6 +7,7 @@ import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { CreateEnvironmentDialog } from '@/components/environments/CreateEnvironmentDialog'
 import { ManageEnvironmentDialog } from '@/components/environments/ManageEnvironmentDialog'
+import { DeletedEnvironments } from '@/components/environments/DeletedEnvironments'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { useMutation } from '@apollo/client'
@@ -28,6 +29,7 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
   const userCanReadEnvironments = hasPermission('Environments', 'read', true)
   const userCanCreateEnvironments = hasPermission('Environments', 'create', true)
   const userCanUpdateEnvironments = hasPermission('Environments', 'update', true)
+  const userCanDeleteEnvironments = hasPermission('Environments', 'delete', true)
 
   const { appEnvironments, fetching } = useAppSecrets(
     appId,
@@ -245,6 +247,9 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
           )}
         </div>
       </LayoutGroup>
+      {userCanReadEnvironments && (
+        <DeletedEnvironments appId={appId} allowRestore={userCanDeleteEnvironments} />
+      )}
     </section>
   )
 }

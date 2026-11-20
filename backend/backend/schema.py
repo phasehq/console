@@ -240,11 +240,13 @@ from .graphene.mutations.environment import (
     CreateSecretTagMutation,
     CreateUserTokenMutation,
     DeleteEnvironmentMutation,
+    DeleteEnvironmentNowMutation,
     DeletePersonalSecretMutation,
     DeleteSecretFolderMutation,
     DeleteUserTokenMutation,
     ReadSecretMutation,
     RenameEnvironmentMutation,
+    RestoreEnvironmentMutation,
     UpdateEnvironmentOrderMutation,
     UpdateMemberEnvScopeMutation,
 )
@@ -269,6 +271,7 @@ from .graphene.mutations.syncing import (
     UpdateProviderCredentials,
     UpdateSyncAuthentication,
 )
+from api.utils.resource_deletion import pending_deletion
 from api.utils.access.permissions import (
     role_has_global_access,
     user_can_access_app,
@@ -281,8 +284,10 @@ from .graphene.mutations.app import (
     BulkAddAppMembersMutation,
     CreateAppMutation,
     DeleteAppMutation,
+    DeleteAppNowMutation,
     MemberType,
     RemoveAppMemberMutation,
+    RestoreAppMutation,
     UpdateAppInfoMutation,
 )
 from .graphene.mutations.account import (
@@ -330,6 +335,8 @@ from .graphene.types import (
     AppType,
     AuditEventType,
     AuditLogsResponseType,
+    DeletedAppType,
+    DeletedEnvironmentType,
     EnvironmentKeyType,
     EnvironmentSyncType,
     EnvironmentTokenType,
@@ -463,6 +470,9 @@ class Query(graphene.ObjectType):
     apps = graphene.List(
         AppType, organisation_id=graphene.ID(), app_id=graphene.ID(required=False)
     )
+    deleted_apps = graphene.List(
+        graphene.NonNull(DeletedAppType), organisation_id=graphene.ID(required=True)
+    )
 
     secret_logs = graphene.Field(
         SecretLogsResponseType,
@@ -495,6 +505,9 @@ class Query(graphene.ObjectType):
         environment_id=graphene.ID(required=False),
         member_id=graphene.ID(required=False),
         member_type=MemberType(),
+    )
+    deleted_environments = graphene.List(
+        graphene.NonNull(DeletedEnvironmentType), app_id=graphene.ID(required=True)
     )
     app_users = graphene.List(OrganisationMemberType, app_id=graphene.ID())
 
@@ -904,7 +917,8 @@ class Query(graphene.ObjectType):
         # Individual app IDs
         individual_ids = set(org_member.apps.values_list("id", flat=True))
 
-        # Team app IDs
+        # Team app IDs. An environment pending deletion still counts: the
+        # team's members open the app to restore it.
         team_ids = set(
             TeamAppEnvironment.objects.filter(
                 team__memberships__org_member=org_member,
@@ -923,6 +937,57 @@ class Query(graphene.ObjectType):
         if app_id:
             filter["id"] = app_id
         return App.objects.filter(**filter)
+
+    def resolve_deleted_apps(root, info, organisation_id):
+        """Apps pending deletion that the caller could access before."""
+        org_member = OrganisationMember.objects.get(
+            organisation_id=organisation_id,
+            user_id=info.context.user.userId,
+            deleted_at=None,
+        )
+
+        if not user_has_permission(
+            info.context.user, "read", "Apps", org_member.organisation
+        ):
+            return []
+
+        team_app_ids = TeamAppEnvironment.objects.filter(
+            team__memberships__org_member=org_member,
+            team__deleted_at__isnull=True,
+        ).values_list("app_id", flat=True)
+
+        return (
+            pending_deletion(App.all_objects.filter(organisation_id=organisation_id))
+            .filter(Q(members=org_member) | Q(id__in=team_app_ids))
+            # For viewerCanDelete, which checks the caller's role for each app.
+            .select_related("organisation")
+            .distinct()
+            .order_by("deleted_at")
+        )
+
+    def resolve_deleted_environments(root, info, app_id):
+        """Environments pending deletion, in an app that isn't, that the
+        caller could access before."""
+        app = App.objects.get(id=app_id)
+
+        if not user_has_permission(
+            info.context.user, "read", "Environments", app.organisation, True, app=app
+        ):
+            return []
+
+        if not user_can_access_app(info.context.user.userId, app_id):
+            raise GraphQLError("You don't have access to this app")
+
+        accessible_env_ids = EnvironmentKey.objects.filter(
+            environment__app=app,
+            user__user_id=info.context.user.userId,
+            user__deleted_at=None,
+            deleted_at__isnull=True,
+        ).values_list("environment_id", flat=True)
+
+        return pending_deletion(
+            Environment.all_objects.filter(app=app, id__in=accessible_env_ids)
+        ).order_by("deleted_at")
 
     def resolve_app_environments(
         root, info, app_id, environment_id, member_id=None, member_type=MemberType.USER
@@ -1080,7 +1145,11 @@ class Query(graphene.ObjectType):
         if not user_can_access_app(info.context.user.userId, app.id):
             raise GraphQLError("You don't have access to this app")
 
-        filter = {"environment__app": app, "deleted_at": None}
+        filter = {
+            "environment__app": app,
+            "environment__deleted_at": None,
+            "deleted_at": None,
+        }
 
         if environment_id:
             filter["environment_id"] = environment_id
@@ -1193,9 +1262,13 @@ class Query(graphene.ObjectType):
                 org_member.apps.values_list("id", flat=True)
             )
             accessible_app_id_strs = {str(a) for a in accessible_app_ids}
+            # Pending deletion is treated as deleted, as for apps above.
             accessible_env_ids = set(
                 EnvironmentKey.objects.filter(
-                    user=org_member, deleted_at=None
+                    user=org_member,
+                    deleted_at=None,
+                    environment__deleted_at=None,
+                    environment__app__deleted_at=None,
                 ).values_list("environment_id", flat=True)
             )
             # Visible SAs = SAs the caller can reach (via app membership
@@ -1283,6 +1356,7 @@ class Query(graphene.ObjectType):
 
         env_keys_filter = {
             "environment__app": app,
+            "environment__deleted_at": None,
             "user": org_member,
             "deleted_at": None,
         }
@@ -1405,6 +1479,8 @@ class Mutation(graphene.ObjectType):
 
     create_app = CreateAppMutation.Field()
     delete_app = DeleteAppMutation.Field()
+    delete_app_now = DeleteAppNowMutation.Field()
+    restore_app = RestoreAppMutation.Field()
     update_app_info = UpdateAppInfoMutation.Field()
     add_app_member = AddAppMemberMutation.Field()
     bulk_add_app_members = BulkAddAppMembersMutation.Field()
@@ -1413,6 +1489,8 @@ class Mutation(graphene.ObjectType):
 
     create_environment = CreateEnvironmentMutation.Field()
     delete_environment = DeleteEnvironmentMutation.Field()
+    delete_environment_now = DeleteEnvironmentNowMutation.Field()
+    restore_environment = RestoreEnvironmentMutation.Field()
     rename_environment = RenameEnvironmentMutation.Field()
     update_environment_order = UpdateEnvironmentOrderMutation.Field()
     create_environment_token = CreateEnvironmentTokenMutation.Field()

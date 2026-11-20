@@ -123,6 +123,7 @@ def _serialize_member_access(member):
         env_keys = EnvironmentKey.objects.filter(
             user=member,
             environment__app=app,
+            environment__deleted_at=None,
             deleted_at=None,
         ).select_related("environment")
         apps_data.append(
@@ -638,15 +639,26 @@ class PublicMemberAccessView(APIView):
         apps_to_remove = set()
 
         with transaction.atomic():
-            current_app_ids = set(str(a.id) for a in member.apps.filter(is_deleted=False))
+            # all_objects: member.apps hides apps pending deletion. They can't
+            # be desired, and access dropped here must not come back with a
+            # restore.
+            current_apps = {
+                str(a.id): a
+                for a in App.all_objects.filter(members=member, is_deleted=False)
+            }
+            current_app_ids = set(current_apps)
 
             # Revoke access to apps no longer in the desired list
             apps_to_remove = current_app_ids - desired_app_ids
             if apps_to_remove:
-                apps_being_removed = list(App.objects.filter(id__in=apps_to_remove))
-                member.apps.remove(*apps_being_removed)
-                for a in apps_being_removed:
-                    revoke_individual_environment_keys(member, app=a)
+                # Not member.apps.remove(): it skips apps pending deletion.
+                member.apps.through.objects.filter(
+                    organisationmember=member, app_id__in=apps_to_remove
+                ).delete()
+                for app_id_str in apps_to_remove:
+                    revoke_individual_environment_keys(
+                        member, app=current_apps[app_id_str]
+                    )
 
             # Grant access to new apps
             apps_to_add = desired_app_ids - current_app_ids
@@ -662,6 +674,9 @@ class PublicMemberAccessView(APIView):
             for app_id_str, desired_envs in desired_env_map.items():
                 desired_env_id_strs = set(str(e) for e in desired_envs)
 
+                # Includes environments pending deletion: they can't be
+                # desired, and access dropped here must not come back with a
+                # restore.
                 current_env_keys = list(EnvironmentKey.objects.filter(
                     user=member,
                     environment__app_id=app_id_str,
@@ -678,7 +693,9 @@ class PublicMemberAccessView(APIView):
                 if envs_to_revoke:
                     revoke_individual_environment_keys(
                         member,
-                        environments=Environment.objects.filter(id__in=envs_to_revoke),
+                        environments=Environment.all_objects.filter(
+                            id__in=envs_to_revoke
+                        ),
                     )
 
                 # Envs the member already had access to (via a team grant or
@@ -739,11 +756,13 @@ class PublicMemberAccessView(APIView):
         # Build detailed access change data for audit log
         app_name_map = {
             str(a.id): a.name
-            for a in App.objects.filter(id__in=desired_app_ids | apps_to_remove)
+            for a in App.all_objects.filter(id__in=desired_app_ids | apps_to_remove)
         }
         env_name_map = {
             str(e.id): e.name
-            for e in Environment.objects.filter(app_id__in=desired_app_ids | apps_to_remove)
+            for e in Environment.all_objects.filter(
+                app_id__in=desired_app_ids | apps_to_remove
+            )
         }
 
         access_detail = []

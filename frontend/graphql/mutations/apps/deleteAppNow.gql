@@ -1,0 +1,7 @@
+mutation DeleteAppNowOp($id: ID!) {
+  deleteAppNow(id: $id) {
+    app {
+      id
+    }
+  }
+}

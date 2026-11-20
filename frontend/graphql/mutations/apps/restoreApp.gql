@@ -1,0 +1,8 @@
+mutation RestoreAppOp($id: ID!) {
+  restoreApp(id: $id) {
+    app {
+      id
+      name
+    }
+  }
+}

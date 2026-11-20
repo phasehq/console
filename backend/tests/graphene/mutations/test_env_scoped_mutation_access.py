@@ -46,6 +46,12 @@ def env_mocks():
         m.user_can_access_environment = stack.enter_context(
             patch(f"{ENV_MUTATIONS}.user_can_access_environment")
         )
+        m.schedule_environment_deletion = stack.enter_context(
+            patch(f"{ENV_MUTATIONS}.schedule_environment_deletion")
+        )
+        stack.enter_context(
+            patch(f"{ENV_MUTATIONS}.environment_name_conflict", return_value=None)
+        )
         stack.enter_context(
             patch(
                 f"{ENV_MUTATIONS}.get_resolver_request_meta",
@@ -81,16 +87,13 @@ def test_delete_env_rejects_env_the_caller_cannot_access(env_mocks):
     with pytest.raises(GraphQLError, match=DENIED):
         DeleteEnvironmentMutation.mutate(None, _info(), environment_id="env-prod")
 
-    env_mocks.env.delete.assert_not_called()
+    env_mocks.schedule_environment_deletion.assert_not_called()
 
 
 def test_rename_allows_env_the_caller_holds(env_mocks):
     from backend.graphene.mutations.environment import RenameEnvironmentMutation
 
     env_mocks.user_can_access_environment.return_value = True
-    env_mocks.Environment.objects.filter.return_value.exclude.return_value.exists.return_value = (
-        False
-    )
 
     RenameEnvironmentMutation.mutate(
         None, _info(), environment_id="env-prod", name="prod2"

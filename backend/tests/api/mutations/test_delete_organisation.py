@@ -50,7 +50,9 @@ def mocks():
         f"{MODULE}.enqueue_deletion_requested"
     ) as enqueue_requested, patch(
         f"{MODULE}.enqueue_organisation_restored"
-    ) as enqueue_restored:
+    ) as enqueue_restored, patch(
+        f"{MODULE}.restart_grace_periods"
+    ) as restart_grace_periods:
         member_model.DoesNotExist = OrganisationMember.DoesNotExist
         member_model.objects.select_related.return_value.get.return_value = _member()
         yield MagicMock(
@@ -58,6 +60,7 @@ def mocks():
             org_model=org_model,
             transaction=transaction,
             audit=audit,
+            restart_grace_periods=restart_grace_periods,
             enqueue_requested=enqueue_requested,
             enqueue_restored=enqueue_restored,
         )
@@ -176,6 +179,9 @@ class TestRestoreOrganisation:
         org.save.assert_called_once_with(
             update_fields=["deleted_at", "purge_blocked_at", "updated_at"]
         )
+        # Its apps and environments pending deletion could be neither purged
+        # nor restored meanwhile.
+        mocks.restart_grace_periods.assert_called_once_with(org)
         assert mocks.audit.call_args.kwargs["event_type"] == "U"
 
         _run_on_commit(mocks)
@@ -195,6 +201,7 @@ class TestRestoreOrganisation:
             _restore()
 
         org.save.assert_not_called()
+        mocks.restart_grace_periods.assert_not_called()
 
     def test_restores_after_the_grace_period_while_the_purge_is_blocked(self, mocks):
         # A credential that can't be revoked holds up the purge, which has

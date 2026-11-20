@@ -10,8 +10,6 @@ the SCIM-managed accounts that belong to no other organisation.
 
 import hashlib
 import logging
-import os
-import time
 from contextlib import contextmanager
 from datetime import timedelta
 
@@ -20,14 +18,21 @@ from django.apps import apps
 from django.conf import settings
 from django.db import connection, transaction
 from django.db.models import Exists, OuterRef
-from django.db.models.deletion import Collector
 from django.utils import timezone
-from rq.exceptions import NoSuchJobError
-from rq.job import Job
 
+from api.tasks.purge import (
+    PurgeBlockedError,
+    delete_environment_secret_events,
+    delete_with_cascade,
+    enqueue_purges,
+    notify as _notify,
+    owner_recipients as _owner_recipients,
+    revoke_dynamic_secret_leases,
+    revoke_rotating_secret_credentials,
+    stop_syncs,
+)
 from api.utils.access.roles import OWNER_ROLE_KEY
 from api.utils.organisation_deletion import GRACE_PERIOD, deletion_scheduled_for
-from api.utils.secret_logs import delete_secret_events
 
 logger = logging.getLogger(__name__)
 
@@ -36,37 +41,13 @@ SWEEP_JOB_ID = "organisation-deletion-sweep"
 SWEEP_INTERVAL_SECONDS = 60 * 60
 PURGE_JOB_TIMEOUT = 6 * 60 * 60
 
-# Deleting secret events is the heavy part of a purge. Throttled like
-# purge_app_logs; raise the pause if replicas lag.
-SECRET_EVENT_BATCH_SIZE = int(os.getenv("ORG_PURGE_EVENT_BATCH_SIZE", "10000"))
-SECRET_EVENT_SLEEP_MS = int(os.getenv("ORG_PURGE_EVENT_SLEEP_MS", "500"))
-# Each run stops deleting events after this long so a large org can't hold a
-# worker for hours. The next sweep carries on; the org stays locked meanwhile.
-SECRET_EVENT_TIME_BUDGET_SECONDS = int(
-    os.getenv("ORG_PURGE_EVENT_TIME_BUDGET_SECONDS", "600")
-)
 
-
-class PurgeBlockedError(Exception):
-    """A live provider credential could not be revoked. The purge is retried on
-    the next sweep rather than orphaning the credential."""
+def _environments_of(organisation):
+    return {"app__organisation": organisation}
 
 
 def _is_cloud():
     return settings.APP_HOST == "cloud"
-
-
-def _notify(message):
-    logger.info(message)
-    if not _is_cloud():
-        return
-
-    from backend.api.notifier import notify_slack
-
-    try:
-        notify_slack(message)
-    except Exception:
-        logger.exception("Failed to send Slack notification")
 
 
 def _get_organisation(organisation_id):
@@ -176,6 +157,8 @@ def _resume_rotations(organisation):
 
     for rotating_secret in RotatingSecret.objects.filter(
         environment__app__organisation=organisation,
+        environment__deleted_at__isnull=True,
+        environment__app__deleted_at__isnull=True,
         is_active=True,
         deleted_at__isnull=True,
     ):
@@ -189,6 +172,8 @@ def _resume_syncs(organisation):
 
     for env_sync in EnvironmentSync.objects.filter(
         environment__app__organisation=organisation,
+        environment__deleted_at__isnull=True,
+        environment__app__deleted_at__isnull=True,
         is_active=True,
         deleted_at__isnull=True,
         status=EnvironmentSync.CANCELLED,
@@ -223,27 +208,12 @@ def init_organisation_deletion_sweeper():
 def sweep_organisation_deletions():
     """Enqueue a purge for every organisation whose grace period has ended."""
     Organisation = apps.get_model("api", "Organisation")
-    queue = django_rq.get_queue("maintenance")
 
     due = Organisation.objects.filter(
         deleted_at__lte=timezone.now() - GRACE_PERIOD
     ).values_list("id", flat=True)
 
-    for organisation_id in due:
-        job_id = f"purge-organisation-{organisation_id}"
-        try:
-            job = Job.fetch(job_id, connection=queue.connection)
-            if job.is_queued or job.is_started:
-                continue
-        except NoSuchJobError:
-            pass
-
-        queue.enqueue(
-            purge_organisation,
-            organisation_id,
-            job_id=job_id,
-            job_timeout=PURGE_JOB_TIMEOUT,
-        )
+    enqueue_purges(purge_organisation, "purge-organisation", due, PURGE_JOB_TIMEOUT)
 
 
 def _purge_due(organisation):
@@ -253,96 +223,19 @@ def _purge_due(organisation):
     )
 
 
-def _owner_recipients(organisation):
-    OrganisationMember = apps.get_model("api", "OrganisationMember")
-    from api.emails import get_user_display_name
-
-    owners = OrganisationMember.objects.filter(
-        organisation=organisation,
-        role__is_default=True,
-        role__managed_key=OWNER_ROLE_KEY,
-        deleted_at=None,
-    ).select_related("user")
-
-    return [
-        (member.user.email, get_user_display_name(member.user))
-        for member in owners
-        if member.user.email
-    ]
-
-
 def _revoke_dynamic_secret_leases(organisation):
-    DynamicSecretLease = apps.get_model("api", "DynamicSecretLease")
-    from ee.integrations.secrets.dynamic.utils import revoke_lease_now
-
-    leases = DynamicSecretLease.objects.filter(
-        secret__environment__app__organisation=organisation,
-        status=DynamicSecretLease.ACTIVE,
-    ).select_related("secret")
-
-    failed = 0
-    for lease in leases:
-        try:
-            revoke_lease_now(lease)
-        except Exception:
-            logger.exception("Failed to revoke dynamic secret lease %s", lease.id)
-            failed += 1
-
-    if failed:
-        raise PurgeBlockedError(f"could not revoke {failed} dynamic secret lease(s)")
+    revoke_dynamic_secret_leases(_environments_of(organisation))
 
 
 def _revoke_rotating_secret_credentials(organisation):
-    RotatingSecret = apps.get_model("api", "RotatingSecret")
-    RotatingSecretCredential = apps.get_model("api", "RotatingSecretCredential")
-    from ee.integrations.secrets.rotation.engine import (
-        cancel_rotation_jobs,
-        revoke_credential,
-    )
-
-    for rotating_secret in RotatingSecret.objects.filter(
-        environment__app__organisation=organisation
-    ):
-        cancel_rotation_jobs(rotating_secret)
-
-    # Every credential that may still be live at the provider, REVOKE_FAILED
-    # included: once the org is deleted, nothing can revoke them.
-    unrevoked = RotatingSecretCredential.objects.filter(
-        rotating_secret__environment__app__organisation=organisation,
-        status__in=[
-            RotatingSecretCredential.PENDING,
-            RotatingSecretCredential.ACTIVE,
-            RotatingSecretCredential.EXPIRING,
-            RotatingSecretCredential.REVOKING,
-            RotatingSecretCredential.REVOKE_FAILED,
-        ],
-    )
-
-    for credential_id in list(unrevoked.values_list("id", flat=True)):
-        try:
-            revoke_credential(credential_id, immediate=True)
-        except Exception:
-            logger.exception(
-                "Failed to revoke rotating secret credential %s", credential_id
-            )
-
-    remaining = unrevoked.count()
-    if remaining:
-        raise PurgeBlockedError(
-            f"could not revoke {remaining} rotating secret credential(s)"
-        )
+    revoke_rotating_secret_credentials(_environments_of(organisation))
 
 
 def _stop_background_jobs(organisation):
-    EnvironmentSync = apps.get_model("api", "EnvironmentSync")
     LogStream = apps.get_model("api", "LogStream")
-    from api.tasks.syncing import cancel_sync_tasks
     from ee.integrations.logs.streams.engine import cancel_ship_job
 
-    syncs = EnvironmentSync.objects.filter(environment__app__organisation=organisation)
-    syncs.update(is_active=False)
-    for sync in syncs:
-        cancel_sync_tasks(sync)
+    stop_syncs(_environments_of(organisation))
 
     # Inactive streams are skipped by the sweeper, so no new ship jobs start.
     streams = LogStream.objects.filter(organisation=organisation)
@@ -352,47 +245,11 @@ def _stop_background_jobs(organisation):
 
 
 def _delete_secret_events(organisation):
-    """Delete the org's secret events in throttled batches per environment,
-    ahead of the cascade, which skips them. Returns False when the time budget
-    runs out first."""
-    Environment = apps.get_model("api", "Environment")
-    SecretEvent = apps.get_model("api", "SecretEvent")
-
-    deadline = time.monotonic() + SECRET_EVENT_TIME_BUDGET_SECONDS
-    for environment_id in Environment.objects.filter(
-        app__organisation=organisation
-    ).values_list("id", flat=True):
-        _, finished = delete_secret_events(
-            SecretEvent.objects.filter(environment_id=environment_id),
-            batch_size=SECRET_EVENT_BATCH_SIZE,
-            sleep_ms=SECRET_EVENT_SLEEP_MS,
-            deadline=deadline,
-        )
-        if not finished:
-            return False
-    return True
-
-
-class _OrganisationCollector(Collector):
-    """Cascade for the purge's final delete. The org's secret events and their
-    tag links are gone by then, so skip those tables rather than scan their
-    dead rows: with row counts from before the batched delete, the planner
-    picked full table scans. FKs are still checked at commit, so a leftover
-    event fails the purge instead of being orphaned."""
-
-    def related_objects(self, related_model, related_fields, objs):
-        SecretEvent = apps.get_model("api", "SecretEvent")
-        if related_model in (SecretEvent, SecretEvent.tags.through):
-            return related_model._base_manager.none()
-        return super().related_objects(related_model, related_fields, objs)
+    return delete_environment_secret_events(_environments_of(organisation))
 
 
 def _delete_organisation(organisation):
-    collector = _OrganisationCollector(
-        using=organisation._state.db, origin=organisation
-    )
-    collector.collect([organisation])
-    collector.delete()
+    delete_with_cascade(organisation)
 
 
 def _scim_only_accounts(organisation):
