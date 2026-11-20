@@ -37,6 +37,10 @@ from api.utils.crypto import (
     random_hex,
 )
 from api.utils.keys import track_individual_environment_grants
+from api.utils.resource_deletion import (
+    environment_name_conflict,
+    environment_name_conflict_message,
+)
 from api.utils.access.roles import (
     ADMIN_ROLE_KEY,
     OWNER_ROLE_KEY,
@@ -226,10 +230,9 @@ def create_environment(
             "and underscores are allowed (max 64 characters)."
         )
 
-    if Environment.objects.filter(app=app, name__iexact=name).exists():
-        raise ValueError(
-            f"An environment named '{name}' already exists in this app."
-        )
+    conflict = environment_name_conflict(app, name)
+    if conflict:
+        raise ValueError(environment_name_conflict_message(conflict, name))
 
     # --- Cryptographic material ---
     seed = _generate_env_seed()
@@ -245,7 +248,8 @@ def create_environment(
     elif type_lower == "prod":
         index = 2
     else:
-        max_index = Environment.objects.filter(app=app).aggregate(
+        # all_objects: an environment pending deletion keeps its place.
+        max_index = Environment.all_objects.filter(app=app).aggregate(
             Max("index")
         )["index__max"]
         index = (max_index + 1) if max_index is not None else 0

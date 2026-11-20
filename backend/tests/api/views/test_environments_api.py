@@ -1,9 +1,16 @@
 import uuid
+from datetime import datetime, timezone
+
 import pytest
 from unittest.mock import Mock, MagicMock, patch
 from rest_framework.test import APIRequestFactory, force_authenticate
 from rest_framework import status
 
+from api.utils.resource_deletion import (
+    NAME_IN_USE,
+    NAME_PENDING_DELETION,
+    ResourceDeletionError,
+)
 from api.views.environments import PublicEnvironmentsView, PublicEnvironmentDetailView
 
 
@@ -388,6 +395,7 @@ class TestPublicEnvironmentDetailViewUpdate:
         self.view = PublicEnvironmentDetailView.as_view()
         self.app = _make_app()
 
+    @patch("api.views.environments.environment_name_conflict", return_value=None)
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.EnvironmentSerializer")
     @patch("api.views.environments.Environment")
@@ -396,12 +404,18 @@ class TestPublicEnvironmentDetailViewUpdate:
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
     def test_update_environment_success(
-        self, _ip, _throttle, _perm, _custom, mock_env_model, mock_serializer, _access
+        self,
+        _ip,
+        _throttle,
+        _perm,
+        _custom,
+        mock_env_model,
+        mock_serializer,
+        _access,
+        conflict,
     ):
         env = _make_env(app=self.app, name="old-name", env_type="custom", index=3)
         mock_env_model.objects.select_related.return_value.get.return_value = env
-        # No duplicates
-        mock_env_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
         mock_serializer.return_value.data = {"id": str(env.id), "name": "new-name"}
 
         request = _build_request(
@@ -413,6 +427,8 @@ class TestPublicEnvironmentDetailViewUpdate:
         assert response.status_code == status.HTTP_200_OK
         assert env.name == "new-name"
         env.save.assert_called_once()
+        # Its own name is not a conflict.
+        conflict.assert_called_once_with(self.app, "new-name", exclude_id=env.id)
 
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.Environment")
@@ -431,24 +447,38 @@ class TestPublicEnvironmentDetailViewUpdate:
         response = self.view(request, env_id=env.id)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    @pytest.mark.parametrize(
+        "conflict, message",
+        [
+            (NAME_IN_USE, "already exists"),
+            # The name stays reserved, so restoring that environment can't collide.
+            (NAME_PENDING_DELETION, "scheduled for deletion"),
+        ],
+    )
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.Environment")
     @patch("api.views.environments.can_use_custom_envs", return_value=True)
     @patch("api.views.environments.user_has_permission", return_value=True)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
-    def test_update_duplicate_name_returns_409(self, _ip, _throttle, _perm, _custom, mock_env_model, _access):
+    def test_update_duplicate_name_returns_409(
+        self, _ip, _throttle, _perm, _custom, mock_env_model, _access, conflict, message
+    ):
         env = _make_env(app=self.app, name="staging", env_type="staging", index=1)
         mock_env_model.objects.select_related.return_value.get.return_value = env
-        # Duplicate exists
-        mock_env_model.objects.filter.return_value.exclude.return_value.exists.return_value = True
 
         request = _build_request(
             "put", f"/public/v1/environments/{env.id}/", self.app,
             data={"name": "production"},
         )
-        response = self.view(request, env_id=env.id)
+        with patch(
+            "api.views.environments.environment_name_conflict", return_value=conflict
+        ):
+            response = self.view(request, env_id=env.id)
+
         assert response.status_code == status.HTTP_409_CONFLICT
+        assert message in response.data["error"]
+        env.save.assert_not_called()
 
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.Environment")
@@ -512,6 +542,86 @@ class TestPublicEnvironmentDetailViewDelete:
         }
         self.view = PublicEnvironmentDetailView.as_view()
         self.app = _make_app()
+        with patch("api.views.environments.RotatingSecret") as rotating_secret:
+            self.rotating_secrets = rotating_secret.objects.filter
+            self.rotating_secrets.return_value.exists.return_value = False
+            yield
+
+    def _delete(self, env, auth_type="User"):
+        request = _build_request(
+            "delete", f"/public/v1/environments/{env.id}/", self.app, auth_type=auth_type
+        )
+        with patch(
+            "api.views.environments.schedule_environment_deletion"
+        ) as schedule, patch(
+            "api.views.environments.deletion_scheduled_for",
+            return_value=datetime(2026, 1, 2, 3, 4, tzinfo=timezone.utc),
+        ), patch("api.views.environments.log_audit_event"):
+            response = self.view(request, env_id=env.id)
+        return response, schedule
+
+    @pytest.mark.parametrize("auth_type", ["User", "ServiceAccount"])
+    @patch("api.views.environments.service_account_can_access_environment", return_value=True)
+    @patch("api.views.environments.service_account_can_access_app", return_value=True)
+    @patch("api.views.environments.user_can_access_app", return_value=True)
+    @patch("api.views.environments.user_can_access_environment", return_value=True)
+    @patch("api.views.environments.Environment")
+    @patch("api.views.environments.can_use_custom_envs", return_value=True)
+    @patch("api.views.environments.user_has_permission")
+    @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
+    def test_delete_needs_permission_to_delete_its_rotating_secrets(
+        self,
+        _ip,
+        _throttle,
+        permission,
+        _custom,
+        mock_env_model,
+        _env_access,
+        _app_access,
+        _sa_app_access,
+        _sa_env_access,
+        auth_type,
+    ):
+        # As the deleteEnvironment mutation: the purge deletes the rotating
+        # secrets and revokes their credentials.
+        env = _make_env(app=self.app, name="test-env", env_type="custom", index=3)
+        mock_env_model.objects.select_related.return_value.get.return_value = env
+        self.rotating_secrets.return_value.exists.return_value = True
+        permission.side_effect = lambda *args, **kwargs: args[2] != "RotatingSecrets"
+
+        response, schedule = self._delete(env, auth_type)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert "rotating secrets" in str(response.data)
+        schedule.assert_not_called()
+        self.rotating_secrets.assert_called_once_with(
+            environment=env, deleted_at__isnull=True
+        )
+        account, action, resource, organisation, is_app_resource, is_sa = (
+            permission.call_args.args
+        )
+        assert (action, resource, is_app_resource) == ("delete", "RotatingSecrets", True)
+        assert is_sa is (auth_type == "ServiceAccount")
+        assert permission.call_args.kwargs == {"app": self.app}
+
+    @patch("api.views.environments.user_can_access_environment", return_value=True)
+    @patch("api.views.environments.Environment")
+    @patch("api.views.environments.can_use_custom_envs", return_value=True)
+    @patch("api.views.environments.user_has_permission", return_value=True)
+    @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
+    def test_delete_with_rotating_secrets_and_the_permission(
+        self, _ip, _throttle, _perm, _custom, mock_env_model, _access
+    ):
+        env = _make_env(app=self.app, name="test-env", env_type="custom", index=3)
+        mock_env_model.objects.select_related.return_value.get.return_value = env
+        self.rotating_secrets.return_value.exists.return_value = True
+
+        response, schedule = self._delete(env)
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        schedule.assert_called_once_with(env)
 
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.Environment")
@@ -524,10 +634,44 @@ class TestPublicEnvironmentDetailViewDelete:
         mock_env_model.objects.select_related.return_value.get.return_value = env
 
         request = _build_request("delete", f"/public/v1/environments/{env.id}/", self.app)
-        response = self.view(request, env_id=env.id)
+        with patch(
+            "api.views.environments.schedule_environment_deletion"
+        ) as schedule, patch(
+            "api.views.environments.deletion_scheduled_for",
+            return_value=datetime(2026, 1, 2, 3, 4, tzinfo=timezone.utc),
+        ), patch("api.views.environments.log_audit_event") as audit:
+            response = self.view(request, env_id=env.id)
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        env.delete.assert_called_once()
+        # Scheduled for the purge job, not deleted in the request.
+        schedule.assert_called_once_with(env)
+        env.delete.assert_not_called()
+        assert audit.call_args.kwargs["event_type"] == "D"
+        assert "for deletion on 2026-01-02 03:04 UTC" in (
+            audit.call_args.kwargs["description"]
+        )
+
+    @patch("api.views.environments.user_can_access_environment", return_value=True)
+    @patch("api.views.environments.Environment")
+    @patch("api.views.environments.can_use_custom_envs", return_value=True)
+    @patch("api.views.environments.user_has_permission", return_value=True)
+    @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
+    def test_delete_environment_already_scheduled_returns_409(
+        self, _ip, _throttle, _perm, _custom, mock_env_model, _access
+    ):
+        env = _make_env(app=self.app, name="test-env", env_type="custom", index=3)
+        mock_env_model.objects.select_related.return_value.get.return_value = env
+
+        request = _build_request("delete", f"/public/v1/environments/{env.id}/", self.app)
+        with patch(
+            "api.views.environments.schedule_environment_deletion",
+            side_effect=ResourceDeletionError("already scheduled"),
+        ), patch("api.views.environments.log_audit_event") as audit:
+            response = self.view(request, env_id=env.id)
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        audit.assert_not_called()
 
     @patch("api.views.environments.Environment")
     @patch("api.views.environments.user_has_permission", return_value=True)

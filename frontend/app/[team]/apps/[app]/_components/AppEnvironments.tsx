@@ -7,8 +7,9 @@ import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { CreateEnvironmentDialog } from '@/components/environments/CreateEnvironmentDialog'
 import { ManageEnvironmentDialog } from '@/components/environments/ManageEnvironmentDialog'
+import { DeletedEnvironments } from '@/components/environments/DeletedEnvironments'
 import { organisationContext } from '@/contexts/organisationContext'
-import { userHasPermission } from '@/utils/access/permissions'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { useMutation } from '@apollo/client'
 import { toast } from 'react-toastify'
 import { LayoutGroup, motion } from 'framer-motion'
@@ -24,26 +25,11 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
 
   // Permissions
-  const userCanReadEnvironments = userHasPermission(
-    organisation?.role?.permissions,
-    'Environments',
-    'read',
-    true
-  )
-
-  const userCanCreateEnvironments = userHasPermission(
-    organisation?.role?.permissions,
-    'Environments',
-    'create',
-    true
-  )
-
-  const userCanUpdateEnvironments = userHasPermission(
-    organisation?.role?.permissions,
-    'Environments',
-    'update',
-    true
-  )
+  const { hasPermission } = useAppPermissions(appId)
+  const userCanReadEnvironments = hasPermission('Environments', 'read', true)
+  const userCanCreateEnvironments = hasPermission('Environments', 'create', true)
+  const userCanUpdateEnvironments = hasPermission('Environments', 'update', true)
+  const userCanDeleteEnvironments = hasPermission('Environments', 'delete', true)
 
   const { appEnvironments, fetching } = useAppSecrets(
     appId,
@@ -261,6 +247,9 @@ export const AppEnvironments = ({ appId }: { appId: string }) => {
           )}
         </div>
       </LayoutGroup>
+      {userCanReadEnvironments && (
+        <DeletedEnvironments appId={appId} allowRestore={userCanDeleteEnvironments} />
+      )}
     </section>
   )
 }

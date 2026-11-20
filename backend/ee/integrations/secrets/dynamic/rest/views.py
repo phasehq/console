@@ -265,8 +265,10 @@ class DynamicSecretLeaseView(APIView):
                 f"You don't have permission to read secrets in this environment."
             )
 
+        # Of the authenticated environment only: the caller's access was
+        # checked for that one, whichever secret the query names.
         try:
-            secret = DynamicSecret.objects.get(id=secret_id)
+            secret = DynamicSecret.objects.get(id=secret_id, environment=env)
         except DynamicSecret.DoesNotExist:
             return Response({"error": "Secret not found"}, status=404)
 

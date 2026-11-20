@@ -1,9 +1,11 @@
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.auth import decrypt_credential_values, get_credentials
 from api.utils.organisation_deletion import deletion_scheduled_for
+from api.utils import resource_deletion
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
+    user_can_delete_app,
     user_has_permission,
 )
 from ee.integrations.secrets.dynamic.graphene.queries import resolve_dynamic_secrets
@@ -142,6 +144,8 @@ class OrganisationType(DjangoObjectType):
     role = graphene.Field(RoleType)
     member_id = graphene.ID()
     member_scim_managed = graphene.Boolean()
+    # Apps the caller is a direct member of. Team-only access is not included.
+    individual_app_ids = graphene.List(graphene.NonNull(graphene.ID))
     keyring = graphene.String()
     recovery = graphene.String()
     plan_detail = graphene.Field(OrganisationPlanType)
@@ -196,6 +200,10 @@ class OrganisationType(DjangoObjectType):
 
     def resolve_member_scim_managed(self, info):
         return OrganisationType._get_member(self, info).scimuser_set.exists()
+
+    def resolve_individual_app_ids(self, info):
+        member = OrganisationType._get_member(self, info)
+        return list(member.apps.filter(is_deleted=False).values_list("id", flat=True))
 
     def resolve_keyring(self, info):
         return OrganisationType._get_member(self, info).wrapped_keyring
@@ -737,6 +745,12 @@ class SecretType(DjangoObjectType):
                 return None
 
 
+def _environment_pending_deletion(environment):
+    """EnvironmentType's resolvers trust whichever query returned the
+    environment, so those that give out its keys check this."""
+    return environment.deleted_at is not None or environment.app.deleted_at is not None
+
+
 class EnvironmentType(DjangoObjectType):
     folders = graphene.NonNull(graphene.List(SecretFolderType))
     secrets = graphene.NonNull(
@@ -804,15 +818,22 @@ class EnvironmentType(DjangoObjectType):
         return SecretFolder.objects.filter(**filter).order_by("created_at")
 
     def resolve_folder_count(self, info):
+        if self.deleted_at is not None:
+            return None
         return SecretFolder.objects.filter(environment=self).count()
 
     def resolve_secret_count(self, info):
+        if self.deleted_at is not None:
+            return None
         return (
             Secret.objects.filter(environment=self, deleted_at=None).count()
             + DynamicSecret.objects.filter(environment=self, deleted_at=None).count()
         )
 
     def resolve_wrapped_seed(self, info):
+        if _environment_pending_deletion(self):
+            return None
+
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self.app.organisation, deleted_at=None
         )
@@ -826,6 +847,9 @@ class EnvironmentType(DjangoObjectType):
             return None
 
     def resolve_wrapped_salt(self, info):
+        if _environment_pending_deletion(self):
+            return None
+
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self.app.organisation, deleted_at=None
         )
@@ -839,6 +863,9 @@ class EnvironmentType(DjangoObjectType):
             return None
 
     def resolve_members(self, info):
+        if self.deleted_at is not None:
+            return []
+
         return [
             env_key.user
             for env_key in EnvironmentKey.objects.filter(
@@ -847,6 +874,9 @@ class EnvironmentType(DjangoObjectType):
         ]
 
     def resolve_syncs(self, info):
+        if self.deleted_at is not None:
+            return []
+
         user = info.context.user
 
         # Memoized per request: list queries resolve this for every environment.
@@ -976,6 +1006,61 @@ class AppMembershipType(DjangoObjectType):
     def resolve_environments(self, info):
         # Only return filtered environments if set
         return getattr(self, "filtered_environments", [])
+
+
+class DeletedAppType(ObjectType):
+    """An app pending deletion: what listing and restoring it needs, and
+    nothing of its contents."""
+
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+    deleted_at = graphene.DateTime(required=True)
+    deletion_scheduled_for = graphene.DateTime(required=True)
+    # A credential that can't be revoked holds up the purge. It can be
+    # restored, even after the grace period.
+    deletion_delayed = graphene.Boolean(required=True)
+    # False once the grace period has ended and the purge may have begun.
+    can_restore = graphene.Boolean(required=True)
+    # Whether the caller may restore it or delete it now. Their role for the
+    # app can come from a team, so it differs from one app to the next.
+    viewer_can_delete = graphene.Boolean(required=True)
+
+    def resolve_deletion_scheduled_for(self, info):
+        return resource_deletion.deletion_scheduled_for(self)
+
+    def resolve_deletion_delayed(self, info):
+        return self.purge_blocked_at is not None
+
+    def resolve_can_restore(self, info):
+        return resource_deletion.can_restore(self)
+
+    def resolve_viewer_can_delete(self, info):
+        return user_can_delete_app(info.context.user, self)
+
+
+class DeletedEnvironmentType(ObjectType):
+    """An environment pending deletion: what listing and restoring it needs,
+    and nothing of its contents."""
+
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+    env_type = graphene.String(required=True)
+    deleted_at = graphene.DateTime(required=True)
+    deletion_scheduled_for = graphene.DateTime(required=True)
+    # A credential that can't be revoked holds up the purge. It can be
+    # restored, even after the grace period.
+    deletion_delayed = graphene.Boolean(required=True)
+    # False once the grace period has ended and the purge may have begun.
+    can_restore = graphene.Boolean(required=True)
+
+    def resolve_deletion_scheduled_for(self, info):
+        return resource_deletion.deletion_scheduled_for(self)
+
+    def resolve_deletion_delayed(self, info):
+        return self.purge_blocked_at is not None
+
+    def resolve_can_restore(self, info):
+        return resource_deletion.can_restore(self)
 
 
 class ServiceAccountType(DjangoObjectType):
@@ -1477,9 +1562,9 @@ class TeamType(DjangoObjectType):
     def resolve_apps(self, info):
         # Gate to apps the caller can access, including through teams.
         user_id = info.context.user.userId
-        app_ids = (
-            self.app_environments.values_list("app_id", flat=True).distinct()
-        )
+        # An app reached only through an environment pending deletion is
+        # still the team's: its members open it to restore that environment.
+        app_ids = self.app_environments.values_list("app_id", flat=True).distinct()
         return [
             app
             for app in App.objects.filter(id__in=app_ids, is_deleted=False)
@@ -1499,7 +1584,9 @@ class TeamType(DjangoObjectType):
         }
         return self.app_environments.select_related(
             "app", "environment"
-        ).filter(app_id__in=accessible_app_ids)
+        ).filter(
+            app_id__in=accessible_app_ids, environment__deleted_at__isnull=True
+        )
 
     def resolve_member_count(self, info):
         return self.memberships.exclude(
