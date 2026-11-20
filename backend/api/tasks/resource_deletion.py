@@ -56,8 +56,8 @@ PURGE_JOB_TIMEOUT = 6 * 60 * 60
 # rest to the next sweep.
 FINAL_DELETE_ATTEMPTS = 2
 RESTORE_JOB_TIMEOUT = 60 * 60
-# A restore can't be asked for twice, so its follow-up is tried again if it
-# fails or its worker dies. Every step can be repeated.
+# A restore can't be asked for twice, so its follow-up jobs are tried again
+# if they fail or their worker dies. Every step can be repeated.
 RESTORE_JOB_RETRIES = 3
 RESTORE_JOB_RETRY_INTERVALS = [10, 30, 60]
 
@@ -80,15 +80,17 @@ def _environment_label(environment):
 
 def enqueue_app_restored(app_id):
     _enqueue_restored(handle_app_restored, app_id)
+    _enqueue_restored(provision_team_keys_for_restored_app, app_id)
 
 
 def enqueue_environment_restored(environment_id):
     _enqueue_restored(handle_environment_restored, environment_id)
+    _enqueue_restored(provision_team_keys_for_restored_environment, environment_id)
 
 
-def _enqueue_restored(handler, resource_id):
+def _enqueue_restored(job, resource_id):
     django_rq.get_queue("default").enqueue(
-        handler,
+        job,
         resource_id,
         job_timeout=RESTORE_JOB_TIMEOUT,
         retry=Retry(max=RESTORE_JOB_RETRIES, interval=RESTORE_JOB_RETRY_INTERVALS),
@@ -105,20 +107,19 @@ def _as_restored(queryset):
         return queryset.select_for_update(no_key=True, of=("self",)).first()
 
 
-def handle_app_restored(app_id):
+def _restored_app(app_id):
+    """The app once its restore has ended, or None if it is not live: the
+    restore was rolled back, or the app was deleted again."""
     App = apps.get_model("api", "App")
     # all_objects: until the restore commits, the app is still hidden.
     app = _as_restored(App.all_objects.filter(id=app_id))
     if app is None or app.deleted_at is not None:
-        return  # the restore was rolled back, or it was deleted again
-
-    _resume({"app": app})
-    _resync_referencing_environments(app.environments.values_list("id", flat=True))
-    # Last: it raises once every team was tried.
-    _provision_team_keys(app)
+        return None
+    return app
 
 
-def handle_environment_restored(environment_id):
+def _restored_environment(environment_id):
+    """The same for an environment. Its app must be live too."""
     Environment = apps.get_model("api", "Environment")
     environment = _as_restored(
         Environment.all_objects.filter(id=environment_id).select_related("app")
@@ -128,38 +129,76 @@ def handle_environment_restored(environment_id):
         or environment.deleted_at is not None
         or environment.app.deleted_at is not None
     ):
-        return  # the restore was rolled back, or it was deleted again
-
-    _resume({"id": environment.id})
-    _resync_referencing_environments([environment.id])
-    # Last: it raises once every team was tried.
-    _provision_team_keys(environment.app)
+        return None
+    return environment
 
 
-def _resume(environments):
-    """Re-arm the rotations and re-run the syncs. Paused secrets and syncs
-    stay paused. An environment still pending deletion stays locked."""
-    RotatingSecret = apps.get_model("api", "RotatingSecret")
-    EnvironmentSync = apps.get_model("api", "EnvironmentSync")
-    from api.tasks.syncing import trigger_sync_tasks
-    from ee.integrations.secrets.rotation.engine import reschedule
+def handle_app_restored(app_id):
+    app = _restored_app(app_id)
+    if app is not None:
+        _resume({"app": app}, app.environments.values_list("id", flat=True))
 
-    scope = {f"environment__{lookup}": value for lookup, value in environments.items()}
-    unlocked = {
+
+def handle_environment_restored(environment_id):
+    environment = _restored_environment(environment_id)
+    if environment is not None:
+        _resume({"id": environment.id}, [environment.id])
+
+
+def provision_team_keys_for_restored_app(app_id):
+    """A job of its own, with its own retries: when it fails, the syncs and
+    the scan of the restore are not run again with it."""
+    app = _restored_app(app_id)
+    if app is not None:
+        _provision_team_keys(app)
+
+
+def provision_team_keys_for_restored_environment(environment_id):
+    environment = _restored_environment(environment_id)
+    if environment is not None:
+        _provision_team_keys(environment.app)
+
+
+def _resume(environments, environment_ids):
+    """Re-arm the rotations, queue the scan of what references these
+    environments, and run their syncs again. The syncs come last, so that
+    nothing can fail after them: a retry of an earlier step runs no sync a
+    second time, which would write an unchanged secret again."""
+    _rearm_rotations(environments)
+    _resync_referencing_environments(environment_ids)
+    _run_syncs(environments)
+
+
+def _unlocked(environments):
+    """Lookups for the rotating secrets or syncs under `environments` that
+    may run. Paused ones stay paused. An environment still pending deletion
+    stays locked."""
+    return {
+        **{f"environment__{lookup}": value for lookup, value in environments.items()},
         "environment__deleted_at__isnull": True,
         "environment__app__deleted_at__isnull": True,
         "is_active": True,
         "deleted_at__isnull": True,
     }
 
-    for rotating_secret in RotatingSecret.objects.filter(**scope, **unlocked):
-        # The syncs run once, below: not once for each secret re-armed.
+
+def _rearm_rotations(environments):
+    RotatingSecret = apps.get_model("api", "RotatingSecret")
+    from ee.integrations.secrets.rotation.engine import reschedule
+
+    for rotating_secret in RotatingSecret.objects.filter(**_unlocked(environments)):
+        # The syncs run once, in _run_syncs: not once for each secret re-armed.
         reschedule(rotating_secret, trigger_syncs=False)
+
+
+def _run_syncs(environments):
+    EnvironmentSync = apps.get_model("api", "EnvironmentSync")
+    from api.tasks.syncing import trigger_sync_tasks
 
     # Every sync, not only those cancelled while locked. One can be out of
     # date without having been cancelled: the scan that follows a change to
     # a secret it references skips a locked environment.
-    for env_sync in EnvironmentSync.objects.filter(**scope, **unlocked):
+    for env_sync in EnvironmentSync.objects.filter(**_unlocked(environments)):
         trigger_sync_tasks(env_sync)
 
 
@@ -199,6 +238,7 @@ def _provision_team_keys(app):
             failed = e
     if failed is not None:
         # Once every team was tried: the job fails, and its retry does the rest.
+        # It is a job of its own, so nothing else is repeated.
         raise failed
 
 

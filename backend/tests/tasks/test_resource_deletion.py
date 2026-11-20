@@ -1216,9 +1216,11 @@ class TestDeletionEmails:
 @pytest.fixture
 def restore_steps():
     order = MagicMock()
-    with patch.object(jobs, "_resume", order.resume), patch.object(
+    with patch.object(jobs, "_rearm_rotations", order.rotations), patch.object(
+        jobs, "_resync_referencing_environments", order.resync
+    ), patch.object(jobs, "_run_syncs", order.syncs), patch.object(
         jobs, "_provision_team_keys", order.keys
-    ), patch.object(jobs, "_resync_referencing_environments", order.resync):
+    ):
         yield order
 
 
@@ -1240,16 +1242,16 @@ class TestRestoreHandlers:
         with _models(App=model), patch.object(jobs, "transaction"):
             jobs.handle_app_restored("app-1")
 
-        restore_steps.resume.assert_called_once_with({"app": app})
-        restore_steps.keys.assert_called_once_with(app)
+        restore_steps.rotations.assert_called_once_with({"app": app})
+        restore_steps.syncs.assert_called_once_with({"app": app})
         # One scan for all of its environments.
         app.environments.values_list.assert_called_once_with("id", flat=True)
         restore_steps.resync.assert_called_once_with(
             app.environments.values_list.return_value
         )
-        # The keys last: that step raises once every team was tried, and must
-        # not keep the others from running.
-        assert _called(restore_steps) == ["resume", "resync", "keys"]
+        # The syncs last, with nothing after them that can fail: a retry then
+        # runs no sync a second time. The team keys are a job of their own.
+        assert _called(restore_steps) == ["rotations", "resync", "syncs"]
 
     def test_restored_environment_resumes(self, restore_steps):
         environment = MagicMock(id="env-1", deleted_at=None)
@@ -1263,10 +1265,73 @@ class TestRestoreHandlers:
         model.all_objects.filter.return_value.select_related.assert_called_once_with(
             "app"
         )
-        restore_steps.resume.assert_called_once_with({"id": "env-1"})
-        restore_steps.keys.assert_called_once_with(environment.app)
+        restore_steps.rotations.assert_called_once_with({"id": "env-1"})
+        restore_steps.syncs.assert_called_once_with({"id": "env-1"})
         restore_steps.resync.assert_called_once_with(["env-1"])
-        assert _called(restore_steps) == ["resume", "resync", "keys"]
+        assert _called(restore_steps) == ["rotations", "resync", "syncs"]
+
+    @pytest.mark.parametrize(
+        "failing, ran",
+        [("rotations", ["rotations"]), ("resync", ["rotations", "resync"])],
+    )
+    def test_a_step_that_fails_is_retried_before_any_sync_has_run(
+        self, failing, ran, restore_steps
+    ):
+        # The job is retried as a whole. A sync that ran once more would
+        # write its secrets again, unchanged: a new version at some targets.
+        getattr(restore_steps, failing).side_effect = RuntimeError("redis is gone")
+        model = MagicMock()
+        _restored(model, MagicMock(id="app-1", deleted_at=None))
+
+        with _models(App=model), patch.object(jobs, "transaction"), pytest.raises(
+            RuntimeError
+        ):
+            jobs.handle_app_restored("app-1")
+
+        assert _called(restore_steps) == ran
+
+    def test_the_team_keys_of_a_restored_app_are_a_job_of_their_own(
+        self, restore_steps
+    ):
+        # With its own retries: a team whose keys can't be provisioned fails
+        # this job only, and the syncs and the scan are not run again.
+        app = MagicMock(id="app-1", deleted_at=None)
+        model = MagicMock()
+        locked = _restored(model, app)
+
+        with _models(App=model), patch.object(jobs, "transaction"):
+            jobs.provision_team_keys_for_restored_app("app-1")
+
+        # It waits for the restore as the other job does.
+        model.all_objects.filter.assert_called_once_with(id="app-1")
+        locked.select_for_update.assert_called_once_with(no_key=True, of=("self",))
+        restore_steps.keys.assert_called_once_with(app)
+        assert _called(restore_steps) == ["keys"]
+
+    def test_the_team_keys_of_a_restored_environment_are_a_job_of_their_own(
+        self, restore_steps
+    ):
+        environment = MagicMock(id="env-1", deleted_at=None)
+        environment.app.deleted_at = None
+        model = MagicMock()
+        _restored(model, environment, related=True)
+
+        with _models(Environment=model), patch.object(jobs, "transaction"):
+            jobs.provision_team_keys_for_restored_environment("env-1")
+
+        model.all_objects.filter.assert_called_once_with(id="env-1")
+        restore_steps.keys.assert_called_once_with(environment.app)
+        assert _called(restore_steps) == ["keys"]
+
+    def test_a_team_key_job_that_fails_is_left_to_its_retries(self, restore_steps):
+        restore_steps.keys.side_effect = RuntimeError("boom")
+        model = MagicMock()
+        _restored(model, MagicMock(id="app-1", deleted_at=None))
+
+        with _models(App=model), patch.object(jobs, "transaction"), pytest.raises(
+            RuntimeError, match="boom"
+        ):
+            jobs.provision_team_keys_for_restored_app("app-1")
 
     def test_waits_for_the_restore_to_commit_however_long_it_takes(
         self, restore_steps
@@ -1288,7 +1353,7 @@ class TestRestoreHandlers:
             return False
 
         locked.select_for_update.return_value.first.side_effect = read
-        restore_steps.resume.side_effect = lambda scope: events.append("resume")
+        restore_steps.rotations.side_effect = lambda scope: events.append("resume")
 
         with _models(App=model), patch.object(jobs, "transaction") as transaction:
             transaction.atomic.return_value.__enter__.side_effect = (
@@ -1317,10 +1382,9 @@ class TestRestoreHandlers:
 
         with _models(App=model), patch.object(jobs, "transaction"):
             jobs.handle_app_restored("app-1")
+            jobs.provision_team_keys_for_restored_app("app-1")
 
-        restore_steps.resume.assert_not_called()
-        restore_steps.keys.assert_not_called()
-        restore_steps.resync.assert_not_called()
+        assert _called(restore_steps) == []
 
     @pytest.mark.parametrize(
         "deleted_at, app_deleted_at",
@@ -1337,39 +1401,44 @@ class TestRestoreHandlers:
 
         with _models(Environment=model), patch.object(jobs, "transaction"):
             jobs.handle_environment_restored("env-1")
+            jobs.provision_team_keys_for_restored_environment("env-1")
             _restored(model, None, related=True)
             jobs.handle_environment_restored("env-1")
+            jobs.provision_team_keys_for_restored_environment("env-1")
 
-        restore_steps.resume.assert_not_called()
-        restore_steps.keys.assert_not_called()
-        restore_steps.resync.assert_not_called()
+        assert _called(restore_steps) == []
 
-    def test_the_handlers_run_on_the_default_queue(self):
+    def test_a_restore_queues_two_jobs_on_the_default_queue(self):
         queue = MagicMock()
         with patch.object(jobs.django_rq, "get_queue", return_value=queue) as get_queue:
             jobs.enqueue_app_restored("app-1")
             jobs.enqueue_environment_restored("env-1")
 
-        assert get_queue.call_args_list == [call("default"), call("default")]
+        assert get_queue.call_args_list == [call("default")] * 4
+        # The team keys apart from the rest: each job is retried on its own.
         assert [enqueued.args for enqueued in queue.enqueue.call_args_list] == [
             (jobs.handle_app_restored, "app-1"),
+            (jobs.provision_team_keys_for_restored_app, "app-1"),
             (jobs.handle_environment_restored, "env-1"),
+            (jobs.provision_team_keys_for_restored_environment, "env-1"),
         ]
 
     @pytest.mark.parametrize(
         "enqueue", [jobs.enqueue_app_restored, jobs.enqueue_environment_restored]
     )
-    def test_a_handler_that_fails_or_dies_is_run_again(self, enqueue):
+    def test_a_job_that_fails_or_dies_is_run_again(self, enqueue):
         # A restore can't be asked for twice, so nothing else would finish it.
         # rq's defaults are no retry, and 180 s for the job.
         queue = MagicMock()
         with patch.object(jobs.django_rq, "get_queue", return_value=queue):
             enqueue("id-1")
 
-        options = queue.enqueue.call_args.kwargs
-        assert options["job_timeout"] == 60 * 60
-        assert options["retry"].max == 3
-        assert options["retry"].intervals == [10, 30, 60]
+        assert len(queue.enqueue.call_args_list) == 2
+        for enqueued in queue.enqueue.call_args_list:
+            options = enqueued.kwargs
+            assert options["job_timeout"] == 60 * 60
+            assert options["retry"].max == 3
+            assert options["retry"].intervals == [10, 30, 60]
 
     def test_one_reference_scan_covers_every_restored_environment(self):
         with patch(
@@ -1391,7 +1460,8 @@ class TestResume:
         with _models(RotatingSecret=rotating_model, EnvironmentSync=sync_model), patch(
             "ee.integrations.secrets.rotation.engine.reschedule"
         ) as reschedule, patch("api.tasks.syncing.trigger_sync_tasks") as trigger:
-            jobs._resume(environments)
+            jobs._rearm_rotations(environments)
+            jobs._run_syncs(environments)
         return rotating_model, sync_model, reschedule, trigger, rotating_secrets, syncs
 
     def test_rearms_the_rotations_and_runs_the_syncs_again(self):
