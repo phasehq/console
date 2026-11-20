@@ -1,0 +1,8 @@
+mutation RestoreEnvironmentOp($environmentId: ID!) {
+  restoreEnvironment(environmentId: $environmentId) {
+    environment {
+      id
+      name
+    }
+  }
+}

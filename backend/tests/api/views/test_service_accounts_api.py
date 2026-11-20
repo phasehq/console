@@ -1591,3 +1591,123 @@ class TestServiceAccountRoleAssignmentCeiling:
         assert response.status_code == status.HTTP_200_OK
         assert sa.role is weak_role
         sa.save.assert_called_once()
+
+
+# ════════════════════════════════════════════════════════════════════
+# Tests for PublicServiceAccountAccessView — access pending deletion
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestServiceAccountAccessPendingDeletion:
+    """PUT replaces the whole access list. `sa.apps` hides an app pending
+    deletion; left alone, the account's access would come back with a
+    restore."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.org = _make_org()
+        self.view = PublicServiceAccountAccessView.as_view()
+        self.sa = _make_service_account(org=self.org)
+        VIEWS = "api.views.service_accounts"
+        patches = {
+            "ip": patch(f"{VIEWS}.IsIPAllowed.has_permission", return_value=True),
+            "throttle": patch(
+                f"{VIEWS}.PlanBasedRateThrottle.allow_request", return_value=True
+            ),
+            "permission": patch(f"{VIEWS}.user_has_permission", return_value=True),
+            "can_access": patch(
+                f"{VIEWS}._can_access_service_account", return_value=True
+            ),
+            "ServiceAccount": patch(f"{VIEWS}.ServiceAccount"),
+            "App": patch(f"{VIEWS}.App"),
+            "Environment": patch(f"{VIEWS}.Environment"),
+            "EnvironmentKey": patch(f"{VIEWS}.EnvironmentKey"),
+            "EnvironmentKeyGrant": patch(f"{VIEWS}.EnvironmentKeyGrant"),
+            "transaction": patch(f"{VIEWS}.transaction"),
+            "unwrap": patch(
+                f"{VIEWS}.unwrap_server_managed_sa_keyring",
+                return_value={"publicKey": "aa" * 32},
+            ),
+            "keypair": patch(
+                f"{VIEWS}.get_server_keypair", return_value=(b"\x00" * 32, b"\x01" * 32)
+            ),
+            "curve": patch(
+                f"{VIEWS}._ed25519_pk_to_curve25519", return_value=b"\x02" * 32
+            ),
+            "revoke": patch(f"{VIEWS}.revoke_individual_environment_keys"),
+            "audit": patch(f"{VIEWS}.log_audit_event"),
+            "actor": patch(f"{VIEWS}.get_actor_info", return_value=("user", "id", {})),
+            "meta": patch(
+                f"{VIEWS}.get_resolver_request_meta", return_value=("127.0.0.1", "ua")
+            ),
+            "serialize": patch(f"{VIEWS}._serialize_sa_detail", return_value={}),
+        }
+        self.m = {name: p.start() for name, p in patches.items()}
+        accounts = self.m["ServiceAccount"].objects.select_related.return_value
+        accounts.get.return_value = self.sa
+        yield
+        for p in patches.values():
+            p.stop()
+
+    def _put(self, apps):
+        request = _build_detail_request(
+            "put",
+            f"/public/v1/service-accounts/{self.sa.id}/access/",
+            self.org,
+            data={"apps": apps},
+        )
+        return self.view(request, sa_id=str(self.sa.id))
+
+    def _app(self):
+        app = Mock(id=str(uuid.uuid4()), sse_enabled=True, organisation=self.org)
+        app.name = "billing"
+        return app
+
+    def test_revokes_an_app_pending_deletion(self):
+        pending_app = self._app()
+        self.m["App"].all_objects.filter.return_value = [pending_app]
+
+        response = self._put([])
+
+        assert response.status_code == status.HTTP_200_OK
+        self.m["App"].all_objects.filter.assert_any_call(
+            service_accounts=self.sa, is_deleted=False
+        )
+        memberships = self.sa.apps.through.objects.filter
+        memberships.assert_called_once_with(
+            serviceaccount=self.sa, app_id__in={pending_app.id}
+        )
+        memberships.return_value.delete.assert_called_once_with()
+        # remove() would skip it: the related manager hides it too.
+        self.sa.apps.remove.assert_not_called()
+        self.m["revoke"].assert_called_once_with(self.sa, app=pending_app)
+        revoked = self.m["audit"].call_args.kwargs["old_values"]["apps_revoked"]
+        assert [app["id"] for app in revoked] == [pending_app.id]
+
+    def test_revokes_an_environment_pending_deletion(self):
+        app = self._app()
+        env_id, pending_env_id = str(uuid.uuid4()), str(uuid.uuid4())
+        self.m["App"].objects.get.return_value = app
+        self.m["App"].all_objects.filter.return_value = [app]
+        self.m["Environment"].objects.filter.return_value.values_list.return_value = [
+            env_id
+        ]
+        # The account holds keys for both; only the live one is still wanted.
+        self.m["EnvironmentKey"].objects.filter.return_value = [
+            Mock(environment_id=env_id),
+            Mock(environment_id=pending_env_id),
+        ]
+
+        response = self._put([{"id": app.id, "environments": [env_id]}])
+
+        assert response.status_code == status.HTTP_200_OK
+        # The account's current keys are not narrowed to live environments.
+        self.m["EnvironmentKey"].objects.filter.assert_called_once_with(
+            service_account=self.sa, environment__app_id=app.id, deleted_at=None
+        )
+        # all_objects: Environment.objects can't see the one being revoked.
+        all_environments = self.m["Environment"].all_objects.filter
+        all_environments.assert_any_call(id__in={pending_env_id})
+        self.m["revoke"].assert_called_once_with(
+            self.sa, environments=all_environments.return_value
+        )

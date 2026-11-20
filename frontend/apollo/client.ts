@@ -219,8 +219,17 @@ export const graphQlClient = new ApolloClient({
       KeyMap: {
         keyFields: ['id', 'keyName'], // composite key
       },
+      // A list from the server is complete, so replace the cached one. That is
+      // Apollo's default, but without a policy it warns when a row has left.
+      AppType: {
+        fields: {
+          environments: { merge: false },
+        },
+      },
       Query: {
         fields: {
+          deletedApps: { merge: false },
+          deletedEnvironments: { merge: false },
           // Offset-based pagination for the audit log query. Without an
           // explicit keyArgs+merge, fetchMore's appending was merging into
           // the offset=0 cache entry via updateQuery, which left a stale

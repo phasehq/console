@@ -124,7 +124,7 @@ class ResolveManyTest(unittest.TestCase):
             return rows
 
         model = MagicMock()
-        model.objects.filter.side_effect = filter
+        model._base_manager.filter.side_effect = filter
         with patch.object(org_resolution.apps, "get_model", return_value=model):
             found = org_resolution._orgs_by_pk("Secret", ["1", "bad"])
 
@@ -207,7 +207,7 @@ class ResolveOrgIdTest(unittest.TestCase):
         from api.utils.access.org_resolution import resolve_org_id
 
         mock_model = MagicMock()
-        mock_model.objects.filter.return_value.values_list.return_value.first.return_value = (
+        mock_model._base_manager.filter.return_value.values_list.return_value.first.return_value = (
             "org-from-db"
         )
 
@@ -233,7 +233,7 @@ class ResolveOrgIdTest(unittest.TestCase):
         from api.utils.access.org_resolution import resolve_org_id
 
         mock_model = MagicMock()
-        mock_model.objects.filter.return_value.values_list.return_value.first.return_value = (
+        mock_model._base_manager.filter.return_value.values_list.return_value.first.return_value = (
             "org-from-db"
         )
 
@@ -264,7 +264,7 @@ class ResolveOrgIdTest(unittest.TestCase):
         from api.utils.access.org_resolution import resolve_org_id
 
         mock_model = MagicMock()
-        mock_model.objects.filter.return_value.values_list.return_value.first.return_value = (
+        mock_model._base_manager.filter.return_value.values_list.return_value.first.return_value = (
             "org-for-provider"
         )
 
@@ -295,7 +295,7 @@ class ResolveOrgIdTest(unittest.TestCase):
             cache.clear()
             mock_model = MagicMock()
             (
-                mock_model.objects.filter.return_value.values_list.return_value.first.return_value
+                mock_model._base_manager.filter.return_value.values_list.return_value.first.return_value
             ) = "org-resolved"
 
             with patch(
