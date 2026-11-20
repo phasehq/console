@@ -1414,14 +1414,37 @@ class TestRestoreHandlers:
             jobs.enqueue_app_restored("app-1")
             jobs.enqueue_environment_restored("env-1")
 
-        assert get_queue.call_args_list == [call("default")] * 4
+        assert get_queue.call_args_list == [call("default"), call("default")]
         # The team keys apart from the rest: each job is retried on its own.
-        assert [enqueued.args for enqueued in queue.enqueue.call_args_list] == [
-            (jobs.handle_app_restored, "app-1"),
-            (jobs.provision_team_keys_for_restored_app, "app-1"),
-            (jobs.handle_environment_restored, "env-1"),
-            (jobs.provision_team_keys_for_restored_environment, "env-1"),
+        for_app, for_environment = (
+            enqueued.args[0] for enqueued in queue.enqueue_many.call_args_list
+        )
+        assert [(job.func, job.args) for job in for_app] == [
+            (jobs.handle_app_restored, ("app-1",)),
+            (jobs.provision_team_keys_for_restored_app, ("app-1",)),
         ]
+        assert [(job.func, job.args) for job in for_environment] == [
+            (jobs.handle_environment_restored, ("env-1",)),
+            (jobs.provision_team_keys_for_restored_environment, ("env-1",)),
+        ]
+
+    @pytest.mark.parametrize(
+        "enqueue", [jobs.enqueue_app_restored, jobs.enqueue_environment_restored]
+    )
+    def test_the_jobs_of_a_restore_are_queued_together_or_not_at_all(self, enqueue):
+        # One call, which rq sends as one Redis transaction. Queued one by
+        # one, a failure in between rolls the restore back with the first
+        # job left behind: it then runs next to the jobs of the retry.
+        queue = MagicMock()
+        with patch.object(jobs.django_rq, "get_queue", return_value=queue):
+            enqueue("id-1")
+
+        queue.enqueue_many.assert_called_once()
+        assert len(queue.enqueue_many.call_args.args[0]) == 2
+        # No pipeline of our own: rq opens one, and sends it once.
+        assert queue.enqueue_many.call_args.kwargs == {}
+        queue.enqueue.assert_not_called()
+        queue.enqueue_call.assert_not_called()
 
     @pytest.mark.parametrize(
         "enqueue", [jobs.enqueue_app_restored, jobs.enqueue_environment_restored]
@@ -1433,12 +1456,12 @@ class TestRestoreHandlers:
         with patch.object(jobs.django_rq, "get_queue", return_value=queue):
             enqueue("id-1")
 
-        assert len(queue.enqueue.call_args_list) == 2
-        for enqueued in queue.enqueue.call_args_list:
-            options = enqueued.kwargs
-            assert options["job_timeout"] == 60 * 60
-            assert options["retry"].max == 3
-            assert options["retry"].intervals == [10, 30, 60]
+        prepared = queue.enqueue_many.call_args.args[0]
+        assert len(prepared) == 2
+        for job in prepared:
+            assert job.timeout == 60 * 60
+            assert job.retry.max == 3
+            assert job.retry.intervals == [10, 30, 60]
 
     def test_one_reference_scan_covers_every_restored_environment(self):
         with patch(

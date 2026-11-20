@@ -21,7 +21,7 @@ from django.db import transaction
 from django.db.models import F, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
-from rq import Retry
+from rq import Queue, Retry
 
 from api.tasks.purge import (
     PurgeBlockedError,
@@ -79,21 +79,33 @@ def _environment_label(environment):
 
 
 def enqueue_app_restored(app_id):
-    _enqueue_restored(handle_app_restored, app_id)
-    _enqueue_restored(provision_team_keys_for_restored_app, app_id)
+    _enqueue_restored(app_id, handle_app_restored, provision_team_keys_for_restored_app)
 
 
 def enqueue_environment_restored(environment_id):
-    _enqueue_restored(handle_environment_restored, environment_id)
-    _enqueue_restored(provision_team_keys_for_restored_environment, environment_id)
+    _enqueue_restored(
+        environment_id,
+        handle_environment_restored,
+        provision_team_keys_for_restored_environment,
+    )
 
 
-def _enqueue_restored(job, resource_id):
-    django_rq.get_queue("default").enqueue(
-        job,
-        resource_id,
-        job_timeout=RESTORE_JOB_TIMEOUT,
-        retry=Retry(max=RESTORE_JOB_RETRIES, interval=RESTORE_JOB_RETRY_INTERVALS),
+def _enqueue_restored(resource_id, *jobs):
+    """Queue the jobs of one restore in one Redis transaction: all of them or
+    none. A job left queued by a restore that was then rolled back would run
+    next to the jobs of its retry, and resume everything twice."""
+    django_rq.get_queue("default").enqueue_many(
+        [
+            Queue.prepare_data(
+                job,
+                args=(resource_id,),
+                timeout=RESTORE_JOB_TIMEOUT,
+                retry=Retry(
+                    max=RESTORE_JOB_RETRIES, interval=RESTORE_JOB_RETRY_INTERVALS
+                ),
+            )
+            for job in jobs
+        ]
     )
 
 
