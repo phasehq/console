@@ -3,6 +3,7 @@ the restore handlers."""
 
 from contextlib import contextmanager
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -121,32 +122,32 @@ def steps():
     ready = MagicMock(name="ready_for_purge")
     ready.return_value.update.side_effect = conditional_update
 
-    with patch.object(
-        jobs, "revoke_dynamic_secret_leases", order.leases
-    ), patch.object(
-        jobs, "revoke_rotating_secret_credentials", order.rotating
-    ), patch.object(
-        jobs, "ready_for_purge", ready
-    ), patch.object(
-        jobs, "stop_syncs", order.syncs
-    ), patch.object(
-        jobs, "delete_environment_secret_events", order.events
-    ), patch.object(
-        jobs, "lock_secrets", order.lock_secrets
-    ), patch.object(
-        jobs, "lock_environments", order.lock_environments
-    ), patch.object(
-        jobs, "live_credentials_remain", order.minted
-    ), patch.object(
-        jobs, "delete_with_cascade", order.delete
-    ), patch.object(
-        jobs, "transaction"
-    ) as transaction, patch.object(
+    # What the app purge's cascade found; `data` is for a test to fill.
+    cascade = MagicMock(name="cascade")
+    cascade.data = {}
+
+    def collect(instance):
+        cascade.delete.side_effect = lambda: order.delete(instance)
+        return cascade
+
+    # One call for the plain replacements: Python allows 20 nested blocks.
+    with patch.multiple(
+        jobs,
+        revoke_dynamic_secret_leases=order.leases,
+        revoke_rotating_secret_credentials=order.rotating,
+        ready_for_purge=ready,
+        stop_syncs=order.syncs,
+        delete_environment_secret_events=order.events,
+        lock_secrets=order.lock_secrets,
+        lock_environments=order.lock_environments,
+        live_credentials_remain=order.minted,
+        delete_late_secret_events=order.late_events,
+        delete_with_cascade=order.delete,
+        collect_cascade=collect,
+        audit_app_cascade_envs=order.cascade_audit,
+        record_audit_event=order.audit,
+    ), patch.object(jobs, "transaction") as transaction, patch.object(
         jobs, "deletion_actor", return_value=("user", "member-1", {"email": "a@b.c"})
-    ), patch.object(
-        jobs, "audit_app_cascade_envs", order.cascade_audit
-    ), patch.object(
-        jobs, "record_audit_event", order.audit
     ), patch.object(
         jobs, "_recipients", return_value=RECIPIENTS
     ), patch(
@@ -164,6 +165,7 @@ def steps():
         transaction.atomic.return_value.__exit__.side_effect = commit
         order.notify = notify
         order.ready = ready
+        order.cascade = cascade
         yield order
 
 
@@ -348,6 +350,8 @@ RELEASED = [
 ]
 # The final transaction, up to the cascade.
 CHECKED = ["lock_secrets", "lock_environments", "minted"]
+# Then what a request wrote meanwhile, and the cascade.
+DELETED = ["late_events", "delete"]
 BLOCKED_AGO = {"purge_blocked_at": timezone.now() - timedelta(hours=3)}
 CLAIMED_AGO = {"purge_claimed_at": timezone.now() - timedelta(hours=2)}
 STARTED_AGO = {"purge_started_at": timezone.now() - timedelta(hours=2)}
@@ -408,7 +412,7 @@ class TestPurgeApp:
         with _models(App=_model(app), Environment=MagicMock()):
             jobs.purge_app("app-1")
 
-        assert _called(steps)[:10] == [*RELEASED, *CHECKED, "delete"]
+        assert _called(steps)[:11] == [*RELEASED, *CHECKED, *DELETED]
         steps.delete.assert_called_once_with(app)
 
     def test_a_deletion_asked_for_at_once_can_be_blocked_like_any_other(self, steps):
@@ -433,7 +437,19 @@ class TestPurgeApp:
         model = _model(app)
         environment_model = MagicMock()
         environments = [MagicMock(), MagicMock()]
-        environment_model.all_objects.filter.return_value = environments
+        deleted_when_listed = []
+
+        def list_environments(**lookup):
+            deleted_when_listed.append(steps.delete.called)
+            return environments
+
+        environment_model.all_objects.filter.side_effect = list_environments
+        steps.cascade.data = {
+            environment_model: [
+                SimpleNamespace(pk="env-1"),
+                SimpleNamespace(pk="env-2"),
+            ]
+        }
 
         with _models(App=model, Environment=environment_model):
             jobs.purge_app("app-1")
@@ -442,7 +458,7 @@ class TestPurgeApp:
         assert _called(steps) == [
             *RELEASED,
             *CHECKED,
-            "delete",
+            *DELETED,
             # Recorded before the commit: the deletion and its audit rows are
             # one transaction.
             "cascade_audit",
@@ -458,6 +474,7 @@ class TestPurgeApp:
         steps.lock_secrets.assert_called_once_with(scope)
         steps.lock_environments.assert_called_once_with(scope)
         steps.minted.assert_called_once_with(scope)
+        steps.late_events.assert_called_once_with(scope)
         steps.delete.assert_called_once_with(app)
 
         # Claimed before anything is revoked, while the purge has not started.
@@ -483,8 +500,13 @@ class TestPurgeApp:
         # It went through: the claim is not handed back.
         pending.filter.return_value.update.assert_not_called()
 
-        # all_objects: its environments are hidden from Environment.objects.
-        environment_model.all_objects.filter.assert_called_once_with(app=app)
+        # The environments the cascade found, not those of a query of its
+        # own: one created meanwhile would be deleted with no record. Read
+        # before the delete. all_objects: they are hidden from the default.
+        environment_model.all_objects.filter.assert_called_once_with(
+            id__in=["env-1", "env-2"]
+        )
+        assert deleted_when_listed == [False]
         audited_app, audited_environments = steps.cascade_audit.call_args.args[:2]
         assert audited_environments == environments
         # The cascade cleared the primary key; the audit still names the app.
@@ -737,13 +759,13 @@ class TestPurgeApp:
         with _models(App=_model(_app()), Environment=MagicMock()):
             jobs.purge_app("app-1")
 
-        assert _called(steps)[6:16] == [
+        assert _called(steps)[6:17] == [
             *CHECKED,
             "commit",
             "leases",
             "rotating",
             *CHECKED,
-            "delete",
+            *DELETED,
         ]
         steps.delete.assert_called_once()
 
@@ -853,7 +875,7 @@ class TestPurgeEnvironment:
         with _models(Environment=_model(environment)):
             jobs.purge_environment("env-1")
 
-        assert _called(steps)[:10] == [*RELEASED, *CHECKED, "delete"]
+        assert _called(steps)[:11] == [*RELEASED, *CHECKED, *DELETED]
         steps.delete.assert_called_once_with(environment)
 
     def test_deletes_the_environment_after_releasing_what_it_holds(self, steps):
@@ -867,7 +889,7 @@ class TestPurgeEnvironment:
         assert _called(steps) == [
             *RELEASED,
             *CHECKED,
-            "delete",
+            *DELETED,
             "audit",
             "commit",
             "email_environment",
@@ -1573,3 +1595,48 @@ class TestScopedPurgeSteps:
         assert options["batch_size"] == 10_000
         assert options["sleep_ms"] == 500
         assert options["deadline"] is not None
+
+    def test_late_events_are_deleted_at_once_for_the_scope_only(self):
+        environment_model, event_model = MagicMock(), MagicMock()
+        environment_model.all_objects.filter.return_value.values_list.return_value = [
+            "env-1",
+            "env-2",
+        ]
+
+        with self._purge_models(
+            Environment=environment_model, SecretEvent=event_model
+        ), patch.object(purge, "delete_secret_events") as delete:
+            purge.delete_late_secret_events({"app": "app-1"})
+
+        # all_objects: an environment pending deletion has events too.
+        environment_model.all_objects.filter.assert_called_once_with(app="app-1")
+        assert event_model.objects.filter.call_args_list == [
+            call(environment_id="env-1"),
+            call(environment_id="env-2"),
+        ]
+        # Inside the final transaction, with its locks held: no pause between
+        # batches, and no time budget that could leave one behind.
+        for deleted in delete.call_args_list:
+            assert deleted.args == (event_model.objects.filter.return_value,)
+            assert deleted.kwargs == {"batch_size": 10_000, "sleep_ms": 0}
+
+    def test_the_cascade_can_be_looked_at_before_it_deletes(self):
+        app = App(id="app-1")
+
+        with patch.object(purge, "EventlessCollector") as collector_class:
+            cascade = purge.collect_cascade(app)
+
+        collector = collector_class.return_value
+        assert cascade is collector
+        collector_class.assert_called_once_with(using=app._state.db, origin=app)
+        collector.collect.assert_called_once_with([app])
+        collector.delete.assert_not_called()
+
+    def test_delete_with_cascade_deletes_what_it_collected(self):
+        app = App(id="app-1")
+
+        with patch.object(purge, "EventlessCollector") as collector_class:
+            purge.delete_with_cascade(app)
+
+        collector = collector_class.return_value
+        assert [step[0] for step in collector.mock_calls] == ["collect", "delete"]

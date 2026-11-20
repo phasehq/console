@@ -24,7 +24,9 @@ from django.utils import timezone
 
 from api.tasks.purge import (
     PurgeBlockedError,
+    collect_cascade,
     delete_environment_secret_events,
+    delete_late_secret_events,
     delete_with_cascade,
     enqueue_purges,
     live_credentials_remain,
@@ -447,6 +449,9 @@ def _delete(environments, lock, may_be_purged, delete, label, revoke):
             # adding has committed, and nothing more can be added.
             lock_environments(environments)
             if not live_credentials_remain(environments):
+                # Written since the batched delete by a request already under
+                # way. The cascade skips them, and would fail on one left.
+                delete_late_secret_events(environments)
                 delete(row)
                 return row
 
@@ -503,8 +508,16 @@ def purge_app(app_id):
         )
 
     def delete(app):
-        environments = list(Environment.all_objects.filter(app=app))
-        delete_with_cascade(app)
+        cascade = collect_cascade(app)
+        # The environments the cascade found, not a list of our own: a request
+        # already under way can commit a new one in between, and it would be
+        # deleted with no record. all_objects: they are hidden.
+        environments = list(
+            Environment.all_objects.filter(
+                id__in=[found.pk for found in cascade.data.get(Environment, ())]
+            )
+        )
+        cascade.delete()
         # The cascade clears the primary key of what it deleted.
         app.id = app_id
 

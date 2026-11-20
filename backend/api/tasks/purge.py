@@ -250,6 +250,25 @@ def delete_environment_secret_events(environments):
     return True
 
 
+def delete_late_secret_events(environments):
+    """Delete the secret events written since the batched delete, by a
+    request that was already under way. For the final transaction, once
+    `lock_environments` holds the rows: no more can then be written, and the
+    cascade, which skips them, finds none left to fail on."""
+    Environment = apps.get_model("api", "Environment")
+    SecretEvent = apps.get_model("api", "SecretEvent")
+
+    for environment_id in Environment.all_objects.filter(**environments).values_list(
+        "id", flat=True
+    ):
+        # A handful of rows at most, with locks held: no pause between batches.
+        delete_secret_events(
+            SecretEvent.objects.filter(environment_id=environment_id),
+            batch_size=SECRET_EVENT_BATCH_SIZE,
+            sleep_ms=0,
+        )
+
+
 class EventlessCollector(Collector):
     """Cascade for a purge's final delete. The secret events and their tag
     links are gone by then, so skip those tables rather than scan their dead
@@ -264,7 +283,13 @@ class EventlessCollector(Collector):
         return super().related_objects(related_model, related_fields, objs)
 
 
-def delete_with_cascade(instance):
+def collect_cascade(instance):
+    """What deleting `instance` takes with it, found and not yet deleted.
+    `.data` holds the rows by model; `.delete()` deletes them."""
     collector = EventlessCollector(using=instance._state.db, origin=instance)
     collector.collect([instance])
-    collector.delete()
+    return collector
+
+
+def delete_with_cascade(instance):
+    collect_cascade(instance).delete()
