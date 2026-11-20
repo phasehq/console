@@ -179,7 +179,7 @@ class UpdateAppInfoMutation(graphene.Mutation):
             raise GraphQLError("You don't have access to this app")
 
         if not user_has_permission(
-            info.context.user, "update", "Apps", app.organisation
+            info.context.user, "update", "Apps", app.organisation, app=app
         ):
             raise GraphQLError("You don't have permission to update Apps")
 
@@ -292,7 +292,7 @@ class DeleteAppMutation(graphene.Mutation):
             raise GraphQLError("You don't have access to this app")
 
         if not user_has_permission(
-            info.context.user, "delete", "Apps", app.organisation
+            info.context.user, "delete", "Apps", app.organisation, app=app
         ):
             raise GraphQLError("You don't have permission to delete Apps")
 
