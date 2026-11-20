@@ -100,14 +100,32 @@ describe('gridLayout', () => {
     expect(layout.tableWidth).toBe(layout.tableMinWidth)
   })
 
-  it('lets user widths go below the defaults, down to 80px, and ignores them for a single env', () => {
+  it('lets user widths go below the defaults, down to 80px', () => {
     expect(
       gridLayout({ ...base, checkedCount: 2, longestKeyChars: 40, customWidthsPx: [100, 40] })
         .tableMinWidth
     ).toBe('calc(564px + 2.75rem)')
-    const single = gridLayout({ ...base, checkedCount: 1, customWidthsPx: [700] })
-    expect(single.keyColumnWidth).toBe('33.333%')
-    expect(single.resizable).toBe(false)
+  })
+
+  it('fills the grid with a single env until its column is dragged', () => {
+    const filling = gridLayout({ ...base, checkedCount: 1 })
+    expect(filling.tableWidth).toBe('100%')
+    expect(filling.keyColumnInset).toBe('33.333%')
+
+    // Dragged, the table stops at its columns. The key keeps the width it had: a third of the
+    // grid, or of the table's 51rem minimum where the grid is narrower
+    const dragged = gridLayout({ ...base, checkedCount: 1, customWidthsPx: [700] })
+    expect(dragged.keyColumnWidth).toBe('max(33.333cqw, 17rem)')
+    expect(dragged.tableWidth).toBe('calc(max(33.333cqw, 17rem) + 700px + 2.75rem)')
+    expect(dragged.tableMinWidth).toBe(dragged.tableWidth)
+    // The scroller can't measure itself in cqw: its scroll padding reads the same third as a percentage
+    expect(dragged.keyColumnInset).toBe('max(33.333%, 17rem)')
+  })
+
+  it("counts the hidden envs' slim columns in a dragged single env's table", () => {
+    const layout = gridLayout({ ...base, checkedCount: 1, slimCount: 2, customWidthsPx: [700] })
+    // 2 × 2.25rem slim + 2.75rem trailing; the minimum's third grows with them (53rem / 3)
+    expect(layout.tableWidth).toBe('calc(max(33.333cqw, 17.667rem) + 700px + 7.25rem)')
   })
 
   it('uses a user-set key width in place of the fitted one', () => {
@@ -118,6 +136,10 @@ describe('gridLayout', () => {
     const single = gridLayout({ ...base, checkedCount: 1, customKeyPx: 150 })
     expect(single.keyColumnWidth).toBe('150px')
     expect(single.tableMinWidth).toBe('calc(150px + 30.75rem)')
+    // ...and beside a dragged single env, where both widths are the user's
+    const both = gridLayout({ ...base, checkedCount: 1, customKeyPx: 150, customWidthsPx: [700] })
+    expect(both.keyColumnWidth).toBe('150px')
+    expect(both.tableWidth).toBe('calc(150px + 700px + 2.75rem)')
   })
 
   it('makes room for the new-environment column', () => {

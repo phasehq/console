@@ -48,7 +48,8 @@ export const NEW_ENV_COLUMN_REM = 10.5
 export const NEW_ENV_COLUMN_UPSELL_REM = 13.5
 /** Bounds for columns the user drags (key or env); below the defaults is allowed */
 export const COLUMN_MIN_PX = 80
-export const COLUMN_MAX_PX = 1024
+// Past any width an env has when it fills the grid alone, so a drag starts from where the column is
+export const COLUMN_MAX_PX = 4096
 
 // Keys render in JetBrains Mono (0.6em advance) with tracking-wide (0.025em), so their
 // width follows from the character count
@@ -127,9 +128,10 @@ export const keyMenuFloorRem = (
  * editor (key ⅓, value ⅔). With more, the key column fits its longest key or
  * folder name; envs the user resized keep their width and the others share
  * the rest, at least ENV_MIN each, scrolling sideways once the viewport can't
- * fit that. When every checked env has a width, the table is exactly as wide
- * as its columns instead of stretching them. A user-set key width replaces the
- * fitted (or ⅓) one in every layout. User widths may go below the defaults.
+ * fit that. When every checked env has a width (the lone one included), the
+ * table is exactly as wide as its columns instead of stretching them. A
+ * user-set key width replaces the fitted (or ⅓) one in every layout. User
+ * widths may go below the defaults.
  */
 export const gridLayout = ({
   checkedCount,
@@ -154,24 +156,42 @@ export const gridLayout = ({
 
   // Table columns treat calc()/min() mixing % and lengths as auto, so each width is one unit
   if (checkedCount <= 1 && viewportWidth >= 640) {
-    if (customKeyPx !== undefined) {
-      const keyPx = clampColumnPx(customKeyPx)
+    // The key's third of the table must still hold its hover menu
+    const minRem = Math.ceil(
+      Math.max((envsRem + fixedRem) / (2 / 3), KEY_MIN_SINGLE * 3, floorRem * 3)
+    )
+    const keyPx = customKeyPx !== undefined ? clampColumnPx(customKeyPx) : undefined
+    const alonePx = checkedCount === 1 ? customWidthsPx[0] : undefined
+    if (alonePx !== undefined) {
+      // The table stops at its columns, so the key's third can no longer be a share of the table:
+      // it is a third of the grid (the table's width until now). Inside the grid cqw measures
+      // that; on the scroller itself a percentage does
+      const third = (unit: string) => `max(33.333${unit}, ${+(minRem / 3).toFixed(3)}rem)`
+      const key = keyPx !== undefined ? `${keyPx}px` : third('cqw')
+      const width = `calc(${key} + ${clampColumnPx(alonePx)}px + ${fixedRem}rem)`
+      return {
+        keyColumnWidth: key,
+        keyColumnInset: keyPx !== undefined ? `${keyPx}px` : third('%'),
+        tableMinWidth: width,
+        tableWidth: width,
+        envMinPx,
+      }
+    }
+    if (keyPx !== undefined) {
       return {
         keyColumnWidth: `${keyPx}px`,
+        keyColumnInset: `${keyPx}px`,
         tableMinWidth: `calc(${keyPx}px + ${envsRem + fixedRem}rem)`,
         tableWidth: '100%',
         envMinPx,
-        resizable: false,
       }
     }
-    // The key's third of the table must still hold its hover menu
-    const minRem = Math.max((envsRem + fixedRem) / (2 / 3), KEY_MIN_SINGLE * 3, floorRem * 3)
     return {
       keyColumnWidth: '33.333%',
-      tableMinWidth: `${Math.ceil(minRem)}rem`,
+      keyColumnInset: '33.333%',
+      tableMinWidth: `${minRem}rem`,
       tableWidth: '100%',
       envMinPx,
-      resizable: false,
     }
   }
 
@@ -195,10 +215,10 @@ export const gridLayout = ({
 
   return {
     keyColumnWidth: `${width}px`,
+    keyColumnInset: `${width}px`,
     tableMinWidth,
     tableWidth: autoCount > 0 ? '100%' : tableMinWidth,
     envMinPx,
-    resizable: true,
   }
 }
 

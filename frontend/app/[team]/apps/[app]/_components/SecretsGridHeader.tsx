@@ -37,6 +37,7 @@ import { ManageEnvironmentDialog } from '@/components/environments/ManageEnviron
 import { envColor } from '@/utils/environment'
 import { MENU_LIT, MENU_SURFACE } from '@/components/common/menuStyles'
 import { COLUMN_MAX_PX, COLUMN_MIN_PX, GridColumn, NEW_ENV_CELL } from './gridColumns'
+import { envColumnId } from '../_hooks/useColumnWidths'
 import { EnvSyncsMenu } from '@/components/syncing/EnvSyncsMenu'
 import { EnvContents } from '@/utils/environmentClone'
 
@@ -159,12 +160,10 @@ type SecretsGridHeaderProps = {
   /** Envs whose values are shown, and the switch for one env */
   revealedEnvIds: ReadonlySet<string>
   onToggleReveal: (envId: string) => void
-  /** Checked env columns can be resized (not when one env fills the grid) */
-  resizable: boolean
-  /** The key column's id for resizing (env columns use their env id) */
+  /** The key column's id for resizing (env columns use `envColumnId`) */
   keyColumnId: string
-  /** Live width while dragging (applied to the table directly, without a render) */
-  onResizePreview: (columnId: string, px: number) => void
+  /** Live width while dragging (applied to the table directly, without a render); null undoes it */
+  onResizePreview: (columnId: string, px: number | null) => void
   /** Saves a column's width; null resets it to the default */
   onResize: (columnId: string, px: number | null) => void
   newEnvironmentRef: RefObject<CreateEnvironmentDialogHandle | null>
@@ -207,7 +206,6 @@ const SecretsGridHeaderBase = ({
   onExport,
   revealedEnvIds,
   onToggleReveal,
-  resizable,
   keyColumnId,
   onResizePreview,
   onResize,
@@ -246,6 +244,8 @@ const SecretsGridHeaderBase = ({
       handle.removeEventListener('pointercancel', end)
       resizingRef.current = false
       if (Math.abs(width - startWidth) >= 1) onResize(columnId, width)
+      // Nothing to save: the widths set on the table while dragging go back to the saved ones
+      else onResizePreview(columnId, null)
     }
     handle.addEventListener('pointermove', move)
     handle.addEventListener('pointerup', end)
@@ -431,7 +431,7 @@ const SecretsGridHeaderBase = ({
               {...dragProps(env.id)}
             >
               {dropIndicatorFor(env.id)}
-              {resizable && renderResizeHandle(env.id, env.name)}
+              {renderResizeHandle(envColumnId(env.id, checkedCount === 1), env.name)}
               {/* A size container, so the sync icons can step down in a narrow column */}
               <div className="group/env flex h-9 items-center gap-1.5 px-2 [container-type:inline-size]">
                 {allowReordering && (

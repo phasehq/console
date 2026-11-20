@@ -171,7 +171,7 @@ import { AppDynamicSecretKeyRow } from './AppDynamicSecretKeyRow'
 import { AppFolderRow } from './AppFolderRow'
 import { DeleteAppFolderDialog, FolderInEnv, FolderTarget } from './DeleteAppFolderDialog'
 import { EditAppFolderDialog } from './EditAppFolderDialog'
-import { keyColumnId, useColumnWidths } from '../_hooks/useColumnWidths'
+import { envColumnId, keyColumnId, useColumnWidths } from '../_hooks/useColumnWidths'
 import { AppSecretGroup, GroupKind, GroupSetUpRequest } from './AppSecretGroup'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
@@ -1276,6 +1276,7 @@ export const AppSecrets = ({
   // Column widths the user dragged: per env (hidden envs keep theirs), and this app's key column
   const { widths: columnWidths, setWidth: setColumnWidth } = useColumnWidths()
   const keyColumn = keyColumnId(app)
+  const envAlone = checkedSet.size === 1
 
   // The last column is the new-environment action, wider when it carries a plan label
   const maxEnvsPerApp = organisation?.planDetail?.maxEnvsPerApp
@@ -1301,9 +1302,10 @@ export const AppSecrets = ({
       maxRowDepth,
       maxTagCount,
       gutterRem,
-      customWidthsPx: checkedEnvironments.flatMap((env) =>
-        widths[env.id] !== undefined ? [widths[env.id]] : []
-      ),
+      customWidthsPx: checkedEnvironments.flatMap((env) => {
+        const px = widths[envColumnId(env.id, envAlone)]
+        return px !== undefined ? [px] : []
+      }),
       customKeyPx: widths[keyColumn],
       trailingRem,
     })
@@ -1313,14 +1315,21 @@ export const AppSecrets = ({
   const columnWidthsRef = useRef(columnWidths)
   columnWidthsRef.current = columnWidths
 
-  // While a header is dragged the table is resized directly — no render per pointer move
+  // While a header is dragged the table is resized directly — no render per pointer move.
+  // null puts back the saved widths, for a drag that ends where it began
   const handleResizePreview = useCallback(
-    (columnId: string, px: number) => {
+    (columnId: string, px: number | null) => {
       const table = gridScrollerRef.current?.querySelector('table')
       const col = table?.querySelector<HTMLTableColElement>(`col[data-col-id="${columnId}"]`)
-      if (!table || !col) return
-      const preview = layoutForRef.current({ ...columnWidthsRef.current, [columnId]: px })
-      col.style.width = columnId === keyColumn ? preview.keyColumnWidth : `${clampColumnPx(px)}px`
+      const keyCol = table?.querySelector<HTMLTableColElement>(`col[data-col-id="${keyColumn}"]`)
+      if (!table || !col || !keyCol) return
+      const widths = { ...columnWidthsRef.current }
+      if (px !== null) widths[columnId] = px
+      const preview = layoutForRef.current(widths)
+      // The key column follows an env's drag too: a lone env's first one takes it off its percentage
+      keyCol.style.width = preview.keyColumnWidth
+      const own = widths[columnId]
+      if (col !== keyCol) col.style.width = own !== undefined ? `${clampColumnPx(own)}px` : ''
       table.style.minWidth = preview.tableMinWidth
       table.style.width = preview.tableWidth
     },
@@ -2842,7 +2851,7 @@ export const AppSecrets = ({
             // column and the scroll-right pill
             style={{
               scrollPaddingTop: '2.5rem',
-              scrollPaddingLeft: layout.keyColumnWidth,
+              scrollPaddingLeft: layout.keyColumnInset,
               scrollPaddingRight: '3rem',
             }}
           >
@@ -2867,12 +2876,12 @@ export const AppSecrets = ({
               <colgroup>
                 <col data-col-id={keyColumn} style={{ width: layout.keyColumnWidth }} />
                 {columns.map((column) => {
-                  const custom =
-                    layout.resizable && column.checked ? columnWidths[column.env.id] : undefined
+                  const columnId = envColumnId(column.env.id, column.checked && envAlone)
+                  const custom = column.checked ? columnWidths[columnId] : undefined
                   return (
                     <col
                       key={column.env.id}
-                      data-col-id={column.env.id}
+                      data-col-id={columnId}
                       style={
                         !column.checked
                           ? { width: SLIM_COLUMN_WIDTH }
@@ -2898,7 +2907,6 @@ export const AppSecrets = ({
                 onExport={handleExportEnv}
                 revealedEnvIds={revealedEnvIds}
                 onToggleReveal={toggleEnvReveal}
-                resizable={layout.resizable}
                 keyColumnId={keyColumn}
                 onResizePreview={handleResizePreview}
                 onResize={setColumnWidth}

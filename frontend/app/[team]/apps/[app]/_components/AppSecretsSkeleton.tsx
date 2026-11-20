@@ -16,6 +16,7 @@ import {
   rowGutterRem,
 } from './gridColumns'
 import { GridShape } from './gridShape'
+import { envColumnId } from '../_hooks/useColumnWidths'
 import { GRID_HEADER_BG, GRID_HEADER_BG_SOLID, TH_BASE } from './SecretsGridHeader'
 
 // Text-sized bars, square like the grid: a key or name, and the fainter line of a masked value
@@ -47,7 +48,7 @@ type AppSecretsSkeletonProps = {
   /** The checked envs' ids, or null for all of them */
   selectedEnvIds: string[] | null
   viewport: { width: number; rootFontPx: number }
-  /** Widths the user dragged, by env id and by `keyColumn` */
+  /** Widths the user dragged, by `envColumnId` and by `keyColumn` */
   columnWidths: Record<string, number>
   keyColumn: string
   /** Env headers carry a drag grip ahead of their checkbox */
@@ -81,9 +82,10 @@ export const AppSecretsSkeleton = ({
     maxRowDepth: shape.maxRowDepth,
     maxTagCount: shape.maxTagCount,
     gutterRem,
-    customWidthsPx: checked.flatMap((env) =>
-      columnWidths[env.id] !== undefined ? [columnWidths[env.id]] : []
-    ),
+    customWidthsPx: checked.flatMap((env) => {
+      const px = columnWidths[envColumnId(env.id, checked.length === 1)]
+      return px !== undefined ? [px] : []
+    }),
     customKeyPx: columnWidths[keyColumn],
     trailingRem: shape.trailingRem,
   })
@@ -181,7 +183,12 @@ export const AppSecretsSkeleton = ({
   })
 
   return (
-    <div className="isolate min-h-0 flex-1 overflow-auto" aria-busy aria-label="Loading secrets">
+    // A container, as the grid's scroller is: a lone env's dragged width sizes the key column in cqw
+    <div
+      className="isolate min-h-0 flex-1 overflow-auto [container-type:inline-size]"
+      aria-busy
+      aria-label="Loading secrets"
+    >
       <table
         aria-hidden
         className={GRID_TABLE}
@@ -196,7 +203,9 @@ export const AppSecretsSkeleton = ({
         <colgroup>
           <col style={{ width: layout.keyColumnWidth }} />
           {envs.map((env, column) => {
-            const custom = layout.resizable && env.checked ? columnWidths[env.id] : undefined
+            const custom = env.checked
+              ? columnWidths[envColumnId(env.id, checked.length === 1)]
+              : undefined
             return (
               <col
                 key={column}

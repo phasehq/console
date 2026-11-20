@@ -12,11 +12,17 @@ const readWidths = (): Record<string, number> => {
   }
 }
 
-/** Storage id for an app's key column (env columns use their env id) */
+/** Storage id for an app's key column (env columns use `envColumnId`) */
 export const keyColumnId = (appId: string) => `key:${appId}`
 
 /**
- * Grid column widths the user dragged — by env id, or `keyColumnId(appId)` —
+ * Storage id for an env's column. Shown alone it fills the grid, so a width dragged there is kept
+ * apart from the one it has among other envs.
+ */
+export const envColumnId = (envId: string, alone: boolean) => (alone ? `solo:${envId}` : envId)
+
+/**
+ * Grid column widths the user dragged — by `envColumnId`, or `keyColumnId(appId)` —
  * remembered in this browser. An env keeps its width while hidden, so
  * checking it again restores it.
  */
