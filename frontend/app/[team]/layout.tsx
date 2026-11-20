@@ -1,7 +1,8 @@
 'use client'
 
 import '@/app/globals.css'
-import { NavBar } from '@/components/layout/Navbar'
+import { PageTitle } from '@/components/layout/PageTitle'
+import CommandPalette from '@/components/common/CommandPalette'
 import Sidebar from '@/components/layout/Sidebar'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useUser } from '@/contexts/userContext'
@@ -126,8 +127,8 @@ export default function RootLayout(props: {
   }
 
   return (
-    // The navigation shares the shell colour, and the page sits in an inset panel: beside the
-    // sidebar from md up, and between the navbar and the tab bar below it
+    // The navigation (the sidebar, or the tab bar below md) shares the shell colour with this
+    // wrapper, and the page fills the rest as a panel. There is no top bar
     <div
       className={clsx(
         'flex h-dvh w-full overflow-hidden',
@@ -135,18 +136,21 @@ export default function RootLayout(props: {
       )}
     >
       {showUnlockDialog && <UnlockKeyringDialog organisation={activeOrganisation} />}
-      {showNav && <Sidebar />}
-      <div className="flex min-w-0 flex-1 flex-col">
-        {showNav && <NavBar />}
-        <div
-          className={clsx(
-            'min-h-0 flex-1 overflow-auto',
-            showNav &&
-              'mb-[var(--mobile-tabbar-height)] rounded-2xl border-y border-neutral-500/20 bg-neutral-200 dark:bg-neutral-900 md:rounded-none md:rounded-tl-2xl md:border-b-0 md:border-l'
-          )}
-        >
-          {orgInSync && children}
-        </div>
+      {showNav && (
+        <>
+          <Sidebar />
+          <CommandPalette />
+          <PageTitle />
+        </>
+      )}
+      <div
+        className={clsx(
+          'min-w-0 flex-1 overflow-auto',
+          showNav &&
+            'mb-[var(--mobile-tabbar-height)] rounded-b-2xl border-b border-neutral-500/20 bg-neutral-200 dark:bg-neutral-900 md:rounded-none md:border-b-0 md:border-l'
+        )}
+      >
+        {orgInSync && children}
       </div>
     </div>
   )

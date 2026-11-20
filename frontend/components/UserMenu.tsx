@@ -19,8 +19,7 @@ const ROW_TEXT = 'text-zinc-700 dark:text-zinc-300'
 const ROW_ACTIVE = 'bg-zinc-900/5 dark:bg-white/5'
 const ROW_ICON = 'size-3.5 shrink-0 text-neutral-500'
 
-// themeInSidebar: md+ has the theme control in the sidebar, so the menu only keeps it below md
-export default function UserMenu({ themeInSidebar = false }: { themeInSidebar?: boolean }) {
+export default function UserMenu() {
   const { data: session } = useSession()
   const { activeOrganisation } = useContext(organisationContext)
 
@@ -87,7 +86,7 @@ export default function UserMenu({ themeInSidebar = false }: { themeInSidebar?: 
                   )}
                 </Menu.Item>
               )}
-              <div className={clsx(ROW_STYLE, ROW_TEXT, themeInSidebar && 'md:hidden')}>
+              <div className={clsx(ROW_STYLE, ROW_TEXT)}>
                 <FaPalette className={ROW_ICON} />
                 <span className="flex-1">Theme</span>
                 <div className="flex items-center gap-2 text-neutral-500">

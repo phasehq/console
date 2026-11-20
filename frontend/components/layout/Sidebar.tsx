@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
 import {
-  FaCog,
   FaCubes,
   FaHome,
   FaUsersCog,
@@ -22,17 +21,29 @@ import {
   FaQuestionCircle,
   FaSlack,
   FaGithub,
+  FaSearch,
 } from 'react-icons/fa'
-import { TbLayoutSidebarLeftCollapseFilled, TbLayoutSidebarLeftExpandFilled } from 'react-icons/tb'
+import {
+  TbLayoutSidebarLeftCollapseFilled,
+  TbLayoutSidebarLeftExpandFilled,
+  TbSelector,
+} from 'react-icons/tb'
+import { MdLogout } from 'react-icons/md'
 import { IconType } from 'react-icons'
 import { useQuery } from '@apollo/client'
 import { organisationContext } from '@/contexts/organisationContext'
 import { SidebarContext } from '@/contexts/sidebarContext'
+import { useSession } from '@/contexts/userContext'
+import { handleSignout } from '@/apollo/client'
 import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AppType } from '@/apollo/graphql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { Menu, Popover, Transition } from '@headlessui/react'
 import { LogoWordMark } from '../common/LogoWordMark'
+import { Avatar } from '../common/Avatar'
+import { openCommandPalette, useModifierKey } from '../common/CommandPalette'
+import { STATUS_PAGE_BASE_URL, statusColor, useSystemStatus } from '../common/StatusIndicator'
+import { RoleLabel } from '../users/RoleLabel'
 import { OrgMenuItems } from './OrgSwitcher'
 import { SIDEBAR_WIDTH, SidebarResizeHandle } from './SidebarResizeHandle'
 import { ModeToggle } from '../common/ModeToggle'
@@ -363,7 +374,7 @@ const SidebarFooterMenu = ({
 type FooterMenuProps = { collapsed: boolean; animating: boolean }
 
 const HelpMenu = (props: FooterMenuProps) => (
-  <SidebarFooterMenu name="Help" icon={<FaQuestionCircle />} align="left" {...props}>
+  <SidebarFooterMenu name="Help" icon={<FaQuestionCircle />} align="right" {...props}>
     {(close) => (
       <div className="space-y-0.5 p-1">
         {HELP_LINKS.map(({ name, href, icon }) => (
@@ -376,42 +387,220 @@ const HelpMenu = (props: FooterMenuProps) => (
   </SidebarFooterMenu>
 )
 
-const SettingsMenu = ({
+// Who is signed in, at the top of the account menu
+const AccountHeader = () => {
+  const { data: session } = useSession()
+  const { activeOrganisation } = useContext(organisationContext)
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2.5">
+      <Avatar user={session?.user} size="md" />
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* The role wraps onto its own line rather than squeezing a long name */}
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          <span className="min-w-0 truncate text-xs font-medium leading-5 text-zinc-900 dark:text-zinc-100">
+            {session?.user?.name}
+          </span>
+          {activeOrganisation?.role && <RoleLabel role={activeOrganisation.role} size="xs" />}
+        </div>
+        <span className="truncate text-2xs leading-4 text-neutral-500">{session?.user?.email}</span>
+      </div>
+    </div>
+  )
+}
+
+const ThemeRow = ({ className }: { className: string }) => (
+  <div className={clsx(className, 'text-zinc-600 dark:text-zinc-400')}>
+    <FaPalette className={MENU_ROW_ICON} />
+    <span className="flex-1">Theme</span>
+    <div className="flex items-center gap-2 text-neutral-500">
+      <FaSun />
+      <ModeToggle />
+      <FaMoon />
+    </div>
+  </div>
+)
+
+// The signed-in user, at the foot of the sidebar. Its menu holds everything about the account:
+// the organisation switch, the theme, the settings pages and sign out
+const AccountMenu = ({
   team,
   active,
-  ...props
-}: FooterMenuProps & { team: string; active: boolean }) => (
-  <SidebarFooterMenu name="Settings" icon={<FaCog />} active={active} align="right" {...props}>
-    {(close) => (
-      <>
-        <div className="p-1">
-          <div className={clsx(MENU_ROW_STYLE, 'text-zinc-600 dark:text-zinc-400')}>
-            <FaPalette className={MENU_ROW_ICON} />
-            <span className="flex-1">Theme</span>
-            <div className="flex items-center gap-2 text-neutral-500">
-              <FaSun />
-              <ModeToggle />
-              <FaMoon />
-            </div>
-          </div>
-        </div>
-        <div className="space-y-0.5 p-1">
-          <FooterMenuLink href="/account" icon={FaUserCircle} onClick={close}>
-            Account settings
-          </FooterMenuLink>
-          <FooterMenuLink
-            href={`/${team}/settings`}
-            icon={FaBuilding}
-            current={active}
-            onClick={close}
+  collapsed,
+  animating,
+}: FooterMenuProps & { team: string; active: boolean }) => {
+  const { data: session } = useSession()
+  const { activeOrganisation } = useContext(organisationContext)
+
+  if (!session) return null
+
+  return (
+    <Popover className="group/item relative mt-1">
+      {({ open }) => (
+        <>
+          <Popover.Button
+            className={clsx(
+              'flex h-10 w-full items-center rounded-md px-2 text-left outline-none transition ease data-[focus]:ring-2 data-[focus]:ring-neutral-500',
+              active || open ? ACTIVE_BG : HOVER_BG
+            )}
           >
-            Organisation settings
-          </FooterMenuLink>
-        </div>
-      </>
-    )}
-  </SidebarFooterMenu>
-)
+            {/* The name follows, so the initials are decoration */}
+            <span className="shrink-0" aria-hidden="true">
+              <Avatar user={session.user} size="xs" showTitle={false} />
+            </span>
+            {/* Clipped by the narrowing sidebar, so only the avatar is left on the rail */}
+            <span
+              className={clsx(
+                'min-w-0 flex-1 overflow-hidden',
+                animating && SLIDE,
+                collapsed && 'opacity-0'
+              )}
+            >
+              <span className="flex items-center gap-2 pl-2">
+                {/* Clipped, not ellipsised, while the sidebar moves over it */}
+                <span
+                  className={clsx(
+                    'flex min-w-0 flex-1 flex-col',
+                    animating && '[&>span]:text-clip'
+                  )}
+                >
+                  <span className="truncate text-xs font-medium leading-4 text-zinc-900 dark:text-zinc-100">
+                    {session.user?.name}
+                  </span>
+                  <span className="truncate text-2xs leading-4 text-neutral-500">
+                    {activeOrganisation?.name}
+                  </span>
+                </span>
+                <TbSelector className="size-3.5 shrink-0 text-neutral-500" />
+              </span>
+            </span>
+          </Popover.Button>
+          {collapsed && !open && <div className={TOOLTIP_STYLE}>{session.user?.name}</div>}
+          <Transition
+            as={Fragment}
+            enter="transition ease-out duration-100"
+            enterFrom="transform opacity-0 scale-95"
+            enterTo="transform opacity-100 scale-100"
+            leave="transition ease-in duration-75"
+            leaveFrom="transform opacity-100 scale-100"
+            leaveTo="transform opacity-0 scale-95"
+          >
+            {/* Collapsed: opens beside the avatar. Expanded: spans the pane, above the row */}
+            <Popover.Panel
+              className={clsx(
+                'absolute z-20 min-w-56 divide-y divide-neutral-500/20 rounded-md bg-neutral-200 shadow-2xl ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-neutral-800',
+                collapsed
+                  ? 'bottom-0 left-full ml-4 w-56 origin-bottom-left'
+                  : 'inset-x-0 bottom-full mb-1 origin-bottom'
+              )}
+            >
+              {({ close }) => (
+                <>
+                  <AccountHeader />
+                  <OrgMenuItems heading="Organisation" onNavigate={close} />
+                  <div className="space-y-0.5 p-1">
+                    <ThemeRow className={MENU_ROW_STYLE} />
+                    <FooterMenuLink href="/account" icon={FaUserCircle} onClick={close}>
+                      Account settings
+                    </FooterMenuLink>
+                    <FooterMenuLink
+                      href={`/${team}/settings`}
+                      icon={FaBuilding}
+                      current={active}
+                      onClick={close}
+                    >
+                      Organisation settings
+                    </FooterMenuLink>
+                  </div>
+                  <div className="p-1">
+                    <button
+                      type="button"
+                      onClick={() => handleSignout()}
+                      className={clsx(
+                        MENU_ROW_STYLE,
+                        'text-red-700 hover:bg-red-500/10 dark:text-red-400'
+                      )}
+                    >
+                      <MdLogout className="size-3.5 shrink-0" />
+                      Sign out
+                    </button>
+                  </div>
+                </>
+              )}
+            </Popover.Panel>
+          </Transition>
+        </>
+      )}
+    </Popover>
+  )
+}
+
+// The hosted service's status, linking to the status page. Self-hosted instances have none
+const SystemStatus = ({ collapsed, animating }: FooterMenuProps) => {
+  const { status, isLoading, enabled } = useSystemStatus()
+
+  if (!enabled) return null
+
+  const description = status?.description || 'Loading'
+
+  return (
+    <div className="group/item relative mt-1">
+      <Link
+        href={STATUS_PAGE_BASE_URL}
+        target="_blank"
+        aria-label={`System status: ${description}`}
+        className={clsx(
+          'flex h-6 w-full items-center rounded-md px-4 text-2xs outline-none transition ease focus-visible:ring-2 focus-visible:ring-neutral-500',
+          'text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100'
+        )}
+      >
+        <span
+          className={clsx(
+            'size-2 shrink-0 rounded-full',
+            statusColor(status),
+            isLoading && 'animate-pulse'
+          )}
+        />
+        <span
+          className={clsx(
+            'min-w-0 flex-1 overflow-hidden',
+            animating && SLIDE,
+            collapsed && 'opacity-0'
+          )}
+        >
+          <span className={clsx('block truncate pl-2', animating && 'text-clip')}>
+            {description}
+          </span>
+        </span>
+      </Link>
+      {collapsed && <div className={TOOLTIP_STYLE}>{description}</div>}
+    </div>
+  )
+}
+
+// Opens the command palette. It sits beside the logo, and under it on the rail
+const SidebarSearchButton = ({ collapsed }: { collapsed: boolean }) => {
+  const modifierKey = useModifierKey()
+
+  return (
+    <div className="group/item absolute bottom-2 right-3">
+      <button
+        type="button"
+        onClick={openCommandPalette}
+        aria-label="Search"
+        title={collapsed ? undefined : `Search (${modifierKey} + K)`}
+        className={clsx(
+          'flex h-8 w-10 items-center justify-center rounded-md text-sm outline-none transition ease focus-visible:ring-2 focus-visible:ring-neutral-500',
+          HOVER_BG,
+          INACTIVE_STYLE
+        )}
+      >
+        <FaSearch />
+      </button>
+      {collapsed && <div className={TOOLTIP_STYLE}>Search</div>}
+    </div>
+  )
+}
 
 const SidebarCollapseToggle = ({
   collapsed,
@@ -421,7 +610,7 @@ const SidebarCollapseToggle = ({
   const Icon = collapsed ? TbLayoutSidebarLeftExpandFilled : TbLayoutSidebarLeftCollapseFilled
 
   return (
-    <div className="group/item relative mb-1 flex">
+    <div className="group/item absolute left-0 top-0 flex">
       <button
         type="button"
         onClick={onToggle}
@@ -473,10 +662,29 @@ const MobileTab = ({
   </>
 )
 
-const MobileMoreMenu = ({ overflowLinks }: { overflowLinks: SidebarLinkT[] }) => (
+// On phones the tab bar is the whole shell, so More also carries the account menu and search
+const MobileMoreMenu = ({
+  overflowLinks,
+  team,
+  settingsActive,
+}: {
+  overflowLinks: SidebarLinkT[]
+  team: string
+  settingsActive: boolean
+}) => (
   <Menu as="div" className="relative min-w-0 flex-1">
     {({ open }) => {
-      const highlighted = open || overflowLinks.some((link) => link.active)
+      const highlighted = open || settingsActive || overflowLinks.some((link) => link.active)
+      const rowStyle = (active: boolean, current = false) =>
+        clsx(
+          MOBILE_MENU_ROW,
+          current
+            ? [ACTIVE_BG, ACTIVE_TEXT]
+            : [
+                'text-zinc-600 dark:text-zinc-400',
+                active && 'bg-zinc-900/5 text-zinc-900 dark:bg-white/5 dark:text-zinc-100',
+              ]
+        )
 
       return (
         <>
@@ -496,25 +704,24 @@ const MobileMoreMenu = ({ overflowLinks }: { overflowLinks: SidebarLinkT[] }) =>
             leaveFrom="transform opacity-100 translate-y-0"
             leaveTo="transform opacity-0 translate-y-1"
           >
-            <Menu.Items className="absolute bottom-full right-1 mb-2 w-64 origin-bottom-right divide-y divide-neutral-500/20 rounded-md bg-neutral-200 shadow-2xl ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-neutral-800">
-              <OrgMenuItems heading="Organisation" touch />
+            <Menu.Items className="absolute bottom-full right-1 mb-2 max-h-[calc(100dvh_-_4.5rem)] w-64 origin-bottom-right divide-y divide-neutral-500/20 overflow-y-auto rounded-md bg-neutral-200 shadow-2xl ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-neutral-800">
+              <AccountHeader />
               <div className="space-y-0.5 p-1">
+                <Menu.Item>
+                  {({ active }) => (
+                    <button type="button" onClick={openCommandPalette} className={rowStyle(active)}>
+                      <FaSearch className={MENU_ROW_ICON} />
+                      Search
+                    </button>
+                  )}
+                </Menu.Item>
                 {overflowLinks.map((link) => (
                   <Menu.Item key={link.name}>
                     {({ active }) => (
                       <Link
                         href={link.href}
                         aria-current={link.active ? 'page' : undefined}
-                        className={clsx(
-                          MOBILE_MENU_ROW,
-                          link.active
-                            ? [ACTIVE_BG, ACTIVE_TEXT]
-                            : [
-                                'text-zinc-600 dark:text-zinc-400',
-                                active &&
-                                  'bg-zinc-900/5 text-zinc-900 dark:bg-white/5 dark:text-zinc-100',
-                              ]
-                        )}
+                        className={rowStyle(active, link.active)}
                       >
                         <span className="text-neutral-500">{link.icon}</span>
                         {link.name}
@@ -522,6 +729,48 @@ const MobileMoreMenu = ({ overflowLinks }: { overflowLinks: SidebarLinkT[] }) =>
                     )}
                   </Menu.Item>
                 ))}
+              </div>
+              <OrgMenuItems heading="Organisation" touch />
+              <div className="space-y-0.5 p-1">
+                <ThemeRow className={MOBILE_MENU_ROW} />
+                <Menu.Item>
+                  {({ active }) => (
+                    <Link href="/account" className={rowStyle(active)}>
+                      <FaUserCircle className={MENU_ROW_ICON} />
+                      Account settings
+                    </Link>
+                  )}
+                </Menu.Item>
+                <Menu.Item>
+                  {({ active }) => (
+                    <Link
+                      href={`/${team}/settings`}
+                      aria-current={settingsActive ? 'page' : undefined}
+                      className={rowStyle(active, settingsActive)}
+                    >
+                      <FaBuilding className={MENU_ROW_ICON} />
+                      Organisation settings
+                    </Link>
+                  )}
+                </Menu.Item>
+              </div>
+              <div className="p-1">
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      type="button"
+                      onClick={() => handleSignout()}
+                      className={clsx(
+                        MOBILE_MENU_ROW,
+                        'text-red-700 dark:text-red-400',
+                        active && 'bg-red-500/10'
+                      )}
+                    >
+                      <MdLogout className="size-3.5 shrink-0" />
+                      Sign out
+                    </button>
+                  )}
+                </Menu.Item>
               </div>
             </Menu.Items>
           </Transition>
@@ -709,10 +958,7 @@ const Sidebar = () => {
   }, [pathname, appLinks.length])
 
   const mobileLinks = links.slice(0, 4)
-  const overflowLinks: SidebarLinkT[] = [
-    ...links.slice(4),
-    { name: 'Settings', href: `/${team}/settings`, icon: <FaCog />, active: settingsActive },
-  ]
+  const overflowLinks = links.slice(4)
 
   return (
     <>
@@ -728,27 +974,33 @@ const Sidebar = () => {
           collapsed && 'w-16'
         )}
       >
-        {/* pl-[23px] centres the logo mark on the nav icons in both states */}
-        <div className="flex h-12 shrink-0 items-center gap-1.5 overflow-hidden pl-[23px] pr-3">
-          <Link href="/" aria-label="Phase" className="shrink-0">
-            {/* The rail clips the wordmark down to its mark */}
-            <div
-              className={clsx(
-                'overflow-hidden',
-                animating && SLIDE,
-                collapsed ? 'w-[18px]' : 'w-16'
-              )}
-            >
-              <LogoWordMark className="w-16 max-w-none fill-black dark:fill-white" />
-            </div>
-          </Link>
-          {activeOrganisation && (
-            <Fade show={!collapsed}>
-              <span className="flex">
-                <PlanLabel plan={activeOrganisation.plan} size="sm" />
-              </span>
-            </Fade>
-          )}
+        {/* The search button is pinned bottom right, so it slides under the logo as this box narrows and grows */}
+        <div
+          className={clsx('relative shrink-0', animating && SLIDE, collapsed ? 'h-[84px]' : 'h-12')}
+        >
+          {/* pl-[23px] centres the logo mark on the nav icons in both states */}
+          <div className="flex h-12 items-center gap-1.5 overflow-hidden pl-[23px] pr-14">
+            <Link href="/" aria-label="Phase" className="shrink-0">
+              {/* The rail clips the wordmark down to its mark */}
+              <div
+                className={clsx(
+                  'overflow-hidden',
+                  animating && SLIDE,
+                  collapsed ? 'w-[18px]' : 'w-16'
+                )}
+              >
+                <LogoWordMark className="w-16 max-w-none fill-black dark:fill-white" />
+              </div>
+            </Link>
+            {activeOrganisation && (
+              <Fade show={!collapsed}>
+                <span className="flex">
+                  <PlanLabel plan={activeOrganisation.plan} size="sm" />
+                </span>
+              </Fade>
+            )}
+          </div>
+          <SidebarSearchButton collapsed={collapsed} />
         </div>
 
         {/* The settled rail lets tooltips and flyouts overflow it. Otherwise the list scrolls and fades at its edges */}
@@ -774,24 +1026,31 @@ const Sidebar = () => {
         </nav>
 
         <div className="shrink-0 border-t border-neutral-500/20 px-3 py-2">
-          {/* A window too narrow for the full sidebar has nothing to expand into */}
-          {!isAutoCollapsed && (
-            <SidebarCollapseToggle
-              collapsed={collapsed}
-              animating={animating}
-              onToggle={toggleCollapsed}
-            />
-          )}
-          {/* Help is pinned top left and Settings bottom right, so the row turns into a column as this box narrows and grows */}
-          <div className={clsx('relative', animating && SLIDE, collapsed ? 'h-[68px]' : 'h-8')}>
+          {/* The toggle is pinned top left and Help bottom right, so the row turns into a column as this box narrows and grows */}
+          <div
+            className={clsx(
+              'relative',
+              animating && SLIDE,
+              collapsed && !isAutoCollapsed ? 'h-[68px]' : 'h-8'
+            )}
+          >
+            {/* A window too narrow for the full sidebar has nothing to expand into */}
+            {!isAutoCollapsed && (
+              <SidebarCollapseToggle
+                collapsed={collapsed}
+                animating={animating}
+                onToggle={toggleCollapsed}
+              />
+            )}
             <HelpMenu collapsed={collapsed} animating={animating} />
-            <SettingsMenu
-              team={team}
-              active={settingsActive}
-              collapsed={collapsed}
-              animating={animating}
-            />
           </div>
+          <AccountMenu
+            team={team}
+            active={settingsActive}
+            collapsed={collapsed}
+            animating={animating}
+          />
+          <SystemStatus collapsed={collapsed} animating={animating} />
         </div>
 
         {!collapsed && <SidebarResizeHandle />}
@@ -816,7 +1075,7 @@ const Sidebar = () => {
             />
           </Link>
         ))}
-        <MobileMoreMenu overflowLinks={overflowLinks} />
+        <MobileMoreMenu overflowLinks={overflowLinks} team={team} settingsActive={settingsActive} />
       </nav>
     </>
   )
