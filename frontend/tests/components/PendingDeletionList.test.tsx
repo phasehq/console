@@ -118,6 +118,39 @@ describe('PendingDeletionList', () => {
     expect(deleteNowButton()).toBeUndefined()
   })
 
+  // The line under the name: an icon and what is happening to the item.
+  const statusLine = (text: string) =>
+    Array.from(container.querySelectorAll('li span')).find((span) =>
+      span.textContent?.startsWith(text)
+    )!.parentElement!
+
+  it('shows the amber spinner of a running sync while it is being deleted', async () => {
+    await render([{ ...pending, canRestore: false }])
+
+    const line = statusLine('Being deleted')
+    const spinner = line.querySelector('[role="status"]')
+    expect(spinner).not.toBeNull()
+    expect(spinner!.className).toContain('border-amber-500')
+    expect(spinner!.className).toContain('animate-spin')
+    // Not the clock of a deletion that is only scheduled.
+    expect(line.querySelector('svg')).toBeNull()
+    expect(line.className).toContain('text-amber-500')
+    expect(line.className).not.toContain('text-red-500')
+  })
+
+  it.each([
+    ['scheduled', {}, 'Will be deleted on'],
+    ['delayed', { deletionDelayed: true }, 'Deletion delayed'],
+    ['delayed past restoring', { deletionDelayed: true, canRestore: false }, 'Deletion delayed'],
+  ])('keeps the red clock while it is %s', async (_, state, text) => {
+    await render([{ ...pending, ...state }])
+
+    const line = statusLine(text)
+    expect(line.querySelector('svg')).not.toBeNull()
+    expect(line.querySelector('[role="status"]')).toBeNull()
+    expect(line.className).toContain('text-red-500')
+  })
+
   it('says the deletion is delayed, and offers a restore but not delete now', async () => {
     await render([{ ...pending, deletionDelayed: true }])
 

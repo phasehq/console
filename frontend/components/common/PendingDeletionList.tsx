@@ -1,10 +1,12 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import clsx from 'clsx'
 import { FaClock, FaTrash, FaUndo } from 'react-icons/fa'
 import { Alert } from './Alert'
 import { Button } from './Button'
 import GenericDialog from './GenericDialog'
+import Spinner from './Spinner'
 import { formatDeletionDate } from '@/utils/organisation'
 
 export type PendingDeletion = {
@@ -24,6 +26,23 @@ const status = (item: PendingDeletion) => {
   if (item.deletionDelayed) return "Deletion delayed: Phase couldn't revoke some credentials"
   if (item.canRestore) return `Will be deleted on ${formatDeletionDate(item.deletionScheduledFor)}`
   return 'Being deleted'
+}
+
+/** A red clock while it waits for its date, the amber spinner of a running sync once it is being deleted. */
+const StatusLine = ({ item }: { item: PendingDeletion }) => {
+  const beingDeleted = isBeingDeleted(item)
+
+  return (
+    <div
+      className={clsx(
+        'flex items-center gap-1.5 text-xs',
+        beingDeleted ? 'text-amber-500' : 'text-red-500'
+      )}
+    >
+      {beingDeleted ? <Spinner size="xs" color="amber" /> : <FaClock className="shrink-0" />}
+      <span>{status(item)}</span>
+    </div>
+  )
 }
 
 /** Asks before giving up the rest of the time in which the item can be restored. */
@@ -119,10 +138,7 @@ export const PendingDeletionList = <T extends PendingDeletion>({
               <div className="font-medium text-sm truncate text-black dark:text-white">
                 {item.name}
               </div>
-              <div className="flex items-center gap-1.5 text-red-500 text-xs">
-                <FaClock className="shrink-0" />
-                <span>{status(item)}</span>
-              </div>
+              <StatusLine item={item} />
             </div>
             {item.canRestore && allowRestore(item) && (
               <div className="flex items-center gap-2 shrink-0">
