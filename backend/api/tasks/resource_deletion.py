@@ -471,7 +471,13 @@ def _delete(environments, lock, may_be_purged, delete, label, revoke):
             if not live_credentials_remain(environments):
                 # Written since the batched delete by a request already under
                 # way. The cascade skips them, and would fail on one left.
-                delete_late_secret_events(environments)
+                if not delete_late_secret_events(environments):
+                    logger.info(
+                        "Purge of %s found a secret event another transaction "
+                        "holds; the next sweep continues",
+                        label,
+                    )
+                    return None
                 delete(row)
                 return row
 

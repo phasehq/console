@@ -105,6 +105,7 @@ def steps():
     order.start.return_value = 1
     order.block.return_value = 1
     order.minted.return_value = False
+    order.late_events.return_value = True
     order.delete.side_effect = _clear_primary_key
 
     def conditional_update(**values):
@@ -805,6 +806,23 @@ class TestPurgeApp:
         steps.audit.assert_not_called()
         steps.email_app.assert_not_called()
 
+    def test_leaves_it_to_the_next_sweep_if_a_late_event_is_held(self, steps):
+        # Another transaction holds a secret event that was written meanwhile.
+        # The cleanup skips it and says so. The cascade would fail on it and
+        # roll back, so it is not started.
+        steps.late_events.return_value = False
+        model = _model(_app())
+
+        with _models(App=model, Environment=MagicMock()):
+            jobs.purge_app("app-1")
+
+        assert _called(steps)[6:] == [*CHECKED, "late_events", "commit"]
+        steps.delete.assert_not_called()
+        steps.audit.assert_not_called()
+        steps.email_app.assert_not_called()
+        # Past the point of no return: the row stays as it is for the next run.
+        assert not _handed_back(model)
+
     def test_looks_for_live_credentials_with_every_row_above_them_locked(self, steps):
         # The secrets first: a rotation in flight holds its rotating secret,
         # then updates the environment, so the other order could deadlock with
@@ -1009,6 +1027,18 @@ class TestPurgeEnvironment:
             jobs.purge_environment("env-1")
 
         steps.delete.assert_not_called()
+
+    def test_leaves_it_to_the_next_sweep_if_a_late_event_is_held(self, steps):
+        steps.late_events.return_value = False
+
+        with _models(Environment=_model(_environment())):
+            jobs.purge_environment("env-1")
+
+        assert _called(steps)[6:] == [*CHECKED, "late_events", "commit"]
+        steps.late_events.assert_called_once_with({"id": "env-1"})
+        steps.delete.assert_not_called()
+        steps.audit.assert_not_called()
+        steps.email_environment.assert_not_called()
 
     def test_restored_while_releasing_is_not_deleted(self, steps):
         model = _model(_environment(), locked=_environment(deleted_ago=None))
@@ -1633,8 +1663,10 @@ class TestScopedPurgeSteps:
 
         with self._purge_models(
             Environment=environment_model, SecretEvent=event_model
-        ), patch.object(purge, "delete_secret_events") as delete:
-            purge.delete_late_secret_events({"app": "app-1"})
+        ), patch.object(
+            purge, "delete_secret_events", return_value=(1, True)
+        ) as delete:
+            assert purge.delete_late_secret_events({"app": "app-1"}) is True
 
         # all_objects: an environment pending deletion has events too.
         environment_model.all_objects.filter.assert_called_once_with(app="app-1")
@@ -1647,6 +1679,22 @@ class TestScopedPurgeSteps:
         for deleted in delete.call_args_list:
             assert deleted.args == (event_model.objects.filter.return_value,)
             assert deleted.kwargs == {"batch_size": 10_000, "sleep_ms": 0}
+
+    def test_a_late_event_another_transaction_holds_is_reported(self):
+        # The batched delete skips a locked row and says it has not finished.
+        # The cascade must then not start: it would fail on that row.
+        environment_model, event_model = MagicMock(), MagicMock()
+        environment_model.all_objects.filter.return_value.values_list.return_value = [
+            "env-1",
+            "env-2",
+        ]
+
+        with self._purge_models(
+            Environment=environment_model, SecretEvent=event_model
+        ), patch.object(
+            purge, "delete_secret_events", side_effect=[(2, True), (0, False)]
+        ):
+            assert purge.delete_late_secret_events({"app": "app-1"}) is False
 
     def test_the_cascade_can_be_looked_at_before_it_deletes(self):
         app = App(id="app-1")

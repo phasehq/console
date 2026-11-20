@@ -254,7 +254,8 @@ def delete_late_secret_events(environments):
     """Delete the secret events written since the batched delete, by a
     request that was already under way. For the final transaction, once
     `lock_environments` holds the rows: no more can then be written, and the
-    cascade, which skips them, finds none left to fail on."""
+    cascade, which skips them, finds none left to fail on. Returns False when
+    one is left: a row another transaction holds is skipped, not waited for."""
     Environment = apps.get_model("api", "Environment")
     SecretEvent = apps.get_model("api", "SecretEvent")
 
@@ -262,11 +263,14 @@ def delete_late_secret_events(environments):
         "id", flat=True
     ):
         # A handful of rows at most, with locks held: no pause between batches.
-        delete_secret_events(
+        _, finished = delete_secret_events(
             SecretEvent.objects.filter(environment_id=environment_id),
             batch_size=SECRET_EVENT_BATCH_SIZE,
             sleep_ms=0,
         )
+        if not finished:
+            return False
+    return True
 
 
 class EventlessCollector(Collector):
