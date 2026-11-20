@@ -126,22 +126,23 @@ export default function RootLayout(props: {
   }
 
   return (
+    // The navigation shares the shell colour, and the page sits in an inset panel: beside the
+    // sidebar from md up, and between the navbar and the tab bar below it
     <div
       className={clsx(
-        'w-full h-dvh overflow-hidden grid',
-        showNav &&
-          'md:divide-x md:divide-neutral-300 md:dark:divide-neutral-800 md:grid-cols-[max-content_1fr]'
+        'flex h-dvh w-full overflow-hidden',
+        showNav && 'bg-neutral-300/50 dark:bg-neutral-950/50'
       )}
     >
       {showUnlockDialog && <UnlockKeyringDialog organisation={activeOrganisation} />}
-      {showNav && <NavBar />}
       {showNav && <Sidebar />}
-      <div className="grid h-dvh">
-        <div></div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {showNav && <NavBar />}
         <div
           className={clsx(
-            'overflow-auto',
-            showNav && 'mt-12 min-h-[calc(100dvh_-_48px)] pb-[var(--mobile-tabbar-height)]'
+            'min-h-0 flex-1 overflow-auto',
+            showNav &&
+              'mb-[var(--mobile-tabbar-height)] rounded-2xl border-y border-neutral-500/20 bg-neutral-200 dark:bg-neutral-900 md:rounded-none md:rounded-tl-2xl md:border-b-0 md:border-l'
           )}
         >
           {orgInSync && children}

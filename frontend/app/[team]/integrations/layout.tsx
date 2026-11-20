@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
+import { getIntegrationPages } from '@/utils/navigation'
 
 export default function AccessLayout(props: {
   params: Promise<{ team: string }>
@@ -30,31 +31,7 @@ export default function AccessLayout(props: {
       userHasGlobalAccess(activeOrganisation.role?.permissions)
     : false
 
-  const tabs = useMemo(
-    () => [
-      {
-        name: 'Syncs',
-        link: 'syncs',
-      },
-      {
-        name: 'Dynamic Secrets',
-        link: 'dynamic-secrets',
-      },
-      ...(userCanReadLogStreams
-        ? [
-            {
-              name: 'Log Streams',
-              link: 'log-streams',
-            },
-          ]
-        : []),
-      {
-        name: 'Third-party credentials',
-        link: 'credentials',
-      },
-    ],
-    [userCanReadLogStreams]
-  )
+  const tabs = useMemo(() => getIntegrationPages(userCanReadLogStreams), [userCanReadLogStreams])
 
   useEffect(() => {
     const activeTabIndex = () => {

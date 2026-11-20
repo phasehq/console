@@ -13,11 +13,11 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
 import { generateBreadcrumbs, generatePageTitle, NavigationContext } from '@/utils/navigation'
 
-import { Button } from '../common/Button'
 import { StatusIndicator } from '../common/StatusIndicator'
 import { LogoMark } from '../common/LogoMark'
 import CommandPalette from '../common/CommandPalette'
 import UserMenu from '../UserMenu'
+import { OrgSwitcher } from './OrgSwitcher'
 
 import { useParsedRoute } from '@/utils/route'
 
@@ -61,21 +61,23 @@ export const NavBar = () => {
 
   const breadcrumbs = generateBreadcrumbs(navigationContext)
 
-  const BreadCrumbs = () => {
+  // Called, not mounted: a nested component remounts on every render, which would close the org menu
+  const renderBreadcrumbs = () => {
     return (
       <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-        <Link href="/" className="shrink-0">
+        {/* md+ shows the logo in the sidebar instead */}
+        <Link href="/" className="shrink-0 md:hidden">
           <LogoMark className="size-7 fill-black dark:fill-white" />
         </Link>
 
         {breadcrumbs.map((crumb, index) => (
           <div key={index} className="hidden min-w-0 items-center gap-2 text-xs md:flex">
-            <span className="shrink-0">/</span>
+            {index > 0 && <span className="shrink-0">/</span>}
             {crumb.isLink && crumb.href ? (
               <Link
                 href={crumb.href}
                 title={crumb.label}
-                className="capitalize overflow-hidden text-ellipsis whitespace-nowrap max-w-[12rem] text-zinc-500"
+                className="capitalize overflow-hidden text-ellipsis whitespace-nowrap max-w-[12rem] text-zinc-600 dark:text-zinc-400"
               >
                 {crumb.label}
               </Link>
@@ -87,6 +89,7 @@ export const NavBar = () => {
                 {crumb.label}
               </span>
             )}
+            {index === 0 && <OrgSwitcher />}
           </div>
         ))}
       </div>
@@ -107,8 +110,9 @@ export const NavBar = () => {
   return (
     // Below md there are no breadcrumbs, so the palette sits beside the logo
     // and takes the free width; md+ keeps the centered 3-column grid
-    <header className="pr-3 sm:pr-4 lg:pr-6 pl-3 w-full h-12 border-b border-neutral-500/20 fixed top-0 z-10 flex gap-2 md:grid md:grid-cols-3 md:gap-4 items-center justify-between text-neutral-500 font-medium text-xs bg-neutral-100/70 dark:bg-neutral-800/20 backdrop-blur-md">
-      <BreadCrumbs />
+    // Drawn on the shell colour, so it has no background or border of its own
+    <header className="relative z-10 pr-3 sm:pr-4 lg:pr-6 pl-3 md:pl-4 lg:pl-6 w-full h-12 shrink-0 flex gap-2 md:grid md:grid-cols-3 md:gap-4 items-center justify-between text-neutral-500 font-medium text-xs">
+      {renderBreadcrumbs()}
 
       <div className="flex min-w-0 flex-1 justify-center md:w-full">
         <CommandPalette />
@@ -116,10 +120,7 @@ export const NavBar = () => {
 
       <div className="flex gap-3 items-center justify-end shrink-0">
         <StatusIndicator />
-        <Link href="https://docs.phase.dev" target="_blank" className="hidden lg:block">
-          <Button variant="secondary">Docs</Button>
-        </Link>
-        <UserMenu />
+        <UserMenu themeInSidebar />
       </div>
     </header>
   )

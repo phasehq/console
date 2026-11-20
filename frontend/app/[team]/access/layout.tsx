@@ -1,10 +1,11 @@
 'use client'
 
-import { Fragment, useContext, useEffect, useMemo, useState, use } from 'react'
+import { Fragment, useContext, useEffect, useState, use } from 'react'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { ACCESS_PAGES } from '@/utils/navigation'
 
 export default function AccessLayout(props: {
   params: Promise<{ team: string }>
@@ -18,47 +19,7 @@ export default function AccessLayout(props: {
 
   const [tabIndex, setTabIndex] = useState(0)
 
-  const tabs = useMemo(
-    () => [
-      {
-        name: 'Members',
-        link: 'members',
-      },
-      {
-        name: 'Service Accounts',
-        link: 'service-accounts',
-      },
-      {
-        name: 'Teams',
-        link: 'teams',
-      },
-      {
-        name: 'Roles',
-        link: 'roles',
-      },
-      {
-        name: 'Single Sign-On',
-        link: 'sso',
-      },
-      {
-        name: 'SCIM',
-        link: 'scim',
-      },
-      {
-        name: 'External Identities',
-        link: 'identities',
-      },
-      {
-        name: 'Authentication',
-        link: 'authentication',
-      },
-      {
-        name: 'Network',
-        link: 'network',
-      },
-    ],
-    []
-  )
+  const tabs = ACCESS_PAGES
 
   useEffect(() => {
     const activeTabIndex = () => {
