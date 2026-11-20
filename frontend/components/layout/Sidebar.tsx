@@ -52,6 +52,7 @@ import { FaCodeMerge, FaListUl } from 'react-icons/fa6'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 import { sortApps } from '@/utils/app'
 import { ACCESS_PAGES, getIntegrationPages } from '@/utils/navigation'
+import { useShellExperiment } from '@/utils/shellExperiment'
 
 type SidebarSubLinkT = {
   name: string
@@ -426,9 +427,10 @@ const ThemeRow = ({ className }: { className: string }) => (
 const AccountMenu = ({
   team,
   active,
+  showOrganisations,
   collapsed,
   animating,
-}: FooterMenuProps & { team: string; active: boolean }) => {
+}: FooterMenuProps & { team: string; active: boolean; showOrganisations: boolean }) => {
   const { data: session } = useSession()
   const { activeOrganisation } = useContext(organisationContext)
 
@@ -497,7 +499,7 @@ const AccountMenu = ({
               {({ close }) => (
                 <>
                   <AccountHeader />
-                  <OrgMenuItems heading="Organisation" onNavigate={close} />
+                  {showOrganisations && <OrgMenuItems heading="Organisation" onNavigate={close} />}
                   <div className="space-y-0.5 p-1">
                     <ThemeRow className={MENU_ROW_STYLE} />
                     <FooterMenuLink href="/account" icon={FaUserCircle} onClick={close}>
@@ -537,7 +539,16 @@ const AccountMenu = ({
 
 // The hosted service's status, linking to the status page. Self-hosted instances have none
 const SystemStatus = ({ collapsed, animating }: FooterMenuProps) => {
-  const { status, isLoading, enabled } = useSystemStatus()
+  const experiment = useShellExperiment()
+  const live = useSystemStatus()
+  // TEMPORARY: a healthy status to look at while developing locally
+  const { status, isLoading, enabled } = experiment.mockStatus
+    ? {
+        status: { indicator: 'none' as const, description: 'All Systems Operational' },
+        isLoading: false,
+        enabled: true,
+      }
+    : live
 
   if (!enabled) return null
 
@@ -791,6 +802,8 @@ const Sidebar = () => {
   const pathname = usePathname()
   const [, team, section, page] = pathname?.split('/') ?? []
   const { activeOrganisation } = useContext(organisationContext)
+  // TEMPORARY: variant switches, see utils/shellExperiment.ts
+  const experiment = useShellExperiment()
 
   const navRef = useRef<HTMLElement>(null)
 
@@ -1047,6 +1060,7 @@ const Sidebar = () => {
           <AccountMenu
             team={team}
             active={settingsActive}
+            showOrganisations={!experiment.breadcrumbs}
             collapsed={collapsed}
             animating={animating}
           />
