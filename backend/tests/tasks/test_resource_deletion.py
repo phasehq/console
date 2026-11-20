@@ -1185,10 +1185,11 @@ class TestDeletionEmails:
 
 @pytest.fixture
 def restore_steps():
-    with patch.object(jobs, "_resume") as resume, patch.object(
-        jobs, "_provision_team_keys"
-    ) as keys, patch.object(jobs, "_resync_referencing_environments") as resync:
-        yield MagicMock(resume=resume, keys=keys, resync=resync)
+    order = MagicMock()
+    with patch.object(jobs, "_resume", order.resume), patch.object(
+        jobs, "_provision_team_keys", order.keys
+    ), patch.object(jobs, "_resync_referencing_environments", order.resync):
+        yield order
 
 
 def _restored(model, row, related=False):
@@ -1216,6 +1217,9 @@ class TestRestoreHandlers:
         restore_steps.resync.assert_called_once_with(
             app.environments.values_list.return_value
         )
+        # The keys last: that step raises once every team was tried, and must
+        # not keep the others from running.
+        assert _called(restore_steps) == ["resume", "resync", "keys"]
 
     def test_restored_environment_resumes(self, restore_steps):
         environment = MagicMock(id="env-1", deleted_at=None)
@@ -1232,6 +1236,7 @@ class TestRestoreHandlers:
         restore_steps.resume.assert_called_once_with({"id": "env-1"})
         restore_steps.keys.assert_called_once_with(environment.app)
         restore_steps.resync.assert_called_once_with(["env-1"])
+        assert _called(restore_steps) == ["resume", "resync", "keys"]
 
     def test_waits_for_the_restore_to_commit_however_long_it_takes(
         self, restore_steps
@@ -1316,10 +1321,25 @@ class TestRestoreHandlers:
             jobs.enqueue_environment_restored("env-1")
 
         assert get_queue.call_args_list == [call("default"), call("default")]
-        assert queue.enqueue.call_args_list == [
-            call(jobs.handle_app_restored, "app-1"),
-            call(jobs.handle_environment_restored, "env-1"),
+        assert [enqueued.args for enqueued in queue.enqueue.call_args_list] == [
+            (jobs.handle_app_restored, "app-1"),
+            (jobs.handle_environment_restored, "env-1"),
         ]
+
+    @pytest.mark.parametrize(
+        "enqueue", [jobs.enqueue_app_restored, jobs.enqueue_environment_restored]
+    )
+    def test_a_handler_that_fails_or_dies_is_run_again(self, enqueue):
+        # A restore can't be asked for twice, so nothing else would finish it.
+        # rq's defaults are no retry, and 180 s for the job.
+        queue = MagicMock()
+        with patch.object(jobs.django_rq, "get_queue", return_value=queue):
+            enqueue("id-1")
+
+        options = queue.enqueue.call_args.kwargs
+        assert options["job_timeout"] == 60 * 60
+        assert options["retry"].max == 3
+        assert options["retry"].intervals == [10, 30, 60]
 
     def test_one_reference_scan_covers_every_restored_environment(self):
         with patch(
@@ -1393,11 +1413,11 @@ class TestResume:
 
 
 class TestProvisionTeamKeys:
-    def _run(self, app, teams, provision=None):
+    def _run(self, app, teams):
         team_model = MagicMock()
         team_model.objects.filter.return_value.distinct.return_value = teams
         with _models(Team=team_model), patch(
-            "api.utils.keys.provision_team_environment_keys", side_effect=provision
+            "api.utils.keys.provision_team_environment_keys"
         ) as provision_keys:
             jobs._provision_team_keys(app)
         return team_model, provision_keys
@@ -1413,12 +1433,20 @@ class TestProvisionTeamKeys:
         )
         assert provision_keys.call_args_list == [call(team, app) for team in teams]
 
-    def test_one_failing_team_does_not_stop_the_others(self):
+    def test_one_failing_team_does_not_stop_the_others_but_fails_the_job(self):
+        # Raised once every team was tried, so the job's retry covers it.
         app = MagicMock(sse_enabled=True)
+        team_model = MagicMock()
+        team_model.objects.filter.return_value.distinct.return_value = [
+            MagicMock(),
+            MagicMock(),
+        ]
 
-        _, provision_keys = self._run(
-            app, [MagicMock(), MagicMock()], provision=[RuntimeError("boom"), None]
-        )
+        with _models(Team=team_model), patch(
+            "api.utils.keys.provision_team_environment_keys",
+            side_effect=[RuntimeError("boom"), None],
+        ) as provision_keys, pytest.raises(RuntimeError, match="boom"):
+            jobs._provision_team_keys(app)
 
         assert provision_keys.call_count == 2
 

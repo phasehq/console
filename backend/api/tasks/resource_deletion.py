@@ -21,6 +21,7 @@ from django.db import transaction
 from django.db.models import F, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
+from rq import Retry
 
 from api.tasks.purge import (
     PurgeBlockedError,
@@ -54,6 +55,11 @@ PURGE_JOB_TIMEOUT = 6 * 60 * 60
 # How often one run revokes what was minted while it ran, before leaving the
 # rest to the next sweep.
 FINAL_DELETE_ATTEMPTS = 2
+RESTORE_JOB_TIMEOUT = 60 * 60
+# A restore can't be asked for twice, so its follow-up is tried again if it
+# fails or its worker dies. Every step can be repeated.
+RESTORE_JOB_RETRIES = 3
+RESTORE_JOB_RETRY_INTERVALS = [10, 30, 60]
 
 
 def _app_label(app):
@@ -73,12 +79,19 @@ def _environment_label(environment):
 
 
 def enqueue_app_restored(app_id):
-    django_rq.get_queue("default").enqueue(handle_app_restored, app_id)
+    _enqueue_restored(handle_app_restored, app_id)
 
 
 def enqueue_environment_restored(environment_id):
+    _enqueue_restored(handle_environment_restored, environment_id)
+
+
+def _enqueue_restored(handler, resource_id):
     django_rq.get_queue("default").enqueue(
-        handle_environment_restored, environment_id
+        handler,
+        resource_id,
+        job_timeout=RESTORE_JOB_TIMEOUT,
+        retry=Retry(max=RESTORE_JOB_RETRIES, interval=RESTORE_JOB_RETRY_INTERVALS),
     )
 
 
@@ -100,8 +113,9 @@ def handle_app_restored(app_id):
         return  # the restore was rolled back, or it was deleted again
 
     _resume({"app": app})
-    _provision_team_keys(app)
     _resync_referencing_environments(app.environments.values_list("id", flat=True))
+    # Last: it raises once every team was tried.
+    _provision_team_keys(app)
 
 
 def handle_environment_restored(environment_id):
@@ -117,8 +131,9 @@ def handle_environment_restored(environment_id):
         return  # the restore was rolled back, or it was deleted again
 
     _resume({"id": environment.id})
-    _provision_team_keys(environment.app)
     _resync_referencing_environments([environment.id])
+    # Last: it raises once every team was tried.
+    _provision_team_keys(environment.app)
 
 
 def _resume(environments):
@@ -171,15 +186,20 @@ def _provision_team_keys(app):
     teams = Team.objects.filter(
         app_environments__app=app, deleted_at__isnull=True
     ).distinct()
+    failed = None
     for team in teams:
         try:
             provision_team_environment_keys(team, app)
-        except Exception:
+        except Exception as e:
             logger.exception(
                 "Failed to provision keys for team %s on restored app %s",
                 team.id,
                 app.id,
             )
+            failed = e
+    if failed is not None:
+        # Once every team was tried: the job fails, and its retry does the rest.
+        raise failed
 
 
 # ---------------------------------------------------------------------------
