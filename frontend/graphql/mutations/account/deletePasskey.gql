@@ -1,0 +1,15 @@
+mutation DeletePasskeyOp(
+  $passkeyId: ID!
+  $code: String
+  $recoveryCode: String
+  $passkeyCredential: String
+) {
+  deletePasskey(
+    passkeyId: $passkeyId
+    code: $code
+    recoveryCode: $recoveryCode
+    passkeyCredential: $passkeyCredential
+  ) {
+    ok
+  }
+}
