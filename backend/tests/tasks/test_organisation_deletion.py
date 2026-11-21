@@ -12,6 +12,7 @@ from rq.exceptions import NoSuchJobError
 from api.models import RotatingSecretCredential
 from api.tasks import organisation_deletion as jobs
 from api.tasks import purge
+from api.tasks import recurring
 from api.utils.organisation_deletion import GRACE_PERIOD
 
 
@@ -276,24 +277,38 @@ class TestSweep:
             job_timeout=jobs.PURGE_JOB_TIMEOUT,
         )
 
-    def test_registration_replaces_the_schedule(self):
-        """Registration runs on every migrate and worker start, so it must
-        replace the schedule, never add a second one."""
+    def test_the_sweep_is_scheduled_hourly(self):
         scheduler = MagicMock()
+        scheduler.__contains__.return_value = False
         with patch.object(
-            jobs.django_rq, "get_scheduler", return_value=scheduler
-        ) as get_scheduler:
+            recurring.django_rq, "get_scheduler", return_value=scheduler
+        ):
             jobs.init_organisation_deletion_sweeper()
 
-        get_scheduler.assert_called_once_with("scheduled-jobs")
-        assert [name for name, _, _ in scheduler.mock_calls] == ["cancel", "schedule"]
-        scheduler.cancel.assert_called_once_with(jobs.SWEEP_JOB_ID)
         kwargs = scheduler.schedule.call_args.kwargs
         assert kwargs["id"] == jobs.SWEEP_JOB_ID
         assert kwargs["func"] == jobs.sweep_organisation_deletions
-        assert kwargs["interval"] == jobs.SWEEP_INTERVAL_SECONDS
-        assert kwargs["repeat"] is None
-        assert kwargs["result_ttl"] == -1
+        assert kwargs["interval"] == jobs.SWEEP_INTERVAL_SECONDS == 60 * 60
+        assert kwargs["queue_name"] == "scheduled-jobs"
+
+    def test_a_sweep_that_is_already_scheduled_keeps_its_time(self):
+        # Each worker start registers it: its next run must not move every
+        # time.
+        scheduler = MagicMock()
+        scheduler.__contains__.return_value = True
+        # As the releases before this one stored it.
+        scheduler.job_class.fetch.return_value = MagicMock(
+            func_name="api.tasks.organisation_deletion.sweep_organisation_deletions",
+            meta={"interval": 60 * 60},
+            origin="scheduled-jobs",
+        )
+        with patch.object(
+            recurring.django_rq, "get_scheduler", return_value=scheduler
+        ):
+            jobs.init_organisation_deletion_sweeper()
+
+        scheduler.schedule.assert_not_called()
+        scheduler.cancel.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
