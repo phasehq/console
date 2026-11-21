@@ -49,6 +49,76 @@
         "method": "POST",
         "pattern": "/api/v3/app/installations/*/access_tokens",
         "operation": "GitHub App installation access token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/repos/*/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/repos/*/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/repos/*/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/repos/*/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/orgs/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/orgs/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/orgs/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/orgs/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/enterprises/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/enterprises/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/enterprises/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/enterprises/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/repos/*/*/keys",
+        "operation": "GitHub repository deploy key"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/repos/*/*/keys",
+        "operation": "GitHub repository deploy key"
       }
     ]
   },

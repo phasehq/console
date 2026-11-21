@@ -123,6 +123,11 @@ _GUARDED_BY_PATH_ONLY = {
 _GUARDED_SINCE = {
     "gamelift:GetComputeAuthToken",
     "grafana:CreateWorkspaceServiceAccountToken",
+    "appsync:ListApiKeys",
+    "appsync:CreateApiKey",
+    "appsync:UpdateApiKey",
+    "iot:CreateProvisioningClaim",
+    "iot:CreateCertificateFromCsr",
 }
 _MINTING_OPERATIONS = (
     _HAND_KEPT_MINTING_OPERATIONS | _GUARDED_BY_PATH_ONLY | _GUARDED_SINCE

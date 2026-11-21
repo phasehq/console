@@ -74,6 +74,23 @@ _MINTING_CALLS = {
         ("POST", "/app/installations/1/access_tokens"),
         # An Enterprise Server serves the same API below /api/v3.
         ("POST", "/api/v3/app/installations/1/access_tokens"),
+        # A runner registration token or just-in-time configuration enrols a
+        # runner that outlives the Connection.
+        ("POST", "/repos/acme/app/actions/runners/registration-token"),
+        ("POST", "/orgs/acme/actions/runners/registration-token"),
+        ("POST", "/enterprises/acme/actions/runners/registration-token"),
+        ("POST", "/repos/acme/app/actions/runners/generate-jitconfig"),
+        ("POST", "/orgs/acme/actions/runners/generate-jitconfig"),
+        ("POST", "/enterprises/acme/actions/runners/generate-jitconfig"),
+        ("POST", "/api/v3/repos/acme/app/actions/runners/registration-token"),
+        ("POST", "/api/v3/orgs/acme/actions/runners/registration-token"),
+        ("POST", "/api/v3/enterprises/acme/actions/runners/registration-token"),
+        ("POST", "/api/v3/repos/acme/app/actions/runners/generate-jitconfig"),
+        ("POST", "/api/v3/orgs/acme/actions/runners/generate-jitconfig"),
+        ("POST", "/api/v3/enterprises/acme/actions/runners/generate-jitconfig"),
+        # A deploy key is an SSH key the caller supplies, with no expiry.
+        ("POST", "/repos/acme/app/keys"),
+        ("POST", "/api/v3/repos/acme/app/keys"),
     ],
 }
 _OTHER_CALLS = {
@@ -99,6 +116,10 @@ _OTHER_CALLS = {
     "github": [
         ("GET", "/app/installations/1"),
         ("POST", "/repos/acme/app/issues"),
+        ("GET", "/repos/acme/app/keys"),
+        ("DELETE", "/repos/acme/app/keys/7"),
+        ("GET", "/repos/acme/app/actions/runners"),
+        ("POST", "/user/repos"),
     ],
 }
 
@@ -156,6 +177,170 @@ def test_the_aws_guard_stops_grafana_service_account_and_gamelift_compute_tokens
         "grafana:CreateWorkspaceServiceAccountToken",
     ):
         assert is_minting_operation(operation)
+
+
+def _aws_guard_stops(service, method, path, query=(), host=None):
+    """Whether the AWS guard's path rules stop a call, compared as the proxy
+    compares them: the method, the signing service, a DNS label of the host,
+    a query parameter the call carries, then the path."""
+
+    host = host or f"{service}.us-east-1.amazonaws.com"
+    labels = {label.removesuffix("-fips") for label in host.split(".")}
+    path = path.lower()
+    if len(path) > 1:
+        path = path.removesuffix("/")
+    for rule in REGISTRY.get_service("aws")["secret_guard"]["paths"]:
+        if rule.get("method", method) != method:
+            continue
+        if service not in rule.get("services", [service]):
+            continue
+        if "host_label" in rule and rule["host_label"] not in labels:
+            continue
+        if "query" in rule and rule["query"] not in query:
+            continue
+        pattern = "".join(
+            "[^/]*" if character == "*" else re.escape(character)
+            for character in rule["pattern"].lower()
+        )
+        if re.fullmatch(pattern, path):
+            return True
+    return False
+
+
+_AWS_MINTING_CALLS = [
+    # AppSync: the key's id is the key itself.
+    ("appsync", "GET", "/v1/apis/abc123/apikeys", ()),
+    ("appsync", "POST", "/v1/apis/abc123/apikeys", ()),
+    ("appsync", "POST", "/v1/apis/abc123/apikeys/da2-keyid", ()),
+    # API Gateway hands back key values on request.
+    ("apigateway", "POST", "/apikeys", ()),
+    ("apigateway", "GET", "/apikeys", ("includeValues",)),
+    ("apigateway", "GET", "/apikeys/abc123", ("includeValue",)),
+    # IoT: a claim certificate and key, or a certificate for the caller's CSR.
+    ("iot", "POST", "/provisioning-templates/fleet/provisioning-claim", ()),
+    ("iot", "POST", "/certificates", ("setAsActive",)),
+    ("iot", "POST", "/keys-and-certificate", ()),
+]
+_AWS_OTHER_CALLS = [
+    ("appsync", "GET", "/v1/apis/abc123", ()),
+    ("appsync", "DELETE", "/v1/apis/abc123/apikeys/da2-keyid", ()),
+    ("apigateway", "GET", "/apikeys", ()),
+    ("apigateway", "GET", "/apikeys/abc123", ()),
+    ("apigateway", "GET", "/restapis", ("includeValues",)),
+    ("iot", "GET", "/provisioning-templates/fleet", ()),
+    ("iot", "GET", "/certificates", ()),
+    ("iot", "POST", "/provisioning-templates", ()),
+]
+
+
+@pytest.mark.parametrize("service,method,path,query", _AWS_MINTING_CALLS)
+def test_an_aws_call_that_hands_back_a_credential_is_guarded(
+    service, method, path, query
+):
+    assert _aws_guard_stops(service, method, path, query)
+
+
+@pytest.mark.parametrize("service,method,path,query", _AWS_OTHER_CALLS)
+def test_the_aws_guard_leaves_other_rest_calls_alone(service, method, path, query):
+    assert not _aws_guard_stops(service, method, path, query)
+
+
+def test_the_iot_certificate_rules_apply_only_to_an_iot_host():
+    assert not _aws_guard_stops(
+        "execute-api",
+        "POST",
+        "/certificates",
+        host="abc123.execute-api.us-east-1.amazonaws.com",
+    )
+    assert _aws_guard_stops(
+        "execute-api", "POST", "/certificates", host="iot.us-east-1.amazonaws.com"
+    )
+
+
+def test_the_new_aws_guard_rules_that_name_an_operation_are_minting_operations():
+    for operation in (
+        "appsync:ListApiKeys",
+        "appsync:CreateApiKey",
+        "appsync:UpdateApiKey",
+        "iot:CreateProvisioningClaim",
+        "iot:CreateCertificateFromCsr",
+    ):
+        assert is_minting_operation(operation), operation
+    # Reading API Gateway keys without their values stays allowable.
+    assert not is_minting_operation("apigateway:GetApiKeys")
+    assert not is_minting_operation("apigateway:GetApiKey")
+
+
+def _aws_class(service, action):
+    """The class the proxy gives one named AWS action, in the order
+    aws_classes.go applies the manifest's tables."""
+
+    classes = REGISTRY.get_service("aws")["action_classes"]
+    exact = {key.lower(): value for key, value in classes["exact"].items()}
+    if f"{service}:{action}".lower() in exact:
+        return exact[f"{service}:{action}".lower()]
+
+    def starts_with(verbs):
+        return any(
+            action.startswith(verb)
+            and (action[len(verb):][:1] == "" or not action[len(verb)].islower())
+            for verb in verbs
+        )
+
+    if starts_with(classes["read_verbs"]):
+        return "read"
+    if service in classes["admin_services"] or any(
+        action.lower().endswith(suffix.lower()) for suffix in classes["admin_suffixes"]
+    ):
+        return "admin"
+    if starts_with(classes["create_verbs"]):
+        return "create"
+    if starts_with(classes["delete_verbs"]):
+        return "delete"
+    return "update"
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "AdminAddUserToGroup",
+        "AdminConfirmSignUp",
+        "AdminCreateUser",
+        "AdminDeleteUserAttributes",
+        "AdminDisableProviderForUser",
+        "AdminDisableUser",
+        "AdminEnableUser",
+        "AdminForgetDevice",
+        "AdminInitiateAuth",
+        "AdminLinkProviderForUser",
+        "AdminRemoveUserFromGroup",
+        "AdminResetUserPassword",
+        "AdminRespondToAuthChallenge",
+        "AdminSetUserMFAPreference",
+        "AdminSetUserPassword",
+        "AdminSetUserSettings",
+        "AdminUpdateAuthEventFeedback",
+        "AdminUpdateDeviceStatus",
+        "AdminUpdateUserAttributes",
+        "AdminUserGlobalSignOut",
+    ],
+)
+def test_a_cognito_admin_user_action_is_classed_admin(action):
+    """An admin block covers Cognito's user administration, which the Admin
+    prefix would otherwise leave as an update."""
+
+    assert _aws_class("cognito-idp", action) == "admin"
+    assert _aws_class("cognito-idp", action.upper()) == "admin"
+
+
+def test_a_cognito_admin_user_delete_is_classed_delete():
+    assert _aws_class("cognito-idp", "AdminDeleteUser") == "delete"
+
+
+def test_cognito_user_pool_calls_without_the_admin_prefix_keep_their_verb_class():
+    assert _aws_class("cognito-idp", "ListUsers") == "read"
+    assert _aws_class("cognito-idp", "CreateUserPool") == "create"
+    assert _aws_class("cognito-idp", "DeleteUserPool") == "delete"
 
 
 def test_the_gamelift_compute_token_call_is_not_classed_by_its_get_verb():

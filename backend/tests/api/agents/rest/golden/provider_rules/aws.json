@@ -101,10 +101,72 @@
       },
       {
         "method": "POST",
+        "pattern": "/provisioning-templates/*/provisioning-claim",
+        "operation": "iot:CreateProvisioningClaim",
+        "services": [
+          "iot",
+          "execute-api"
+        ],
+        "host_label": "iot"
+      },
+      {
+        "method": "POST",
+        "pattern": "/certificates",
+        "operation": "iot:CreateCertificateFromCsr",
+        "services": [
+          "iot",
+          "execute-api"
+        ],
+        "host_label": "iot"
+      },
+      {
+        "method": "POST",
         "pattern": "/apikeys",
         "operation": "apigateway:CreateApiKey",
         "services": [
           "apigateway"
+        ]
+      },
+      {
+        "method": "GET",
+        "pattern": "/apikeys",
+        "query": "includeValues",
+        "operation": "apigateway:GetApiKeys with the key values",
+        "services": [
+          "apigateway"
+        ]
+      },
+      {
+        "method": "GET",
+        "pattern": "/apikeys/*",
+        "query": "includeValue",
+        "operation": "apigateway:GetApiKey with the key value",
+        "services": [
+          "apigateway"
+        ]
+      },
+      {
+        "method": "GET",
+        "pattern": "/v1/apis/*/apikeys",
+        "operation": "appsync:ListApiKeys",
+        "services": [
+          "appsync"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/v1/apis/*/apikeys",
+        "operation": "appsync:CreateApiKey",
+        "services": [
+          "appsync"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/v1/apis/*/apikeys/*",
+        "operation": "appsync:UpdateApiKey",
+        "services": [
+          "appsync"
         ]
       },
       {
@@ -212,6 +274,27 @@
       "application-autoscaling:PutScalingPolicy": "update",
       "autoscaling:DeletePolicy": "delete",
       "autoscaling:PutScalingPolicy": "update",
+      "cognito-idp:AdminAddUserToGroup": "admin",
+      "cognito-idp:AdminConfirmSignUp": "admin",
+      "cognito-idp:AdminCreateUser": "admin",
+      "cognito-idp:AdminDeleteUser": "delete",
+      "cognito-idp:AdminDeleteUserAttributes": "admin",
+      "cognito-idp:AdminDisableProviderForUser": "admin",
+      "cognito-idp:AdminDisableUser": "admin",
+      "cognito-idp:AdminEnableUser": "admin",
+      "cognito-idp:AdminForgetDevice": "admin",
+      "cognito-idp:AdminInitiateAuth": "admin",
+      "cognito-idp:AdminLinkProviderForUser": "admin",
+      "cognito-idp:AdminRemoveUserFromGroup": "admin",
+      "cognito-idp:AdminResetUserPassword": "admin",
+      "cognito-idp:AdminRespondToAuthChallenge": "admin",
+      "cognito-idp:AdminSetUserMFAPreference": "admin",
+      "cognito-idp:AdminSetUserPassword": "admin",
+      "cognito-idp:AdminSetUserSettings": "admin",
+      "cognito-idp:AdminUpdateAuthEventFeedback": "admin",
+      "cognito-idp:AdminUpdateDeviceStatus": "admin",
+      "cognito-idp:AdminUpdateUserAttributes": "admin",
+      "cognito-idp:AdminUserGlobalSignOut": "admin",
       "dynamodb:BatchWriteItem": "update",
       "dynamodb:TransactWriteItems": "update",
       "ec2:AssociateIamInstanceProfile": "admin",
