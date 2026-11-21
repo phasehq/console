@@ -343,11 +343,14 @@ def test_cognito_user_pool_calls_without_the_admin_prefix_keep_their_verb_class(
     assert _aws_class("cognito-idp", "DeleteUserPool") == "delete"
 
 
-def test_the_gamelift_compute_token_call_is_not_classed_by_its_get_verb():
-    classes = REGISTRY.get_service("aws")["action_classes"]
-
-    assert "Get" in classes["read_verbs"]
-    assert classes["exact"]["gamelift:GetComputeAuthToken"] == "admin"
+def test_no_guarded_aws_call_also_has_an_exact_class():
+    # The CLI refuses a manifest whose guarded call could be reclassified
+    # into something a policy allows.
+    aws = REGISTRY.get_service("aws")
+    exact = aws["action_classes"]["exact"]
+    for service, operations in aws["secret_guard"]["operations"].items():
+        for operation in operations:
+            assert f"{service}:{operation}" not in exact
 
 
 # Which Connections list the guard

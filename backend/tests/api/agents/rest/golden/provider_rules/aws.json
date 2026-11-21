@@ -304,7 +304,6 @@
       "ec2:ReplaceIamInstanceProfileAssociation": "admin",
       "ecr:DeleteLifecyclePolicy": "delete",
       "ecr:PutLifecyclePolicy": "update",
-      "gamelift:GetComputeAuthToken": "admin",
       "kms:CreateGrant": "admin",
       "kms:RetireGrant": "admin",
       "kms:RevokeGrant": "admin",
