@@ -62,12 +62,24 @@ def _is_scheduled(scheduler, job_id, func, interval_seconds, queue_name):
 
     try:
         job = scheduler.job_class.fetch(job_id, connection=scheduler.connection)
+        # Reading the function name unpickles the job's data.
+        func_name = job.func_name
     except NoSuchJobError:
         # The scheduler drops an entry whose job is gone.
         return False
+    except Exception:
+        # A job hash that can't be read is scheduled again, which rewrites it.
+        # Left in place, it would also stop rq-scheduler, which catches only
+        # NoSuchJobError when it reads the jobs that are due.
+        logger.warning(
+            "Recurring job %s can't be read, scheduling it again",
+            job_id,
+            exc_info=True,
+        )
+        return False
 
     return (
-        job.func_name == f"{func.__module__}.{func.__qualname__}"
+        func_name == f"{func.__module__}.{func.__qualname__}"
         and job.meta.get("interval") == interval_seconds
         and job.origin == queue_name
     )

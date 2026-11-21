@@ -2,11 +2,11 @@
 finish, and then left alone."""
 
 from datetime import timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from django.utils import timezone
-from rq.exceptions import NoSuchJobError
+from rq.exceptions import DeserializationError, NoSuchJobError
 from rq.job import Job
 
 from api.tasks import recurring
@@ -93,6 +93,29 @@ def test_a_job_that_is_already_scheduled_is_left_alone():
 )
 def test_a_schedule_that_differs_is_replaced(stored):
     scheduler, scheduled_now = _ensure(scheduled=True, stored=stored)
+
+    assert scheduled_now is True
+    scheduler.schedule.assert_called_once()
+    assert scheduler.schedule.call_args.kwargs["id"] == JOB_ID
+
+
+@pytest.mark.parametrize("fails_on", ["fetch", "func_name"])
+def test_a_job_that_cant_be_read_is_scheduled_again(fails_on):
+    # rq-scheduler stops on such a job when it comes due. Scheduling it again
+    # rewrites the hash.
+    scheduler = MagicMock()
+    scheduler.__contains__.return_value = True
+    if fails_on == "fetch":
+        scheduler.job_class.fetch.side_effect = ValueError("bad status")
+    else:
+        stored = MagicMock(meta={"interval": INTERVAL}, origin="scheduled-jobs")
+        type(stored).func_name = PropertyMock(
+            side_effect=DeserializationError("bad data")
+        )
+        scheduler.job_class.fetch.return_value = stored
+
+    with patch.object(recurring.django_rq, "get_scheduler", return_value=scheduler):
+        scheduled_now = recurring.ensure_recurring_job(JOB_ID, sweep, INTERVAL)
 
     assert scheduled_now is True
     scheduler.schedule.assert_called_once()
