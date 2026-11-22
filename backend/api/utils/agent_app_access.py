@@ -428,9 +428,10 @@ def require_sse(app):
     return app
 
 
-def resolve_environments(app, values, *, names=False):
+def resolve_environments(app, values, *, names=False, name_app=False):
     """The app's environments a list names, by id or, with ``names``, by
-    exact name in any case. Each needs a server key."""
+    exact name in any case. Each needs a server key. A refusal names the app
+    only with ``name_app``, for a caller known to see it."""
 
     label = "environments" if names else "environmentIds"
     if (
@@ -461,8 +462,9 @@ def resolve_environments(app, values, *, names=False):
                 None,
             )
         if match is None:
+            named = f"The app '{app.name}'" if name_app else "The app"
             raise AppAccessError(
-                f"The app '{app.name}' has no environment '{value}'.",
+                f"{named} has no environment '{value}'.",
                 code="environment_not_found",
                 not_found=True,
             )

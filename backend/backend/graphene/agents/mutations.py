@@ -1209,7 +1209,7 @@ class CreateAgentAppConnectionMutation(graphene.Mutation):
             require_member_can_release(member, app, [], ())
             require_sse(app)
             environments = resolve_environments(
-                app, [str(value) for value in environment_ids]
+                app, [str(value) for value in environment_ids], name_app=True
             )
             checked = (
                 deepcopy(DEFAULT_APP_POLICY)
