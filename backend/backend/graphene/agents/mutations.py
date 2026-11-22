@@ -1790,6 +1790,9 @@ class GrantAgentWorkflowMutation(graphene.Mutation):
                         ],
                     )
             else:
+                # The Workflow is given the Connection's Integration Credential,
+                # which creating the Connection also needs.
+                require_role(member, "read", "IntegrationCredentials")
                 service = get_config_registry().get_service(connection.service_type)
                 if connection.authentication.provider not in _providers_for_service(
                     service

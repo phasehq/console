@@ -90,6 +90,18 @@ def _only(payload):
 _set_policy = set_policy
 
 
+def _grant_packaged(space, connection):
+    """Grant a packaged Connection as a member who may read its Integration
+    Credential, which granting it needs."""
+
+    role = space.member.role
+    role.permissions["permissions"]["IntegrationCredentials"] = ["read"]
+    role.save(update_fields=["permissions"])
+    return GrantAgentWorkflowMutation.mutate(
+        None, space.info, workflow_id=space.workflow.id, connection_id=connection.id
+    )
+
+
 def _allow_action(space, allow=None, **members):
     return {
         "type": "agent_grant.allow",
@@ -362,9 +374,7 @@ def test_the_console_reads_a_connections_policy_and_its_locked_secret_guard(spac
     _set_policy(space, ASK_DELETES)
     postgres = packaged_connection(space, "postgres")
     packaged_connection(space, "aws")
-    GrantAgentWorkflowMutation.mutate(
-        None, space.info, workflow_id=space.workflow.id, connection_id=postgres.id
-    )
+    _grant_packaged(space, postgres)
     allow = {
         "id": "allow-1",
         **DELETE_X,
@@ -670,9 +680,7 @@ def test_a_malformed_allow_request_is_refused(space, members, code):
 
 def test_an_allow_names_a_connection_the_workflow_has_over_http(space):
     postgres = packaged_connection(space, "postgres")
-    GrantAgentWorkflowMutation.mutate(
-        None, space.info, workflow_id=space.workflow.id, connection_id=postgres.id
-    )
+    _grant_packaged(space, postgres)
     ungranted = custom_connection(space, bearer_definition(host="api.other.example"), name="Other")
 
     refused(

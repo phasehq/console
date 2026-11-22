@@ -31,6 +31,7 @@ from api.utils.agent_app_access import (
 from api.utils.agent_config import (
     ConfigRegistryError,
     is_app_service,
+    is_custom_service,
     service_for_connection,
 )
 from api.utils.agent_config.access_policy import (
@@ -448,6 +449,11 @@ class RenewAccess(ActionHandler):
             raise ActionError(
                 "The Agent Connection changed; start a new request"
             ) from exc
+        if not is_app_service(connection.service_type) and not is_custom_service(
+            connection.service_type
+        ):
+            # The Workflow keeps the Connection's Integration Credential.
+            _require(member, "read", "IntegrationCredentials")
         _refuse_removed_since(request, connection, connection_id=connection.id)
         renewed = self._target(request, action["connectionId"])
         if is_app_service(connection.service_type):
