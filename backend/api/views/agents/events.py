@@ -361,7 +361,9 @@ def _timestamp(event, *, index):
             index=index,
             field="created_at",
         )
-    return parsed
+    # A time ahead of the Console's would sort above every newer event. It is
+    # stored as now rather than refused: the proxy keeps resending a refused batch.
+    return min(parsed, timezone.now())
 
 
 def _validate_event(event, index):
