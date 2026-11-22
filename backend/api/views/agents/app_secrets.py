@@ -36,6 +36,7 @@ from api.utils.agent_config import APP_SERVICE_TYPE
 from api.utils.crypto import decrypt_asymmetric
 from api.utils.rest import get_token_type
 from api.utils.secrets import (
+    compute_key_digest,
     decompose_path_and_key,
     get_environment_keys,
     get_or_compute_crypto_context,
@@ -183,22 +184,42 @@ def _leads_outside_readable(reader, environment, composed_key, contexts):
     return reader.refused
 
 
+def _moves_path(secret, stored):
+    try:
+        return stored.path != normalize_path_string(secret["path"])
+    except Exception:
+        # No usable path: the view keeps the stored one.
+        return False
+
+
+def _renames(secret, stored, environment):
+    if "key" not in secret:
+        return False
+    try:
+        return compute_key_digest(secret["key"], environment.id) != stored.key_digest
+    except Exception:
+        # A key the view cannot use is refused there, before anything is written.
+        return False
+
+
 def _moved_values(secrets, environment):
-    """The stored values of the secrets an update moves to another path, where
-    a sync of that path would start to read them."""
+    """The stored values of the secrets an update moves to another path or
+    renames. A sync of that path would start to read them, and a sync that
+    skips or treats some names specially would read a renamed one anew."""
 
     moved = []
     for secret in secrets:
         try:
-            path = normalize_path_string(secret["path"])
             # Found the way the view finds it, whatever form the id takes.
             stored = Secret.objects.filter(
                 id=secret["id"], environment=environment, deleted_at__isnull=True
             ).first()
         except Exception:
-            # No usable id or path: the view answers it, and nothing moves.
+            # No usable id: the view answers it, and nothing moves.
             continue
-        if stored is not None and stored.path != path:
+        if stored is not None and (
+            _moves_path(secret, stored) or _renames(secret, stored, environment)
+        ):
             moved.append(stored)
     if not moved:
         return []
@@ -209,12 +230,13 @@ def _moved_values(secrets, environment):
 
 
 def _refers_outside_readable(request, workflow, environment):
-    """Whether a value this call writes, or moves to another path, refers to a
-    secret in an environment the Workflow cannot read, directly or through the
-    references of the secret it names. Other readers of this environment, such
-    as a sync, resolve references without an account check, so such a reference
-    would carry that secret where the Agent might see it. A reference keeps
-    resolving after the access that wrote it ends, as it does for members."""
+    """Whether a value this call writes, or moves to another path or name,
+    refers to a secret in an environment the Workflow cannot read, directly or
+    through the references of the secret it names. Other readers of this
+    environment, such as a sync, resolve references without an account check,
+    so such a reference would carry that secret where the Agent might see it.
+    A reference keeps resolving after the access that wrote it ends, as it does
+    for members."""
 
     reader = _ReferenceReader(workflow)
     secrets = _body_secrets(request)

@@ -236,7 +236,8 @@ def test_a_value_the_workflow_can_read_to_its_end_moves(writer, stored):
 @pytest.mark.django_db
 @pytest.mark.parametrize(
     "members",
-    [{"comment": "x"}, {"path": "/unsynced"}, {"path": "unsynced/"}, {"key": "RENAMED"}],
+    # Keys are stored upper-cased, so "old" names the stored key.
+    [{"comment": "x"}, {"path": "/unsynced"}, {"path": "unsynced/"}, {"key": "old"}],
 )
 def test_an_update_that_moves_nothing_leaves_a_stored_reference_alone(writer, members):
     secret = put_secret(writer.dev, "OLD", "${Production.SHARED}", path="/unsynced")
