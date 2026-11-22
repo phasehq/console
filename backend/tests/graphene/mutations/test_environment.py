@@ -39,6 +39,8 @@ def test_create_custom_environment_blocked_on_free_plan():
         f"{_M}.can_use_custom_envs", return_value=False
     ), patch(
         f"{_M}.can_add_environment", return_value=True
+    ), patch(
+        f"{_M}.environment_name_conflict", return_value=None
     ):
         MockApp.objects.get.return_value = MagicMock()
         MockEnv.objects.filter.return_value = env_qs
@@ -66,6 +68,8 @@ def test_create_default_environment_exempt_from_custom_gate():
         f"{_M}.can_use_custom_envs", return_value=False
     ), patch(
         f"{_M}.can_add_environment", return_value=False
+    ), patch(
+        f"{_M}.environment_name_conflict", return_value=None
     ):
         MockApp.objects.get.return_value = MagicMock()
         MockEnv.objects.filter.return_value = env_qs

@@ -159,6 +159,11 @@ export default function TeamDetail(props: { params: Promise<{ team: string; team
     }
     envsByApp[appId].envs.push(tae!)
   }
+  // An app with no environment here: the team reaches it only through one
+  // that is scheduled for deletion.
+  for (const app of team.apps || []) {
+    if (!envsByApp[app!.id]) envsByApp[app!.id] = { app: app as AppType, envs: [] }
+  }
 
   return (
     <section className="flex flex-col px-3 sm:px-4 lg:px-6">
@@ -462,6 +467,9 @@ export default function TeamDetail(props: { params: Promise<{ team: string; team
                       Environments
                     </div>
                     <div className="text-xs text-zinc-700 dark:text-zinc-300">
+                      {envs.length === 0 && (
+                        <span className="text-neutral-500">Scheduled for deletion</span>
+                      )}
                       {envs.map((tae, i) => (
                         <span key={tae.id}>
                           <Link

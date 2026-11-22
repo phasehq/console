@@ -205,12 +205,9 @@ class CreateServiceAccountMutation(graphene.Mutation):
                     .values_list("app_id", flat=True)
                     .distinct()
                 )
-                for app_id in app_ids:
-                    app = App.objects.get(id=app_id)
-                    if app.sse_enabled:
-                        provision_team_environment_keys(
-                            team, app, members=[membership]
-                        )
+                # A filter, not a get per ID: apps pending deletion are left out.
+                for app in App.objects.filter(id__in=app_ids, sse_enabled=True):
+                    provision_team_environment_keys(team, app, members=[membership])
 
         if settings.APP_HOST == "cloud":
             from ee.billing.stripe import update_stripe_subscription_seats

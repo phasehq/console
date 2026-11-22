@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0145_environment_color'),
+        ('api', '0146_environment_color'),
     ]
 
     operations = [

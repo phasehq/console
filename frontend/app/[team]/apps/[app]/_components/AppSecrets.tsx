@@ -8,6 +8,7 @@ import {
   CreateEnvironmentDialog,
   CreateEnvironmentDialogHandle,
 } from '@/components/environments/CreateEnvironmentDialog'
+import { DeletedEnvironments } from '@/components/environments/DeletedEnvironments'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { UpdateEnvOrder } from '@/graphql/mutations/environments/updateEnvironmentOrder.gql'
 import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
@@ -371,6 +372,7 @@ export const AppSecrets = ({
   const { hasPermission } = useAppPermissions(app)
   const userCanReadEnvironments = hasPermission('Environments', 'read', true)
   const userCanCreateEnvironments = hasPermission('Environments', 'create', true)
+  const userCanDeleteEnvironments = hasPermission('Environments', 'delete', true)
   const userCanUpdateEnvironments = hasPermission('Environments', 'update', true)
   const userCanReadSecrets = hasPermission('Secrets', 'read', true)
   const userCanCreateSecrets = hasPermission('Secrets', 'create', true)
@@ -3075,6 +3077,14 @@ export const AppSecrets = ({
             onClose={() => setFolderEditTarget(null)}
             onSave={handleEditFolders}
           />
+          </div>
+        )}
+        {/* An environment scheduled for deletion has no column: it is listed under the grid, to
+            restore it from. The list takes room from the grid only while there is one: enough
+            for one environment in a short window, and it scrolls past that */}
+        {userCanReadEnvironments && (
+          <div className="max-h-[max(30%,8.5rem)] shrink-0 overflow-y-auto empty:hidden">
+            <DeletedEnvironments appId={app} allowRestore={userCanDeleteEnvironments} />
           </div>
         )}
       </section>

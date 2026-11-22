@@ -100,7 +100,9 @@ def test_team_granted_keys_survive_direct_scope_edit(
         ("env-A", "Environment A"),
         ("env-B", "Environment B"),
     ]
-    MockEnv.objects.filter.side_effect = [valid_env_qs, audit_env_qs]
+    MockEnv.objects.filter.return_value = valid_env_qs
+    # all_objects: the audit also names an environment pending deletion.
+    MockEnv.all_objects.filter.return_value = audit_env_qs
 
     # Two existing keys for this member:
     # - K1 on env-A: individual + team grants
@@ -170,6 +172,15 @@ def test_team_granted_keys_survive_direct_scope_edit(
     # 4. No new EnvironmentKey row was created for env-A — the mutation
     #    re-used the preserved row to avoid a uniqueness conflict.
     MockEnvKey.objects.create.assert_not_called()
+    # 5. The old scope is every key in the app, those for environments
+    #    pending deletion included: they can't be in the new scope, and
+    #    access dropped here must not come back with a restore.
+    assert MockEnvKey.objects.filter.call_args_list[0].kwargs == {
+        "environment__app": app,
+        "user": member,
+    }
+    removed = _mock_audit.call_args.kwargs["old_values"]["envs_removed"]
+    assert removed == ["Environment B"]
 
 
 @patch(

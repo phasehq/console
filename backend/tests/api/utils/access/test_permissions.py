@@ -1,7 +1,8 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 from api.utils.access.permissions import (
     role_has_permission,
+    user_can_delete_app,
     user_has_permission,
     role_has_global_access,
     get_role_effective_policy,
@@ -188,6 +189,46 @@ class TestUserHasPermission:
             )
             is False
         )
+
+
+class TestUserCanDeleteApp:
+    """Who may delete an app, and so restore it or delete it now while it is
+    scheduled for deletion."""
+
+    def _run(self, by_org_role, by_app_role):
+        app = MagicMock()
+        with patch(
+            "api.utils.access.permissions.user_has_permission",
+            side_effect=[by_org_role, by_app_role],
+        ) as has_permission:
+            allowed = user_can_delete_app("user", app)
+        return allowed, app, has_permission
+
+    def test_the_organisation_role_is_enough(self):
+        # As the deleteApp mutation checks it.
+        allowed, app, has_permission = self._run(True, False)
+
+        assert allowed is True
+        has_permission.assert_called_once_with(
+            "user", "delete", "Apps", app.organisation
+        )
+
+    def test_a_team_role_for_the_app_is_enough(self):
+        # As the REST API checks a delete: a team can give its members a
+        # role for its apps that their organisation role doesn't have.
+        allowed, app, has_permission = self._run(False, True)
+
+        assert allowed is True
+        by_org_role, by_app_role = has_permission.call_args_list
+        assert "app" not in by_org_role.kwargs
+        assert by_app_role == call(
+            "user", "delete", "Apps", app.organisation, app=app
+        )
+
+    def test_refused_without_either(self):
+        allowed, *_ = self._run(False, False)
+
+        assert allowed is False
 
 
 @patch("api.utils.access.permissions.apps.get_model")

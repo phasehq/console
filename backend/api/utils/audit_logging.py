@@ -84,23 +84,58 @@ def log_audit_event(
     Log a generic audit event. Fire-and-forget — never raises.
     """
     try:
-        AuditEvent.objects.create(
+        record_audit_event(
             organisation=organisation,
             event_type=event_type,
             resource_type=resource_type,
-            resource_id=str(resource_id),
+            resource_id=resource_id,
             actor_type=actor_type,
-            actor_id=str(actor_id),
-            actor_metadata=actor_metadata or {},
-            resource_metadata=resource_metadata or {},
+            actor_id=actor_id,
+            actor_metadata=actor_metadata,
+            resource_metadata=resource_metadata,
             old_values=old_values,
             new_values=new_values,
             description=description,
             ip_address=ip_address,
-            user_agent=user_agent or "",
+            user_agent=user_agent,
         )
     except Exception:
         logger.exception("Failed to write audit event: %s %s %s", event_type, resource_type, resource_id)
+
+
+def record_audit_event(
+    organisation,
+    event_type,
+    resource_type,
+    resource_id,
+    actor_type,
+    actor_id,
+    actor_metadata=None,
+    resource_metadata=None,
+    old_values=None,
+    new_values=None,
+    description="",
+    ip_address=None,
+    user_agent="",
+):
+    """Write an audit event, raising on failure. For a caller that writes it
+    in the same transaction as the change it records: a swallowed database
+    error there would roll the whole transaction back unnoticed."""
+    AuditEvent.objects.create(
+        organisation=organisation,
+        event_type=event_type,
+        resource_type=resource_type,
+        resource_id=str(resource_id),
+        actor_type=actor_type,
+        actor_id=str(actor_id),
+        actor_metadata=actor_metadata or {},
+        resource_metadata=resource_metadata or {},
+        old_values=old_values,
+        new_values=new_values,
+        description=description,
+        ip_address=ip_address,
+        user_agent=user_agent or "",
+    )
 
 
 def get_actor_info(request):
@@ -205,19 +240,38 @@ def _serialize_value(val):
     return str(val)
 
 
-def audit_app_cascade_envs(
-    app, actor_type, actor_id, actor_metadata, ip_address, user_agent
-):
-    """Emit a D event per environment that's about to be hard-cascaded by
-    `app.delete()`. Without this, wiping an app shows as one audit line
-    even though N envs and all their secret history die with it. Secret-
-    level events are intentionally out of scope — the SecretEvent rows
-    are CASCADE-tied to Secret and disappear with them; replicating that
-    history into AuditEvent would flood the log."""
-    from api.models import Environment
+def deletion_actor(organisation, resource_type, resource_id):
+    """Who last asked for an app or environment to be deleted, as (actor_type,
+    actor_id, actor_metadata). The purge that follows is logged as theirs."""
+    scheduled = (
+        AuditEvent.objects.filter(
+            organisation=organisation,
+            resource_type=resource_type,
+            resource_id=str(resource_id),
+            event_type="D",
+        )
+        .order_by("-timestamp")
+        .first()
+    )
+    if scheduled is None:
+        return ("user", "", {})
+    return (scheduled.actor_type, scheduled.actor_id, scheduled.actor_metadata)
 
-    for env in Environment.objects.filter(app=app):
-        log_audit_event(
+
+def audit_app_cascade_envs(
+    app, environments, actor_type, actor_id, actor_metadata, ip_address, user_agent
+):
+    """Emit a D event per environment hard-cascaded by an app's deletion.
+    Without this, wiping an app shows as one audit line even though N envs
+    and all their secret history die with it. Secret-level events are
+    intentionally out of scope — the SecretEvent rows are CASCADE-tied to
+    Secret and disappear with them; replicating that history into
+    AuditEvent would flood the log.
+
+    Called in the transaction that deletes them, so the deletion and its
+    record commit together. `environments` are the rows fetched before it."""
+    for env in environments:
+        record_audit_event(
             organisation=app.organisation,
             event_type="D",
             resource_type="env",

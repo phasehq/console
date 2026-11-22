@@ -33,11 +33,12 @@ def _create(color):
     with patch(f"{_M}.user_can_access_app", return_value=True), patch(
         f"{_M}.user_has_permission", return_value=True
     ), patch(f"{_M}.App"), patch(f"{_M}.Environment") as environments, patch(
+        f"{_M}.environment_name_conflict", return_value=None
+    ), patch(
         f"{_M}.can_use_custom_envs", return_value=True
     ), patch(
         f"{_M}.can_add_environment", return_value=False
     ):
-        environments.objects.filter.return_value.exists.return_value = False
         try:
             CreateEnvironmentMutation.mutate(None, _info(), data, [])
         finally:
@@ -88,7 +89,7 @@ def update():
         m.env = env
         m.Environment.objects.get.return_value = env
         # No other environment of the App has the new name
-        m.Environment.objects.filter.return_value.exclude.return_value.exists.return_value = False
+        stack.enter_context(patch(f"{_M}.environment_name_conflict", return_value=None))
         m.run = lambda **kwargs: RenameEnvironmentMutation.mutate(
             None, _info(), environment_id="env-prod", **kwargs
         )
