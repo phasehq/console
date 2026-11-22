@@ -127,6 +127,10 @@ const runOf = (sync: EnvironmentSyncType, record: DeployRecord): SyncRun | null 
       status: queued ? EventStatus.Queued : EventStatus.InProgress,
     }
   }
+  // A run that couldn't be queued leaves no entry, only the sync's failed status: when one of a
+  // deploy's later writes ends that way, the run that finished before it isn't the last word
+  if (run.status === EventStatus.Completed && isFailing(sync))
+    return { sync, state: 'failed', status: sync.status }
   const state: SyncRunState =
     run.status === EventStatus.Completed
       ? 'completed'

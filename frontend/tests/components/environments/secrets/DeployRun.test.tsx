@@ -161,6 +161,24 @@ describe('useDeployRun', () => {
     expect(run.runs.map((r) => r.state)).toEqual(['failed', 'running'])
   })
 
+  it('reports a sync as failed when a later run of the same deploy could not be queued', async () => {
+    // A deploy's first write queued a run that finished; its last one could not queue another,
+    // which leaves no run, only the sync's own status
+    await deploy(
+      [makeSync('s1', [])],
+      [
+        makeSync(
+          's1',
+          [{ id: 'e1', status: EventStatus.Completed, completedAt: '2026-01-01T00:00:05Z' }],
+          Status.Failed
+        ),
+      ]
+    )
+    expect(run.runs.map((r) => r.state)).toEqual(['failed'])
+    expect(run.phase).toBe('failed')
+    expect(face()).toBe('1 sync failed')
+  })
+
   it('reports a sync whose job could not be queued as failed, not synced', async () => {
     // The server marks the sync failed and records no run
     await deploy([makeSync('s1', [])], [makeSync('s1', [], Status.Failed)])
