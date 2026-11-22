@@ -338,10 +338,18 @@ def test_a_secret_must_not_occur_in_text_the_agent_can_read(space, place, messag
             )
         assert secret not in str(failure.value)
         assert f"The secret for {field}" in str(failure.value)
-        # When only the definition changes and the stored value stays.
-        with pytest.raises(GraphQLError, match=message):
+        # When the definition changes, the secret is entered again and checked.
+        with pytest.raises(GraphQLError, match="Enter the secret again"):
             UpdateCustomAgentConnectionMutation.mutate(
                 None, space.info, connection_id=connection.id, definition=leaky
+            )
+        with pytest.raises(GraphQLError, match=message):
+            UpdateCustomAgentConnectionMutation.mutate(
+                None,
+                space.info,
+                connection_id=connection.id,
+                definition=leaky,
+                sealed_value=seal(leaky, keys.public_key, fields=secrets),
             )
     # When only the value changes.
     UpdateCustomAgentConnectionMutation.mutate(
@@ -349,6 +357,7 @@ def test_a_secret_must_not_occur_in_text_the_agent_can_read(space, place, messag
         space.info,
         connection_id=connection.id,
         definition=_leaky(place, "harmless"),
+        sealed_value=seal(_leaky(place, "harmless"), keys.public_key, fields=secrets),
     )
     with pytest.raises(GraphQLError, match=message):
         UpdateCustomAgentConnectionMutation.mutate(
@@ -363,7 +372,8 @@ def test_a_secret_must_not_occur_in_text_the_agent_can_read(space, place, messag
         )
 
     connection.refresh_from_db()
-    assert connection.value_revision == 1
+    # Only the harmless definition, with its secret entered again, was stored.
+    assert connection.value_revision == 2
     assert AgentConnection.objects.filter(organisation=space.organisation).count() == 1
 
 
@@ -382,17 +392,18 @@ def test_a_change_that_keeps_the_bound_hosts_needs_no_new_secret(space):
     before = _generation(session)
     version = connection.host_rules_version
 
+    # Dropping the path keeps the bound hosts and adds no text the Agent reads.
     result = UpdateCustomAgentConnectionMutation.mutate(
         None,
         space.info,
         connection_id=connection.id,
         name="Renamed API",
-        definition=bearer_definition(path="/v2/*"),
+        definition=bearer_definition(),
     )
 
     connection = result.connection
     assert connection.name == "Renamed API"
-    assert connection.config["hosts"][0]["path"] == "/v2/*"
+    assert "path" not in connection.config["hosts"][0]
     assert (connection.key_version, connection.value_revision) == (1, 1)
     # The path list is still executable host configuration with an author.
     assert connection.host_rules_version != version
@@ -517,11 +528,15 @@ def test_turning_off_plain_http_or_leaving_it_on_needs_no_secret(space):
 
     # Leaving it on while changing something else needs nothing either.
     other = _create(space, plain)
-    renamed = {**plain, "hosts": [{**plain["hosts"][0], "path": "/v1/*"}]}
+    renamed = {
+        **plain,
+        "injections": [{**plain["injections"][0], "whenAbsent": "block"}],
+    }
     result = UpdateCustomAgentConnectionMutation.mutate(
         None, space.info, connection_id=other.id, definition=renamed
     )
     assert result.connection.config["allowPlainHttp"] is True
+    assert result.connection.value_revision == 1
 
 
 def test_an_update_with_nothing_to_change_is_refused(space):

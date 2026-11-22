@@ -35,6 +35,7 @@ from api.utils.agent_config.http_definition import bound_hosts, secret_field_nam
 from api.utils.agent_connection_values import (
     SealedValueError,
     activate_custom_connection,
+    adds_agent_visible_text,
     update_custom_connection,
     write_custom_connection_value,
 )
@@ -510,6 +511,7 @@ class UpdateConnection(ActionHandler):
                     bool(after.get("allowPlainHttp"))
                     and not before.get("allowPlainHttp")
                 )
+                or adds_agent_visible_text(before, after)
             )
         )
         if before and after and before["hosts"] != after["hosts"]:

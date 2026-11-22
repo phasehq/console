@@ -452,15 +452,20 @@ def test_decoys_survive_definition_and_value_changes(space):
         assert set(AgentDecoy.objects.values_list("id", "decoy_value")) == stored
 
     # A definition change: another path, another injection mode, another
-    # decoy prefix for a field that already has its decoy.
+    # decoy prefix for a field that already has its decoy. New text the Agent
+    # reads takes the same secret entered again.
     changed = definition()
     changed["hosts"][0]["path"] = "/v2/*"
     changed["injections"][0]["whenAbsent"] = "block"
     changed["fields"][0]["decoyPrefix"] = "other-"
     UpdateCustomAgentConnectionMutation.mutate(
-        None, space.info, connection_id=space.connection.id, definition=changed
+        None,
+        space.info,
+        connection_id=space.connection.id,
+        definition=changed,
+        sealed_value=seal(changed, space.connection.encryption_public_key),
     )
-    unchanged("1.1")
+    unchanged("1.2")
     assert _only(_refresh(member, sessions[0][1]).json())["hosts"][0]["path"] == "/v2/*"
 
     space.connection.refresh_from_db()
@@ -474,7 +479,7 @@ def test_decoys_survive_definition_and_value_changes(space):
             fields={"token": "second-token", "password": "second-password"},
         ),
     )
-    unchanged("1.2")
+    unchanged("1.3")
     refreshed = _refresh(member, sessions[0][1]).json()
     assert _only(refreshed)["secretMaterial"]["token"] == "second-token"
 

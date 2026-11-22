@@ -908,7 +908,8 @@ def test_approving_takes_the_connection_permission_but_no_integration_one(space)
 
 def test_an_update_that_keeps_the_hosts_is_applied_without_a_secret(space):
     connection = _granted_connection(space)
-    requested = bearer_definition(path="/v2/*")
+    # Dropping the path keeps the bound hosts and adds no text the Agent reads.
+    requested = bearer_definition()
     agent_request = _filed(
         _ask(space, action=_action("update", connection, definition=requested))
     )
@@ -926,7 +927,7 @@ def test_an_update_that_keeps_the_hosts_is_applied_without_a_secret(space):
     )
     assert _generation(space) == before + 1
     [granted] = _config(space)["connections"]
-    assert granted["hosts"][0]["path"] == "/v2/*"
+    assert not granted["hosts"][0].get("path")
 
 
 def test_an_update_that_moves_the_hosts_needs_the_secret_entered_again(space):
@@ -1003,6 +1004,9 @@ def test_an_update_is_refused_once_the_connection_changed_underneath_it(space):
         space.info,
         connection_id=connection.id,
         definition=bearer_definition(path="/v3/*"),
+        sealed_value=seal(
+            bearer_definition(path="/v3/*"), connection.encryption_public_key
+        ),
     )
 
     with pytest.raises(GraphQLError, match="changed after this request was made"):

@@ -159,6 +159,14 @@ def _refuse_agent_visible_secrets(fields, definition):
                 )
 
 
+def adds_agent_visible_text(current, requested):
+    """Whether a definition puts text before the Agent that the current one
+    does not. The stored secret was only checked against the current text."""
+
+    known = {text for _, text in agent_visible_texts(current)}
+    return any(text not in known for _, text in agent_visible_texts(requested))
+
+
 def _read_sealed_value(ciphertext, private_key, public_key, definition):
     plaintext = _open(
         ciphertext, private_key, public_key, "The sealed value does not open"
@@ -312,7 +320,8 @@ def update_custom_connection(
 ):
     """Change a custom Connection's name, definition or value. Call with the Connection row locked.
 
-    A changed host or secret field set needs a freshly sealed value. Returns what changed.
+    A changed host or secret field set, or new text the Agent can read, needs a freshly sealed
+    value. Returns what changed.
     """
 
     current = load_definition(connection.config)
@@ -338,6 +347,14 @@ def update_custom_connection(
             raise SealedValueError(
                 "Enter the secret again to allow plain HTTP on this Connection"
             )
+        # Checking new text against the stored secret would answer whether
+        # the text holds it, so the secret is entered again and checked.
+        if adds_agent_visible_text(current, requested):
+            raise SealedValueError(
+                "Enter the secret again to change text the Agent can read on "
+                "this Connection, such as an identifier, a prefix, a header "
+                "name or a path"
+            )
 
     changes = {
         "name_changed": name is not None and name != connection.name,
@@ -348,22 +365,6 @@ def update_custom_connection(
     }
     if sealed_value is not None:
         _set_value(connection, sealed_value, requested, member)
-    elif (
-        changes["definition_changed"]
-        and connection.sealed_value
-        and server_readable(connection)
-    ):
-        # The stored value stays, so check it against what the Agent will now
-        # be able to read.
-        _refuse_agent_visible_secrets(
-            _read_sealed_value(
-                connection.sealed_value,
-                _connection_private_key(connection),
-                connection.encryption_public_key,
-                requested,
-            ),
-            requested,
-        )
     if not any(changes.values()):
         # Nothing differs from what is stored: leave the row untouched.
         return changes
