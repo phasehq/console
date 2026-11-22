@@ -156,28 +156,88 @@ describe('asking for the secret again', () => {
     expect(secretRequirement(null, bearer)).toMatchObject({ required: true, reason: '' })
   })
 
-  test('a change of path, injection, environment name or decoy prefix does not', () => {
+  test('a change of environment name or of what happens without the header does not', () => {
     const changed: HttpDefinition = {
       ...bearer,
-      hosts: [{ match: 'exact', value: 'api.example.com', port: 443, path: '/v2/*' }],
-      fields: [
+      fields: [{ name: 'token', kind: 'secret', source: { type: 'sealed' }, env: 'EXAMPLE_KEY' }],
+      injections: [
         {
-          name: 'token',
-          kind: 'secret',
-          source: { type: 'sealed' },
-          env: 'EXAMPLE_KEY',
-          decoyPrefix: 'sk-',
+          type: 'header',
+          name: 'Authorization',
+          prefix: 'Bearer ',
+          field: 'token',
+          whenAbsent: 'block',
         },
       ],
-      injections: [{ type: 'query', name: 'key', field: 'token', whenAbsent: 'block' }],
     }
     expect(secretRequirement(bearer, changed)).toEqual({
       required: false,
       hostsChanged: false,
       fieldsChanged: false,
       plainHttpEnabled: false,
+      textAdded: false,
       reason: '',
     })
+  })
+
+  test('text the Agent reads that was not there does, and says why', () => {
+    const withPath = (path: string): HttpDefinition => ({
+      ...bearer,
+      hosts: [{ match: 'exact', value: 'api.example.com', port: 443, path }],
+    })
+    const decoy: HttpDefinition = {
+      ...bearer,
+      fields: [{ name: 'token', kind: 'secret', source: { type: 'sealed' }, decoyPrefix: 'sk-' }],
+    }
+    const query: HttpDefinition = {
+      ...bearer,
+      injections: [{ type: 'query', name: 'key', field: 'token' }],
+    }
+    const prefix: HttpDefinition = {
+      ...bearer,
+      injections: [{ type: 'header', name: 'Authorization', prefix: 'Token ', field: 'token' }],
+    }
+    const classes: HttpDefinition = {
+      ...bearer,
+      operationClasses: [{ match: { methods: ['POST'], path: '/v1/search' }, class: 'read' }],
+    }
+    for (const changed of [withPath('/v2/*'), decoy, query, prefix, classes]) {
+      const requirement = secretRequirement(bearer, changed)
+      expect(requirement).toEqual({
+        required: true,
+        hostsChanged: false,
+        fieldsChanged: false,
+        plainHttpEnabled: false,
+        textAdded: true,
+        reason: expect.stringMatching(/^Text the Agent can read changed/),
+      })
+    }
+  })
+
+  test('text taken away does not; putting it back does', () => {
+    const noPath: HttpDefinition = {
+      ...bearer,
+      hosts: [{ match: 'exact', value: 'api.example.com', port: 443 }],
+    }
+    expect(secretRequirement(bearer, noPath).required).toBe(false)
+    expect(secretRequirement(noPath, bearer).textAdded).toBe(true)
+  })
+
+  test('a new host does not add a second reason for its new text', () => {
+    const moved: HttpDefinition = {
+      ...bearer,
+      hosts: [{ match: 'exact', value: 'api.example.org', port: 443, path: '/v1/*' }],
+    }
+    const requirement = secretRequirement(bearer, moved)
+    expect(requirement).toMatchObject({ required: true, hostsChanged: true, textAdded: true })
+    expect(requirement.reason).toMatch(/allowed hosts changed/)
+    expect(requirement.reason).not.toMatch(/Text the Agent can read/)
+  })
+
+  test('a definition without its injections is read as having none', () => {
+    const shape = { hosts: bearer.hosts, fields: bearer.fields }
+    expect(secretRequirement(bearer, shape).required).toBe(false)
+    expect(secretRequirement(shape, bearer).textAdded).toBe(true)
   })
 
   test('turning plain HTTP on does, and says why; turning it off or leaving it does not', () => {
@@ -204,7 +264,7 @@ describe('asking for the secret again', () => {
     expect(both.reason).toMatch(/Plain HTTP was turned on/)
   })
 
-  test('the same hosts in another order or letter case do not', () => {
+  test('the same hosts in another order or letter case are not a host change', () => {
     const before = withHosts([
       { match: 'exact', value: 'a.example.com' },
       { match: 'exact', value: 'b.example.com' },
@@ -213,7 +273,9 @@ describe('asking for the secret again', () => {
       { match: 'exact', value: 'B.example.com', path: '/x' },
       { match: 'exact', value: 'a.example.com' },
     ])
-    expect(secretRequirement(before, after).required).toBe(false)
+    expect(secretRequirement(before, after).hostsChanged).toBe(false)
+    // In another order alone they show the Agent nothing new either.
+    expect(secretRequirement(before, withHosts([...before.hosts].reverse())).required).toBe(false)
   })
 
   test.each([
@@ -255,12 +317,17 @@ describe('asking for the secret again', () => {
     expect(secretRequirement(bearer, renamed).fieldsChanged).toBe(true)
   })
 
-  test('adding an identifier field does not', () => {
+  test('adding an identifier field keeps the secrets but shows the Agent its value', () => {
     const basic: HttpDefinition = {
       ...bearer,
       fields: [{ name: 'username', kind: 'identifier', value: 'alice' }, ...bearer.fields],
       injections: [{ type: 'basic', usernameField: 'username', field: 'token' }],
     }
-    expect(secretRequirement(bearer, basic).required).toBe(false)
+    expect(secretRequirement(bearer, basic)).toMatchObject({
+      required: true,
+      hostsChanged: false,
+      fieldsChanged: false,
+      textAdded: true,
+    })
   })
 })

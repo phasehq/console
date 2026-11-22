@@ -343,7 +343,7 @@ describe('custom Connection dialogs', () => {
     await type(field(container, 'Connection name'), 'Example API')
     expect(save().disabled).toBe(true)
 
-    await type(field(container, 'Path for host 1 (optional)'), '/v2/*')
+    await type(field(container, 'Path for host 1 (optional)'), '')
     expect(save().disabled).toBe(false)
     await type(field(container, 'Path for host 1 (optional)'), '/v1/*')
     expect(save().disabled).toBe(true)
@@ -363,18 +363,34 @@ describe('custom Connection dialogs', () => {
     await openEdit()
 
     expect(field(container, 'Host 1').value).toBe('api.example.com')
-    await type(field(container, 'Path for host 1 (optional)'), '/v2/*')
+    // Dropping the path shows the Agent nothing new.
+    await type(field(container, 'Path for host 1 (optional)'), '')
     // The stored secret still stands.
     expect(secretInputs()[0].placeholder).toBe(STORED_MASK)
     expect(container.textContent).not.toContain('enter the secret again')
 
     expect(await saved()).toEqual({
       connectionId: 'connection-1',
-      definition: {
-        ...stored,
-        hosts: [{ match: 'exact', value: 'api.example.com', path: '/v2/*' }],
-      },
+      definition: { ...stored, hosts: [{ match: 'exact', value: 'api.example.com' }] },
     })
+  })
+
+  test('an edit that adds text the Agent reads asks for the secret up front and says why', async () => {
+    await openEdit()
+
+    await type(field(container, 'Path for host 1 (optional)'), '/v2/*')
+    expect(container.textContent).toContain('Text the Agent can read changed')
+    // The dots are gone: the stored secret has to be entered again with the new text.
+    expect(secretInputs()[0].placeholder).toBe('')
+    expect(secretInputs()[0].required).toBe(true)
+    expect(save().disabled).toBe(true)
+
+    await type(secretInputs()[0], SECRET)
+    const variables = await saved()
+    expect(variables.definition.hosts).toEqual([
+      { match: 'exact', value: 'api.example.com', path: '/v2/*' },
+    ])
+    expect((await opened(variables.sealedValue)).fields).toEqual({ token: SECRET })
   })
 
   test('a typed secret alone is sealed and sent with nothing else', async () => {

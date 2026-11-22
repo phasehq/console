@@ -379,16 +379,28 @@ describe('whether an edit asks for the secret again', () => {
     return secretRequirement(stored, buildCustomConnectionDefinition(form).definition)
   }
 
-  test('not for a rename, a path, an environment name or advanced settings', () => {
+  test('not for a rename, an environment name or advanced settings', () => {
     expect(
       edit((form) => ({
         ...form,
         name: 'Renamed',
-        hosts: [{ ...form.hosts[0], path: '/v2/*' }],
-        credentials: [{ ...form.credentials[0], env: 'EXAMPLE_KEY', decoyPrefix: 'sk-' }],
+        credentials: [{ ...form.credentials[0], env: 'EXAMPLE_KEY' }],
         blockWhenAbsent: true,
       })).required
     ).toBe(false)
+  })
+
+  test('for a new path or decoy prefix, which the Agent reads, with a reason', () => {
+    for (const changed of [
+      edit((form) => ({ ...form, hosts: [{ ...form.hosts[0], path: '/v2/*' }] })),
+      edit((form) => ({
+        ...form,
+        credentials: [{ ...form.credentials[0], decoyPrefix: 'sk-' }],
+      })),
+    ]) {
+      expect(changed).toMatchObject({ required: true, hostsChanged: false, textAdded: true })
+      expect(changed.reason).toMatch(/Text the Agent can read changed/)
+    }
   })
 
   test('for turning plain HTTP on, with a reason, but not for turning it off', () => {
@@ -408,15 +420,22 @@ describe('whether an edit asks for the secret again', () => {
     ).toBe(false)
   })
 
-  test('not for moving the same secret to another place', () => {
-    // The secret keeps its field name across presets.
-    expect(edit((form) => withPreset(form, 'query')).required).toBe(false)
+  test('for moving the same secret to another place only by the new text it shows', () => {
+    // The secret keeps its field name across presets; the query parameter name and the
+    // username are new text the Agent reads.
+    const query = edit((form) => withPreset(form, 'query'))
     const basic = edit((form) => {
       const next = withPreset(form, 'basic')
       next.credentials[0] = { ...next.credentials[0], username: 'alice' }
       return next
     })
-    expect(basic.required).toBe(false)
+    for (const moved of [query, basic])
+      expect(moved).toMatchObject({
+        required: true,
+        hostsChanged: false,
+        fieldsChanged: false,
+        textAdded: true,
+      })
   })
 
   test('for a changed host, port or match', () => {

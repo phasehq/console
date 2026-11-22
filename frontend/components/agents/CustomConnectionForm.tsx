@@ -59,16 +59,22 @@ export function useCustomConnectionEditor(
 
   const requirement = useMemo(() => {
     if (built.definition || !shape) return secretRequirement(current, built.definition)
-    // While the form is incomplete the hosts are those it last built, and the
-    // secrets are its rows, so a secret just added or removed already counts.
+    // While the form is incomplete the hosts and the text the Agent reads are
+    // those it last built, and the secrets are its rows, so a secret just added
+    // or removed already counts.
     return secretRequirement(current, {
-      hosts: shape.hosts,
-      allowPlainHttp: shape.allowPlainHttp,
-      fields: Object.values(built.secretFields).map((name) => ({
-        name,
-        kind: 'secret' as const,
-        source: { type: 'sealed' as const },
-      })),
+      ...shape,
+      fields: [
+        ...shape.fields.filter((field) => field.kind === 'identifier'),
+        ...Object.values(built.secretFields).map(
+          (name) =>
+            shape.fields.find((field) => field.kind === 'secret' && field.name === name) ?? {
+              name,
+              kind: 'secret' as const,
+              source: { type: 'sealed' as const },
+            }
+        ),
+      ],
     })
   }, [current, built.definition, built.secretFields, shape])
   const enteredSecrets = useMemo(

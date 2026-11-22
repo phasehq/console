@@ -5,6 +5,7 @@
 
 import { encryptAsymmetric, randomFormattedKeyPair } from '@/utils/crypto/general'
 import {
+  agentVisibleTexts,
   boundHosts,
   secretFieldNames,
   secretValueProblem,
@@ -97,18 +98,35 @@ export type SecretRequirement = {
   fieldsChanged: boolean
   /** Plain HTTP was turned on: the stored value may now travel unencrypted. */
   plainHttpEnabled: boolean
+  /** The Agent can read text the stored definition does not have. */
+  textAdded: boolean
   /** Why the secret is asked for again; '' when it is not, or on a first entry. */
   reason: string
 }
 
-type RequirementShape = Pick<HttpDefinition, 'hosts' | 'fields' | 'allowPlainHttp'>
+type RequirementShape = Pick<HttpDefinition, 'hosts' | 'fields' | 'allowPlainHttp'> &
+  Partial<Pick<HttpDefinition, 'injections' | 'operationClasses'>>
 
 const PLAIN_HTTP_REASON =
   'Plain HTTP was turned on, so the secret may now be sent unencrypted. Enter the secret again to confirm it.'
 
+const TEXT_REASON =
+  'Text the Agent can read changed, such as an identifier, a prefix, a header name or a path. Enter the secret again so it can be checked against that text.'
+
+/**
+ * Whether a definition shows the Agent text the stored one does not: the stored secret was
+ * only checked against the stored text. Mirrors `adds_agent_visible_text` on the backend.
+ */
+const addsAgentVisibleText = (current: RequirementShape, requested: RequirementShape) => {
+  const texts = (shape: RequirementShape) =>
+    agentVisibleTexts({ ...shape, injections: shape.injections ?? [] }).map(({ text }) => text)
+  const known = new Set(texts(current))
+  return texts(requested).some((text) => !known.has(text))
+}
+
 /**
  * Whether a definition change needs the secret entered again: when the bound hosts or the
- * secret field set change, or plain HTTP is turned on.
+ * secret field set change, plain HTTP is turned on, or the Agent can read new text.
  */
 export const secretRequirement = (
   current: RequirementShape | null | undefined,
@@ -119,6 +137,7 @@ export const secretRequirement = (
     hostsChanged: false,
     fieldsChanged: false,
     plainHttpEnabled: false,
+    textAdded: false,
     reason: '',
   }
   if (!requested) return none
@@ -129,6 +148,7 @@ export const secretRequirement = (
   const after = secretFieldNames(requested).sort()
   const fieldsChanged = JSON.stringify(before) !== JSON.stringify(after)
   const plainHttpEnabled = requested.allowPlainHttp === true && current.allowPlainHttp !== true
+  const textAdded = addsAgentVisibleText(current, requested)
   const rebound = hostsChanged
     ? fieldsChanged
       ? 'The allowed hosts and the set of secrets changed. The stored value is sealed to its hosts and holds exactly its secrets, so enter every secret again.'
@@ -136,12 +156,20 @@ export const secretRequirement = (
     : fieldsChanged
       ? 'The set of secrets changed. The stored value holds exactly its secrets, so enter every secret again.'
       : ''
-  const reason = [rebound, plainHttpEnabled ? PLAIN_HTTP_REASON : ''].filter(Boolean).join(' ')
+  const reason = [
+    rebound,
+    plainHttpEnabled ? PLAIN_HTTP_REASON : '',
+    // A new host is new text too; its own reason already asks for the secret.
+    textAdded && !rebound ? TEXT_REASON : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
   return {
-    required: hostsChanged || fieldsChanged || plainHttpEnabled,
+    required: hostsChanged || fieldsChanged || plainHttpEnabled || textAdded,
     hostsChanged,
     fieldsChanged,
     plainHttpEnabled,
+    textAdded,
     reason,
   }
 }

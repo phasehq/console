@@ -61,6 +61,11 @@ const withPath = (path: string): HttpDefinition => ({
   ...current,
   hosts: [{ match: 'exact', value: 'api.example.com', path }],
 })
+// The same host without its path: nothing new for the Agent to read.
+const noPath: HttpDefinition = {
+  ...current,
+  hosts: [{ match: 'exact', value: 'api.example.com' }],
+}
 const otherHost: HttpDefinition = {
   ...current,
   hosts: [{ match: 'exact', value: 'api.example.org', path: '/v1/*' }],
@@ -275,17 +280,30 @@ describe('reviewing a request that carries an action', () => {
     ])
   })
 
-  test('a change that keeps the hosts needs no secret', async () => {
-    await open(updateRequest(withPath('/v2/*'), false))
+  test('a change that keeps the hosts and adds no text the Agent reads needs no secret', async () => {
+    await open(updateRequest(noPath, false))
 
     expect(secretInputs()).toHaveLength(0)
     // The diff sets the request against the Connection as it is.
     expect(container.textContent).toContain('api.example.com/v1/*')
-    expect(container.textContent).toContain('api.example.com/v2/*')
 
     const variables = await approved('Approve change')
     expect(variables).not.toHaveProperty('action')
     expect(variables).not.toHaveProperty('inputs')
+  })
+
+  test('a new path asks for the secret, since the Agent reads it, and says so', async () => {
+    await open(updateRequest(withPath('/v2/*'), true))
+
+    expect(container.textContent).toContain('Text the Agent can read changed')
+    expect(secretInputs()).toHaveLength(1)
+    expect(buttonNamed(container, 'Approve change')!.disabled).toBe(true)
+    await type(secretInputs()[0], SECRET)
+
+    const variables = await approved('Approve change')
+    expect(variables).not.toHaveProperty('action')
+    expect(Object.keys(variables.inputs)).toEqual(['sealedValue'])
+    expect((await opened(variables.inputs.sealedValue)).fields).toEqual({ token: SECRET })
   })
 
   test('a change of hosts asks for the secret, sealed to the Connection over the new hosts', async () => {
@@ -307,7 +325,7 @@ describe('reviewing a request that carries an action', () => {
   })
 
   test("the reviewer's own change of hosts asks for the secret too", async () => {
-    await open(updateRequest(withPath('/v2/*'), false))
+    await open(updateRequest(noPath, false))
     expect(secretInputs()).toHaveLength(0)
 
     await click(container, 'Edit request')
@@ -323,12 +341,30 @@ describe('reviewing a request that carries an action', () => {
       name: 'Example API',
       definition: {
         ...current,
-        hosts: [{ match: 'exact', value: 'files.example.com', path: '/v2/*' }],
+        hosts: [{ match: 'exact', value: 'files.example.com' }],
       },
     })
     expect((await opened(variables.inputs.sealedValue)).hosts).toEqual([
       { match: 'exact', value: 'files.example.com' },
     ])
+  })
+
+  test("the reviewer's own new path asks for the secret before approving", async () => {
+    await open(updateRequest(noPath, false))
+    expect(secretInputs()).toHaveLength(0)
+
+    await click(container, 'Edit request')
+    await type(field(container, 'Path for host 1 (optional)'), '/v3/*')
+    expect(container.textContent).toContain('Text the Agent can read changed')
+    expect(secretInputs()).toHaveLength(1)
+    expect(buttonNamed(container, 'Approve change')!.disabled).toBe(true)
+    await type(secretInputs()[0], SECRET)
+
+    const variables = await approved('Approve change')
+    expect(variables.action.definition.hosts).toEqual([
+      { match: 'exact', value: 'api.example.com', path: '/v3/*' },
+    ])
+    expect(Object.keys(variables.inputs)).toEqual(['sealedValue'])
   })
 
   test('a secret update carries only the newly sealed value', async () => {
@@ -399,7 +435,7 @@ describe('reviewing a request that carries an action', () => {
     approve.mockRejectedValue(
       new Error('The Connection changed after this request was made; start a new request')
     )
-    await open(updateRequest(withPath('/v2/*'), false))
+    await open(updateRequest(noPath, false))
     await click(container, 'Approve change')
     await settle(() => approve.mock.calls.length > 0)
     await settle(() => !!container.querySelector('[role="alert"]'))

@@ -307,9 +307,11 @@ export function EditCustomConnectionDialog({
   const nameChanged = !!nextName && nextName !== base.name
   const definitionChanged =
     editable && !!definition && !!base.definition && !sameDefinition(definition, base.definition)
-  // The hosts or the set of secrets differ, even while a host is half-typed: the
-  // stored value no longer fits, so every secret is entered again.
-  const rebound = editable && editor.requirement.required
+  // The hosts, the set of secrets or the text the Agent reads differ, even while a host is
+  // half-typed: the stored value no longer fits, so every secret is entered again. A
+  // definition left as it opened is not sent, so it asks for nothing.
+  const rebound =
+    editable && editor.requirement.required && (definitionChanged || !editor.built.definition)
   const secretsTyped = editable
     ? editor.secretsTyped
     : Object.values(fieldSecrets).some((value) => !!value)
