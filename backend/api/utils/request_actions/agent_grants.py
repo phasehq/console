@@ -331,11 +331,18 @@ class AllowCall(ActionHandler):
         )
         _inputs(inputs)
         connection = _locked_target(request)
-        grant = (
-            AgentWorkflowGrant.objects.select_for_update(of=("self",))
-            .active()
-            .get(id=request.grant_id)
-        )
+        try:
+            grant = (
+                AgentWorkflowGrant.objects.select_for_update(of=("self",))
+                .active()
+                .get(id=request.grant_id)
+            )
+        except AgentWorkflowGrant.DoesNotExist as exc:
+            # A revoke that was still committing when the grant was checked.
+            raise ActionError(
+                "This access was ended while the request was open; ask the Agent "
+                "to file the request again."
+            ) from exc
         # The policy may have changed since the request was filed.
         _refuse_blocked(connection, action["allow"])
         now = timezone.now()

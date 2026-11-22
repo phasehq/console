@@ -27,6 +27,7 @@ from api.utils.agent_access import end_connection_access
 from api.utils.agent_config import get_config_registry
 from api.utils.agent_config.access_policy import live_temporary_allows
 from api.utils.agents import mint_agent_token
+from api.utils.request_actions import agent_grants
 from api.utils.request_actions.agent_workflows import set_workflow_context
 from backend.graphene.agents import mutations
 from backend.graphene.agents.mutations import (
@@ -238,6 +239,30 @@ def test_ending_an_allow_that_is_not_there_leaves_pending_requests_alone(lab, ag
         )
 
     assert _status(pending) == AgentRequest.PENDING
+
+
+def test_an_allow_whose_grant_is_revoked_during_approval_is_refused_plainly(
+    lab, agent, monkeypatch
+):
+    connection = app_connection(lab, [lab.dev])
+    granted = grant_app(lab, connection)
+    agent_request = _allow(agent, connection, "asked")
+    real_target = agent_grants._locked_target
+
+    def revoked_after_the_check(request):
+        # A revoke that lands once the grant was checked, before it is locked.
+        checked = real_target(request)
+        _revoke(granted)
+        return checked
+
+    monkeypatch.setattr(agent_grants, "_locked_target", revoked_after_the_check)
+
+    with pytest.raises(GraphQLError, match="ended while the request was open"):
+        approve(lab, agent_request, lab.approver_info)
+
+    assert _status(agent_request) == AgentRequest.PENDING
+    granted.refresh_from_db()
+    assert granted.temporary_allows == []
 
 
 # --- Approving the Agent's request to drop a Connection ---------------------
