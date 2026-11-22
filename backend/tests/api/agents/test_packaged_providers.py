@@ -80,6 +80,7 @@ PROVIDERS = {
         "classes": [
             {"match": {"methods": ["POST"], "path": "/graphql"}, "class": "update"},
             {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"},
+            {"match": {"methods": ["POST"], "path": "/*/api/graphql"}, "class": "update"},
         ],
     },
     "gitlab": {

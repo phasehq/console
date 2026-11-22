@@ -123,6 +123,9 @@ _CONTROL_CHARACTER = re.compile(r"[\x00-\x1f\x7f]")
 # A path below which a self-hosted instance serves its API. It becomes part
 # of a host rule's path pattern, so nothing a pattern reads specially.
 _ENDPOINT_PATH = re.compile(r"^(?:/[A-Za-z0-9._~-]+)*$")
+# An Enterprise Server's API path once /v3 is removed, below at most one
+# segment: as deep as the GitHub manifest's guard and call class paths reach.
+_GITHUB_API_PATH = re.compile(r"^(?:/[^/]+)?/api$")
 
 
 def _provider_name(provider):
@@ -206,6 +209,12 @@ def _github_config(material):
     # An Enterprise Server serves REST below /api/v3 and GraphQL at
     # /api/graphql, so the rule covers what they share.
     path = path.removesuffix("/v3")
+    if path and not _GITHUB_API_PATH.fullmatch(path):
+        raise CredentialResolutionError(
+            "The GitHub API URL of this credential must have no path, or end in "
+            "/api/v3 with at most one path segment before it (such as "
+            "https://example.com/github/api/v3), to be used by an Agent Connection"
+        )
     rule = {"match": "exact", "value": host, "port": port}
     if path:
         rule["path"] = f"{path}/*"
@@ -223,6 +232,14 @@ def _gitlab_config(material):
     host, port, path = _https_endpoint(
         gitlab_host, "The GitLab host of this credential"
     )
+    # The GitLab manifest's guard and call class paths reach the API at the
+    # root or below one segment, so an instance served deeper is refused.
+    if path.count("/") > 1:
+        raise CredentialResolutionError(
+            "The GitLab host of this credential must be the instance's address "
+            "with at most one path segment (such as https://example.com/gitlab), "
+            "to be used by an Agent Connection"
+        )
     return {
         "hosts": [
             {"match": "exact", "value": host, "port": port, "path": f"{path}/api/*"}

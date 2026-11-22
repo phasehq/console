@@ -768,6 +768,7 @@ def test_graphql_endpoints_are_classed_as_updates_by_their_own_service():
     assert classes["github"] == [
         {"match": {"methods": ["POST"], "path": "/graphql"}, "class": "update"},
         {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"},
+        {"match": {"methods": ["POST"], "path": "/*/api/graphql"}, "class": "update"},
     ]
     assert classes["gitlab"] == [
         {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"},

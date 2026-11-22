@@ -40,7 +40,17 @@
       },
       {
         "method": "POST",
+        "pattern": "/*/api/v4/projects/*/access_tokens",
+        "operation": "GitLab project access token"
+      },
+      {
+        "method": "POST",
         "pattern": "/api/v4/projects/*/access_tokens/*/rotate",
+        "operation": "GitLab project access token rotation"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v4/projects/*/access_tokens/*/rotate",
         "operation": "GitLab project access token rotation"
       },
       {
@@ -50,7 +60,17 @@
       },
       {
         "method": "POST",
+        "pattern": "/*/api/v4/groups/*/access_tokens",
+        "operation": "GitLab group access token"
+      },
+      {
+        "method": "POST",
         "pattern": "/api/v4/groups/*/access_tokens/*/rotate",
+        "operation": "GitLab group access token rotation"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v4/groups/*/access_tokens/*/rotate",
         "operation": "GitLab group access token rotation"
       },
       {
@@ -60,7 +80,17 @@
       },
       {
         "method": "POST",
+        "pattern": "/*/api/v4/user/personal_access_tokens",
+        "operation": "GitLab personal access token"
+      },
+      {
+        "method": "POST",
         "pattern": "/api/v4/users/*/personal_access_tokens",
+        "operation": "GitLab personal access token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v4/users/*/personal_access_tokens",
         "operation": "GitLab personal access token"
       },
       {
@@ -70,7 +100,17 @@
       },
       {
         "method": "POST",
+        "pattern": "/*/api/v4/personal_access_tokens/*/rotate",
+        "operation": "GitLab personal access token rotation"
+      },
+      {
+        "method": "POST",
         "pattern": "/api/v4/users/*/impersonation_tokens",
+        "operation": "GitLab impersonation token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v4/users/*/impersonation_tokens",
         "operation": "GitLab impersonation token"
       },
       {
@@ -80,7 +120,17 @@
       },
       {
         "method": "POST",
+        "pattern": "/*/api/v4/projects/*/deploy_tokens",
+        "operation": "GitLab project deploy token"
+      },
+      {
+        "method": "POST",
         "pattern": "/api/v4/groups/*/deploy_tokens",
+        "operation": "GitLab group deploy token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v4/groups/*/deploy_tokens",
         "operation": "GitLab group deploy token"
       },
       {
@@ -90,7 +140,17 @@
       },
       {
         "method": "POST",
+        "pattern": "/*/api/v4/projects/*/deploy_keys",
+        "operation": "GitLab project deploy key"
+      },
+      {
+        "method": "POST",
         "pattern": "/api/v4/projects/*/deploy_keys/*/enable",
+        "operation": "GitLab project deploy key enablement"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v4/projects/*/deploy_keys/*/enable",
         "operation": "GitLab project deploy key enablement"
       },
       {
@@ -100,7 +160,17 @@
       },
       {
         "method": "POST",
+        "pattern": "/*/api/v4/user/keys",
+        "operation": "GitLab user SSH key"
+      },
+      {
+        "method": "POST",
         "pattern": "/api/v4/users/*/keys",
+        "operation": "GitLab user SSH key"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v4/users/*/keys",
         "operation": "GitLab user SSH key"
       },
       {
@@ -110,12 +180,27 @@
       },
       {
         "method": "POST",
+        "pattern": "/*/api/v4/projects/*/triggers",
+        "operation": "GitLab pipeline trigger token"
+      },
+      {
+        "method": "POST",
         "pattern": "/api/v4/user/runners",
         "operation": "GitLab runner authentication token"
       },
       {
         "method": "POST",
+        "pattern": "/*/api/v4/user/runners",
+        "operation": "GitLab runner authentication token"
+      },
+      {
+        "method": "POST",
         "pattern": "/api/v4/runners",
+        "operation": "GitLab runner authentication token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v4/runners",
         "operation": "GitLab runner authentication token"
       }
     ]
