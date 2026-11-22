@@ -2172,6 +2172,18 @@ class RevokeAgentTokenMutation(graphene.Mutation):
         return cls(token=token)
 
 
+def _require_request_management(member, agent_request, *, credentials=False):
+    require_role(member, "update", "AgentRequests")
+    if credentials:
+        require_role(member, "read", "IntegrationCredentials")
+        require_role(
+            member,
+            "create" if agent_request.kind == AgentRequest.SETUP else "update",
+            "AgentConnections",
+        )
+    require_workflow(member, agent_request.workflow, "update")
+
+
 def _request_management_member(info, request_id, *, credentials=False):
     """Authorize a human before any request lifecycle mutation."""
 
@@ -2182,16 +2194,36 @@ def _request_management_member(info, request_id, *, credentials=False):
     except (AgentRequest.DoesNotExist, ValueError) as exc:
         raise GraphQLError("Agent request not found") from exc
     member = organisation_member(info, initial.organisation_id)
-    require_role(member, "update", "AgentRequests")
-    if credentials:
-        require_role(member, "read", "IntegrationCredentials")
-        require_role(
-            member,
-            "create" if initial.kind == AgentRequest.SETUP else "update",
-            "AgentConnections",
-        )
-    require_workflow(member, initial.workflow, "update")
+    _require_request_management(member, initial, credentials=credentials)
     return member, initial.organisation_id
+
+
+def _current_request_manager(member, agent_request, *, credentials=False):
+    """The member as they are now, authorized again inside the transaction
+    that carries out a locked request.
+
+    Their Agent membership is locked first, as removing them or changing their Workflows does,
+    so a removal still committing is waited for and seen.
+    """
+
+    list(
+        AgentMembership.objects.select_for_update(of=("self",))
+        .filter(
+            agent_id=agent_request.workflow.agent_id,
+            member_id=member.id,
+            deleted_at__isnull=True,
+        )
+        .values_list("id", flat=True)
+    )
+    current = (
+        OrganisationMember.objects.select_related("role", "organisation")
+        .filter(pk=member.pk, deleted_at__isnull=True)
+        .first()
+    )
+    if current is None:
+        raise GraphQLError("You don't have access to this organisation")
+    _require_request_management(current, agent_request, credentials=credentials)
+    return current
 
 
 def _expire_pending_request(request_id, organisation_id, now):
@@ -2330,6 +2362,7 @@ class FulfillAgentRequestMutation(graphene.Mutation):
                     "This request carries an action; approve it with "
                     "approveAgentRequestAction"
                 )
+            member = _current_request_manager(member, agent_request, credentials=True)
             try:
                 credential = ProviderCredentials.objects.select_for_update().get(
                     id=credential_id,
@@ -2592,6 +2625,7 @@ class ApproveAgentRequestActionMutation(graphene.Mutation):
                     "This request carries no action; fulfil it with "
                     "fulfillAgentRequest"
                 )
+            member = _current_request_manager(member, agent_request)
             try:
                 handler = action_handler(agent_request.action)
                 if action is not None and action_handler(action) is not handler:
