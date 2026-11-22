@@ -1759,6 +1759,11 @@ class GrantAgentWorkflowMutation(graphene.Mutation):
         require_workflow(member, workflow, "update")
         require_role(member, "read", "AgentConnections")
         with transaction.atomic():
+            # Checked again as the member is now: one removed from the Workflow,
+            # or whose role changed, since the checks above grants nothing.
+            member = _current_member(member, workflow.agent_id)
+            require_workflow(member, workflow, "update")
+            require_role(member, "read", "AgentConnections")
             try:
                 # ``authentication`` is nullable while a setup request is pending,
                 # so Django renders this select_related as an outer join. PostgreSQL
@@ -2206,21 +2211,16 @@ def _request_management_member(info, request_id, *, credentials=False):
     return member, initial.organisation_id
 
 
-def _current_request_manager(member, agent_request, *, credentials=False):
-    """The member as they are now, authorized again inside the transaction
-    that carries out a locked request.
+def _current_member(member, agent_id):
+    """The member as they are now, read inside the transaction that acts for them.
 
-    Their Agent membership is locked first, as removing them or changing their Workflows does,
-    so a removal still committing is waited for and seen.
+    Their membership of the Agent is locked first, as removing them or changing their Workflows
+    does, so a removal still committing is waited for and seen.
     """
 
     list(
         AgentMembership.objects.select_for_update(of=("self",))
-        .filter(
-            agent_id=agent_request.workflow.agent_id,
-            member_id=member.id,
-            deleted_at__isnull=True,
-        )
+        .filter(agent_id=agent_id, member_id=member.id, deleted_at__isnull=True)
         .values_list("id", flat=True)
     )
     current = (
@@ -2230,6 +2230,14 @@ def _current_request_manager(member, agent_request, *, credentials=False):
     )
     if current is None:
         raise GraphQLError("You don't have access to this organisation")
+    return current
+
+
+def _current_request_manager(member, agent_request, *, credentials=False):
+    """The member as they are now, authorized again inside the transaction
+    that carries out a locked request."""
+
+    current = _current_member(member, agent_request.workflow.agent_id)
     _require_request_management(current, agent_request, credentials=credentials)
     return current
 

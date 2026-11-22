@@ -32,6 +32,7 @@ from api.utils.request_actions.agent_workflows import set_workflow_context
 from backend.graphene.agents import mutations
 from backend.graphene.agents.mutations import (
     FulfillAgentRequestMutation,
+    GrantAgentWorkflowMutation,
     RemoveAgentWorkflowGrantAllowMutation,
 )
 
@@ -540,6 +541,87 @@ def test_a_reviewer_whose_role_lost_request_rights_changes_nothing(space, monkey
 
     assert _status(agent_request) == AgentRequest.PENDING
     assert AgentWorkflowGrant.objects.active().filter(id=granted.id).exists()
+
+
+# --- A member granting a Connection directly --------------------------------
+
+
+def _between_check_and_grant(monkeypatch, change):
+    """Run ``change`` once the grant mutation checked its member, before the
+    transaction that makes the grant."""
+
+    real = mutations.require_role
+    changed = []
+
+    def checked_then_changed(member, action, resource):
+        real(member, action, resource)
+        if (action, resource) == ("read", "AgentConnections") and not changed:
+            changed.append(True)
+            change()
+
+    monkeypatch.setattr(mutations, "require_role", checked_then_changed)
+
+
+def _grant_editor(space):
+    editor = add_member(
+        space.organisation,
+        "grant-editor",
+        permissions={"Agents": ["read"], "AgentConnections": ["read"]},
+        agent_permissions={"AgentWorkflows": ["read", "update"]},
+    )
+    return editor, _assign(space, editor)
+
+
+def _grant(member, space, connection):
+    return GrantAgentWorkflowMutation.mutate(
+        None, info(member), workflow_id=space.workflow.id, connection_id=connection.id
+    )
+
+
+def test_a_member_removed_before_a_grant_is_made_grants_nothing(space, monkeypatch):
+    editor, membership = _grant_editor(space)
+    connection = custom_connection(space)
+    _between_check_and_grant(
+        monkeypatch, lambda: AgentMembership.objects.get(pk=membership.pk).delete()
+    )
+
+    with pytest.raises(GraphQLError, match="permission to update this Workflow"):
+        _grant(editor, space, connection)
+
+    assert not AgentWorkflowGrant.objects.filter(connection=connection).exists()
+
+
+def test_a_member_whose_role_lost_connection_read_grants_nothing(space, monkeypatch):
+    editor, _ = _grant_editor(space)
+    connection = custom_connection(space)
+    workflows_only = Role.objects.create(
+        organisation=space.organisation,
+        name="Workflows only",
+        permissions={
+            "permissions": {"Agents": ["read"]},
+            "agent_permissions": {"AgentWorkflows": ["read", "update"]},
+        },
+    )
+    _between_check_and_grant(
+        monkeypatch,
+        lambda: OrganisationMember.objects.filter(pk=editor.pk).update(
+            role=workflows_only
+        ),
+    )
+
+    with pytest.raises(GraphQLError, match="permission to read AgentConnections"):
+        _grant(editor, space, connection)
+
+    assert not AgentWorkflowGrant.objects.filter(connection=connection).exists()
+
+
+def test_a_member_still_assigned_makes_the_grant(space):
+    editor, _ = _grant_editor(space)
+    connection = custom_connection(space)
+
+    _grant(editor, space, connection)
+
+    assert AgentWorkflowGrant.objects.active().filter(connection=connection).exists()
 
 
 # --- Minting an Agent token -------------------------------------------------
