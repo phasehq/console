@@ -620,6 +620,8 @@ class RemoveConnection(ActionHandler):
         }
 
     def apply(self, request, action, member, inputs):
+        # What revoking the grant directly needs.
+        _require(member, "read")
         _inputs(inputs)
         # Only this Workflow's grant goes; the Connection and its other grants
         # stay as they are.
