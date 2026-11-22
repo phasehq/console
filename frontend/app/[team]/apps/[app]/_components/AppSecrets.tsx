@@ -189,7 +189,7 @@ import { DynamicSecretActions, RotationStatusCell } from './GroupCells'
 import { AppSecretsSkeleton } from './AppSecretsSkeleton'
 import { EnvironmentsMenu } from './EnvironmentsMenu'
 import { SecretWithFlags } from './EnvValueCell'
-import { useEnvSelection, loadedEnvSelection } from './EnvSelectionProvider'
+import { useEnvSelection, filterEnvSelection, loadedEnvSelection } from './EnvSelectionProvider'
 import { RowSelection, SecretsGridHeader } from './SecretsGridHeader'
 import { GridScrollControls } from './GridScrollControls'
 import { SelectionBar } from './SelectionBar'
@@ -2125,12 +2125,17 @@ export const AppSecrets = ({
         ? 'all Environments'
         : `${checkedEnvironments.length} Environments`
 
+  // Named for the envs asked for while none of them has loaded yet
+  const titledEnvironments =
+    checkedEnvironments.length > 0
+      ? checkedEnvironments
+      : filterEnvSelection(orderedEnvironments, selectedEnvIds)
   const viewTitle =
-    checkedEnvironments.length === 1
-      ? checkedEnvironments[0].name
-      : checkedEnvironments.length === orderedEnvironments.length
+    titledEnvironments.length === 1
+      ? titledEnvironments[0].name
+      : titledEnvironments.length === orderedEnvironments.length
         ? 'All Environments'
-        : `${checkedEnvironments.length} of ${orderedEnvironments.length} Environments`
+        : `${titledEnvironments.length} of ${orderedEnvironments.length} Environments`
 
   const allowRotatingSecrets =
     organisation?.plan === ApiOrganisationPlanChoices.En ||
@@ -2240,9 +2245,18 @@ export const AppSecrets = ({
     visibleRows.length > 0 || visibleFolders.length > 0 || visibleDynamicSecrets.length > 0
   const colSpan = columns.length + 2
 
+  // Every env asked for is still decrypting (a link narrowed the grid to one of them): as on a
+  // first load there is nothing of theirs to show yet. One that can't be decrypted: a failed load
+  const selectionLoading =
+    !fetching &&
+    !loadFailed &&
+    orderedEnvironments.length > 0 &&
+    checkedEnvironments.length === 0 &&
+    pendingEnvIds.length > 0
   // The first load, with nothing to show yet; without permission to read there is no load to wait for
   const loadingGrid =
-    fetching && !hasContent && (!organisation || (userCanReadEnvironments && userCanReadSecrets))
+    ((fetching && !hasContent) || selectionLoading) &&
+    (!organisation || (userCanReadEnvironments && userCanReadSecrets))
   // Last visit's layout; unread until mounted, as the server render can't see this browser's storage
   const [savedShape, setSavedShape] = useState<GridShape | null | undefined>(undefined)
   useLayoutEffect(() => setSavedShape(readGridShape(app)), [app])

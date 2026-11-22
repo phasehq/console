@@ -44,7 +44,13 @@ describe('loadedEnvSelection', () => {
     expect(ids(loadedEnvSelection(envs, null, ['prod']))).toEqual(['dev', 'staging'])
   })
 
-  it('shows the decrypted envs when the selection names only ones still decrypting', () => {
-    expect(ids(loadedEnvSelection(envs, ['prod'], ['staging', 'prod']))).toEqual(['dev'])
+  it('shows none when the selection names only envs still decrypting', () => {
+    // Not the ones that have loaded: nobody asked to see, or edit, those
+    expect(ids(loadedEnvSelection(envs, ['prod'], ['staging', 'prod']))).toEqual([])
+    expect(ids(loadedEnvSelection(envs, ['prod'], ['prod']))).toEqual([])
+  })
+
+  it('still falls back to every decrypted env when the selection only names unknown envs', () => {
+    expect(ids(loadedEnvSelection(envs, ['deleted-env'], ['prod']))).toEqual(['dev', 'staging'])
   })
 })
