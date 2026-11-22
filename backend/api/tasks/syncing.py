@@ -65,7 +65,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 3600
 
-# A job holds the sync as it was queued: saving the whole row would undo a path or pause changed since
+# A job holds the sync as it was queued, and the request that queues it as it was loaded: saving the
+# whole row would undo a path or pause changed since
 _STATUS_FIELDS = ["status", "updated_at"]
 
 
@@ -101,7 +102,7 @@ def trigger_sync_tasks(env_sync):
         return
 
     env_sync.status = EnvironmentSync.QUEUED
-    env_sync.save()
+    env_sync.save(update_fields=_STATUS_FIELDS)
 
     try:
         job = sync_func.delay(env_sync)
@@ -110,7 +111,7 @@ def trigger_sync_tasks(env_sync):
     except Exception as e:
         logger.error(f"Failed to dispatch sync job for {env_sync.id}: {e}")
         env_sync.status = EnvironmentSync.FAILED
-        env_sync.save()
+        env_sync.save(update_fields=_STATUS_FIELDS)
 
 
 def _pause_if_org_locked(env_sync, sync_event=None):

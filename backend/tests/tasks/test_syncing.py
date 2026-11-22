@@ -411,6 +411,36 @@ def test_sync_job_saves_its_status_and_nothing_else(sync_function):
     ]
 
 
+def _queue(delay):
+    """trigger_sync_tasks on a sync as the request that queues it holds it; returns its saves."""
+    from api.services import ServiceConfig
+    from api.tasks.syncing import trigger_sync_tasks
+
+    env_sync = MagicMock(service=ServiceConfig.SUPABASE_EDGE_FUNCTIONS["id"])
+    with patch("api.tasks.syncing.apps.get_model"), patch(
+        "api.tasks.syncing.organisation_is_locked", return_value=False
+    ), patch("api.tasks.syncing.cancel_sync_tasks"), patch(
+        "api.tasks.syncing.perform_supabase_sync"
+    ) as job:
+        job.delay.side_effect = delay
+        trigger_sync_tasks(env_sync)
+    return [call.kwargs for call in env_sync.save.call_args_list]
+
+
+@pytest.mark.parametrize(
+    "delay, saved",
+    [(lambda env_sync: MagicMock(), 1), (Exception("queue down"), 2)],
+    ids=["queued", "not queued"],
+)
+def test_queueing_a_sync_saves_its_status_and_nothing_else(delay, saved):
+    """The request loaded the sync before queueing it. A folder renamed in between has its
+    new path in the row: saving the whole stale copy would put the old one back, and the
+    job reads the row's path."""
+    saves = _queue(delay)
+
+    assert saves == [{"update_fields": ["status", "updated_at"]}] * saved
+
+
 def test_sync_job_paused_for_a_locked_org_saves_its_status_and_nothing_else():
     sync_function = MagicMock()
 
