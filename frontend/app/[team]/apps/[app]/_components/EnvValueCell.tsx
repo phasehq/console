@@ -184,12 +184,13 @@ const EnvValueCellBase = ({
 
   // A value saved elsewhere that reaches a cell with none is masked, as on a fresh load: the cell
   // was open only because it was empty. While an unsaved edit covers it, that waits for the edit.
+  // A layout effect, so the mask is on before the browser paints the value
   const savedValue = serverSecret?.value ?? ''
   const savedId = serverSecret?.id
   const prevSavedValueRef = useRef(savedValue)
   const prevValueRef = useRef(value)
   const arrivedUnseenRef = useRef(false)
-  useEffect(() => {
+  useLayoutEffect(() => {
     const typedHere = prevValueRef.current === value
     prevValueRef.current = value
     if (prevSavedValueRef.current === '' && savedValue !== '') arrivedUnseenRef.current = true

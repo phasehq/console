@@ -49,35 +49,33 @@ describe('EnvValueCell', () => {
   const logReads = jest.fn()
 
   /** The cell with `client` on screen and `server` as its saved copy */
-  const render = (
+  const cell = (
     client: SecretType | null,
     server: SecretType | null,
     props: Partial<EnvValueCellProps> = {}
-  ) =>
-    act(async () =>
-      root.render(
-        <EnvValueCell
-          rowId="row-1"
-          entry={{ env, secret: client }}
-          serverEntry={{ env, secret: server }}
-          rowKey="TOKEN"
-          keyIsStagedForDelete={false}
-          sameAsProd={null}
-          inRotatingGroup={false}
-          envRevealed={false}
-          revealOnHover={false}
-          highlighted={false}
-          canUpdateSecrets
-          canDeleteSecrets
-          canCreateLockbox
-          updateValue={() => {}}
-          addValue={() => {}}
-          deleteValue={() => {}}
-          logReads={logReads}
-          {...props}
-        />
-      )
-    )
+  ) => (
+    <EnvValueCell
+      rowId="row-1"
+      entry={{ env, secret: client }}
+      serverEntry={{ env, secret: server }}
+      rowKey="TOKEN"
+      keyIsStagedForDelete={false}
+      sameAsProd={null}
+      inRotatingGroup={false}
+      envRevealed={false}
+      revealOnHover={false}
+      highlighted={false}
+      canUpdateSecrets
+      canDeleteSecrets
+      canCreateLockbox
+      updateValue={() => {}}
+      addValue={() => {}}
+      deleteValue={() => {}}
+      logReads={logReads}
+      {...props}
+    />
+  )
+  const render = (...args: Parameters<typeof cell>) => act(async () => root.render(cell(...args)))
   const field = () => container.querySelector('textarea')!
   const masked = () => field().classList.contains('text-security-disc')
 
@@ -101,6 +99,29 @@ describe('EnvValueCell', () => {
       expect(field().value).toBe('s3cret')
       expect(masked()).toBe(true)
       expect(logReads).not.toHaveBeenCalled()
+    })
+
+    it('has it masked by the time the browser can paint it', async () => {
+      await render(null, null)
+      // The first change to the page that puts the value in it, seen as the browser would see
+      // it: after the commit, before anything scheduled for later (a passive effect)
+      const firstSeen = new Promise<boolean>((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (!container.querySelector('textarea')?.value) return
+          observer.disconnect()
+          resolve(masked())
+        })
+        observer.observe(container, { subtree: true, childList: true, attributes: true })
+      })
+      // Outside act, which would run every effect before this test could look
+      const environment = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+      environment.IS_REACT_ACT_ENVIRONMENT = false
+      try {
+        root.render(cell(saved('s3cret'), saved('s3cret')))
+        expect(await firstSeen).toBe(true)
+      } finally {
+        environment.IS_REACT_ACT_ENVIRONMENT = true
+      }
     })
 
     it('masks it in a cell whose saved value was blank', async () => {
