@@ -17,8 +17,9 @@ from api.models import (
     AgentWorkflow,
     AgentWorkflowMembership,
     Organisation,
+    OrganisationMember,
 )
-from api.utils.access.permissions import role_has_global_access
+from api.utils.access.permissions import role_has_global_access, role_has_permission
 from api.utils.crypto import (
     ed25519_to_kx,
     random_hex,
@@ -304,13 +305,25 @@ def mint_agent_token(
 
     # Removing the creator from the Agent locks this row before it retires
     # their tokens, so it either retires this one or is seen by the check below.
-    assigned = created_by is not None and not role_has_global_access(created_by.role)
-    if assigned:
+    membership = None
+    if created_by is not None:
         membership = (
             AgentMembership.objects.select_for_update(of=("self",))
             .filter(agent=agent, member=created_by, deleted_at__isnull=True)
             .first()
         )
+        # The creator's role as it is now: one changed since the caller
+        # checked it decides.
+        created_by = (
+            OrganisationMember.objects.select_related("role")
+            .filter(pk=created_by.pk, deleted_at__isnull=True)
+            .first()
+        )
+        if created_by is None or not role_has_permission(
+            created_by.role, "create", "AgentTokens"
+        ):
+            raise ValueError("You no longer have permission to create Agent tokens")
+    assigned = created_by is not None and not role_has_global_access(created_by.role)
     try:
         workflow = (
             AgentWorkflow.objects.select_for_update(of=("self",))

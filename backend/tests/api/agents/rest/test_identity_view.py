@@ -30,6 +30,8 @@ def identity(db):
             },
             "agent_permissions": {
                 "AgentSessions": ["create", "read", "delete"],
+                # Minting the token below takes it.
+                "AgentTokens": ["create"],
             }
         },
     )
