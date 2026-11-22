@@ -1685,11 +1685,13 @@ class SetAgentConnectionPolicyMutation(graphene.Mutation):
             changed = previous != checked
             if changed and is_app_service(connection.service_type):
                 # Allowing a class, or lifting a block from one with a live
-                # temporary allow, needs what granting the Connection needs.
+                # temporary allow, needs what granting the Connection needs. A
+                # class the rules now allow counts even while a temporary allow
+                # lets it through: that allow ends, the rule does not.
                 live = _live_allow_classes(connection)
-                opened = released_classes(checked, live) - released_classes(
-                    previous, live
-                )
+                opened = (
+                    released_classes(checked, live) - released_classes(previous, live)
+                ) | (released_classes(checked) - released_classes(previous))
                 if opened:
                     with _app_access_errors():
                         app, environments = check_app_connection(connection)
