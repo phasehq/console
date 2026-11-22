@@ -397,8 +397,9 @@ function ConnectionDialog({
             </p>
           )}
           <p className="text-xs text-neutral-500">
-            The Connection uses this integration credential at runtime. Agent tokens never receive
-            the stored secret values.
+            At runtime, the Phase proxy on the developer&apos;s machine receives this
+            credential&apos;s secret values and adds them to the Agent&apos;s requests. The Agent
+            itself is given placeholders in their place.
           </p>
           {failure && (
             <div role="alert">

@@ -341,6 +341,29 @@ describe('Agent Connection credentials', () => {
     )
   })
 
+  test('says the proxy receives the secret values and the Agent is given placeholders', async () => {
+    await act(async () =>
+      root.render(
+        <CreateConnectionDialog
+          organisationId="org-1"
+          services={[
+            {
+              serviceType: 'aws',
+              displayName: 'Amazon Web Services',
+              provider: 'aws_assume_role',
+            },
+          ]}
+        />
+      )
+    )
+
+    expect(container.textContent).toContain(
+      "the Phase proxy on the developer's machine receives this credential's secret values"
+    )
+    expect(container.textContent).toContain('The Agent itself is given placeholders')
+    expect(container.textContent).not.toMatch(/never receive/i)
+  })
+
   test('renames a Connection without resubmitting hidden credentials', async () => {
     await act(async () =>
       root.render(
