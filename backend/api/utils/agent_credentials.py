@@ -352,6 +352,15 @@ def resolve_agent_credential(authentication, session, *, grant=None):
         # The call to AWS ran outside the locks, and access may have ended
         # while it did.
         locked_grant = _recheck_release(authentication, session, grant)
+        # An edit committed meanwhile may name another role or account, so
+        # these keys belong to a revision that is no longer the credential's.
+        if str(locked_grant.connection.authentication.revision) != str(
+            authentication.revision
+        ):
+            raise CredentialResolutionError(
+                "The AWS credential changed while its role was being assumed; "
+                "fetch the session configuration again to use the new one"
+            )
         # The runtime reprovisions the session before these keys lapse.
         return ResolvedCredential(
             material=resolved,
