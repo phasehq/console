@@ -70,8 +70,10 @@ export const AppSecretGroup = ({
   children,
 }: AppSecretGroupProps) => {
   const sourceId = sourceByEnvId.values().next().value as string | undefined
+  // An env that is still loading may turn out to have it: no gap to set up until that is known
+  const loadingEnvIds = new Set(columns.filter((c) => c.pending).map((c) => c.env.id))
   const missingEnvIds = environments
-    .filter((env) => !sourceByEnvId.has(env.id))
+    .filter((env) => !sourceByEnvId.has(env.id) && !loadingEnvIds.has(env.id))
     .map((env) => env.id)
   const missingKey = canSetUp && sourceId ? missingEnvIds.join(',') : ''
 
