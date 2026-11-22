@@ -92,6 +92,7 @@ from api.utils.agents import (
 )
 from api.utils.audit_logging import get_actor_info_from_graphql, log_audit_event
 from api.utils.request_actions import CREDENTIAL_TEXT, ActionError, action_handler
+from api.utils.request_actions.agent_grants import AllowCall
 from api.utils.request_actions.agent_workflows import (
     set_workflow_context,
     validate_workflow_context,
@@ -1861,6 +1862,18 @@ class RemoveAgentWorkflowGrantAllowMutation(graphene.Mutation):
         require_workflow(member, workflow, "update")
         require_role(member, "read", "AgentConnections")
         with transaction.atomic():
+            now = timezone.now()
+            # An allow asked for before it was ended takes a new request, so
+            # the grant's pending ones close with it. Requests first: an
+            # approval locks its request before the grant.
+            cancel_pending_requests(
+                AgentRequest.objects.filter(
+                    grant_id=initial.id,
+                    action__type=AllowCall.type,
+                    created_at__lte=now,
+                ),
+                now,
+            )
             try:
                 grant = (
                     AgentWorkflowGrant.objects.select_for_update(of=("self",))
@@ -1870,7 +1883,7 @@ class RemoveAgentWorkflowGrantAllowMutation(graphene.Mutation):
                 )
             except AgentWorkflowGrant.DoesNotExist as exc:
                 raise GraphQLError("Agent Workflow Grant not found") from exc
-            live = live_temporary_allows(grant.temporary_allows, timezone.now())
+            live = live_temporary_allows(grant.temporary_allows, now)
             removed = next(
                 (entry for entry in live if str(entry.get("id")) == str(allow_id)),
                 None,

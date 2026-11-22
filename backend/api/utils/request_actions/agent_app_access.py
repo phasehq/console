@@ -49,6 +49,7 @@ from .agent_connections import (
     _members,
     _references,
     _refuse_credential_text,
+    _refuse_removed_since,
     _require,
 )
 from .agent_grants import _refresh_after_commit
@@ -337,6 +338,9 @@ class AppAccess(ActionHandler):
         connection = reusable_connection(
             request.organisation_id, app, environments, lock=True
         )
+        # Any of the app's Connections counts: the access taken away was to
+        # this app's secrets.
+        _refuse_removed_since(request, connection, connection__app_id=app.id)
         temporary = set(WRITE_CLASSES if writes else ())
         held = connection and (
             AgentWorkflowGrant.objects.active()

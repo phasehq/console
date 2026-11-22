@@ -10,6 +10,7 @@ import json
 import re
 
 from django.core.exceptions import ValidationError
+from django.db.models import F, Q
 
 from api.models import AgentConnection, AgentRequest, AgentWorkflowGrant
 from api.utils.access.permissions import role_has_permission
@@ -299,6 +300,35 @@ def _locked_target(request):
     ):
         raise ActionError("The Agent Workflow Grant changed; start a new request")
     return connection
+
+
+def _refuse_removed_since(request, connection=None, **scope):
+    """Access a member took away after a request was made stays away: only a
+    request made since then can give it back. ``scope`` picks the Workflow's
+    grants that count.
+
+    The Workflow's grant of ``connection`` in force is locked first, so a revoke of it that is
+    still committing is waited for and then seen.
+    """
+
+    grants = AgentWorkflowGrant.objects.filter(workflow_id=request.workflow_id)
+    if connection is not None:
+        list(
+            grants.filter(connection_id=connection.id)
+            .active()
+            .select_for_update(of=("self",))
+            .values_list("id", flat=True)
+        )
+    if (
+        grants.filter(deleted_at__gt=request.created_at, **scope)
+        # Ended before it would have expired: a member's doing, not the clock's.
+        .filter(Q(expires_at__isnull=True) | Q(deleted_at__lt=F("expires_at")))
+        .exists()
+    ):
+        raise ActionError(
+            "A member removed this access after this request was made; "
+            "start a new request"
+        )
 
 
 def _custom_target(request):
