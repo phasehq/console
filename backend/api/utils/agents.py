@@ -41,6 +41,11 @@ class AgentPlanLimitReached(ValueError):
     """The organisation's plan does not allow another Agent or Workflow."""
 
 
+class AgentTokenNotAllowed(ValueError):
+    """The token's creator may not mint it as they are now: their role or
+    their assignment to the Workflow changed."""
+
+
 def hash_agent_token_lookup(token_value):
     """Return a 32-byte BLAKE2b digest for an Agent bearer secret."""
 
@@ -322,7 +327,9 @@ def mint_agent_token(
         if created_by is None or not role_has_permission(
             created_by.role, "create", "AgentTokens"
         ):
-            raise ValueError("You no longer have permission to create Agent tokens")
+            raise AgentTokenNotAllowed(
+                "You no longer have permission to create Agent tokens"
+            )
     assigned = created_by is not None and not role_has_global_access(created_by.role)
     try:
         workflow = (
@@ -345,7 +352,7 @@ def mint_agent_token(
             workflow=workflow, deleted_at__isnull=True
         ).exists()
     ):
-        raise ValueError("You no longer have access to this Workflow")
+        raise AgentTokenNotAllowed("You no longer have access to this Workflow")
 
     try:
         keyring = unwrap_server_managed_sa_keyring(

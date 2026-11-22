@@ -10,6 +10,7 @@ import pytest
 from django.db import transaction
 from django.utils import timezone
 from graphql import GraphQLError
+from rest_framework.test import APIClient
 
 from api.models import (
     AgentConnection,
@@ -22,13 +23,16 @@ from api.models import (
     OrganisationMember,
     ProviderCredentials,
     Role,
+    UserToken,
 )
 from api.utils.agent_access import end_connection_access
 from api.utils.agent_config import get_config_registry
 from api.utils.agent_config.access_policy import live_temporary_allows
 from api.utils.agents import mint_agent_token
+from api.utils.crypto import random_hex
 from api.utils.request_actions import agent_grants
 from api.utils.request_actions.agent_workflows import set_workflow_context
+from api.views.agents import management
 from backend.graphene.agents import mutations
 from backend.graphene.agents.mutations import (
     FulfillAgentRequestMutation,
@@ -666,3 +670,113 @@ def test_a_member_whose_role_lost_token_creation_mints_no_token(space):
     assert list(
         AgentToken.objects.filter(created_by=minter).values_list("name", flat=True)
     ) == ["before"]
+
+
+def _cli_client(member):
+    """A client authenticated with the member's Personal Access Token."""
+
+    token_value = random_hex(32)
+    UserToken.objects.create(
+        user=member,
+        name="cli",
+        identity_key="00" * 32,
+        token=token_value,
+        wrapped_key_share="00",
+    )
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer User {token_value}")
+    return client
+
+
+def _changed_during_mint(monkeypatch, change):
+    """Run ``change`` after the token view checked the member, before minting."""
+
+    real = management.mint_agent_token
+
+    def changed_then_minted(**kwargs):
+        change()
+        return real(**kwargs)
+
+    monkeypatch.setattr(management, "mint_agent_token", changed_then_minted)
+
+
+def _cli_mint(space, member):
+    return _cli_client(member).post(
+        f"/v1/agents/{space.agent.id}/tokens/",
+        {"workflowId": str(space.workflow.id), "name": "cli login"},
+        format="json",
+    )
+
+
+@pytest.fixture
+def minter(space):
+    member = add_member(
+        space.organisation,
+        "cli-minter",
+        permissions={"Agents": ["read"]},
+        agent_permissions=_MINTER_PERMISSIONS,
+    )
+    member.membership = _assign(space, member)
+    return member
+
+
+def test_a_cli_mint_refused_for_a_changed_role_is_answered_as_forbidden(
+    space, minter, monkeypatch
+):
+    sessions_only = Role.objects.create(
+        organisation=space.organisation,
+        name="CLI sessions only",
+        permissions={
+            "permissions": {"Agents": ["read"]},
+            "agent_permissions": {**_MINTER_PERMISSIONS, "AgentTokens": ["read"]},
+        },
+    )
+    _changed_during_mint(
+        monkeypatch,
+        lambda: OrganisationMember.objects.filter(pk=minter.pk).update(
+            role=sessions_only
+        ),
+    )
+
+    response = _cli_mint(space, minter)
+
+    assert response.status_code == 403, response.content
+    error = response.json()["error"]
+    assert error["code"] == "agent_token_create_forbidden"
+    assert "no longer have permission to create Agent tokens" in error["message"]
+    assert not AgentToken.objects.filter(created_by=minter).exists()
+
+
+def test_a_cli_mint_refused_for_a_removed_assignment_is_answered_as_forbidden(
+    space, minter, monkeypatch
+):
+    _changed_during_mint(
+        monkeypatch,
+        lambda: AgentWorkflowMembership.objects.filter(
+            agent_membership=minter.membership
+        ).update(deleted_at=timezone.now()),
+    )
+
+    response = _cli_mint(space, minter)
+
+    assert response.status_code == 403, response.content
+    error = response.json()["error"]
+    assert error["code"] == "agent_token_create_forbidden"
+    assert "no longer have access to this Workflow" in error["message"]
+    assert not AgentToken.objects.filter(created_by=minter).exists()
+
+
+def test_a_cli_mint_for_a_workflow_retired_meanwhile_is_still_not_found(
+    space, minter, monkeypatch
+):
+    _changed_during_mint(
+        monkeypatch,
+        lambda: AgentWorkflow.objects.filter(pk=space.workflow.pk).update(
+            deleted_at=timezone.now()
+        ),
+    )
+
+    response = _cli_mint(space, minter)
+
+    assert response.status_code == 404, response.content
+    assert response.json()["error"]["code"] == "workflow_not_found"

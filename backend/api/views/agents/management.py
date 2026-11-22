@@ -15,6 +15,7 @@ from api.utils.access.permissions import (
 from api.utils.agents import (
     InvalidAgentKeyring,
     AgentPlanLimitReached,
+    AgentTokenNotAllowed,
     create_agent_with_default_workflow,
     mint_agent_token,
 )
@@ -224,6 +225,13 @@ class AgentTokenCreateView(AgentRuntimeAPIView):
             raise AgentRuntimeError(
                 "invalid_agent_keyring",
                 "The Agent keyring is invalid.",
+                status.HTTP_403_FORBIDDEN,
+            ) from exc
+        except AgentTokenNotAllowed as exc:
+            # The principal's role or assignment changed after the check above.
+            raise AgentRuntimeError(
+                "agent_token_create_forbidden",
+                str(exc),
                 status.HTTP_403_FORBIDDEN,
             ) from exc
         except ValueError as exc:
