@@ -4,7 +4,7 @@ Mirrors the member and service account access endpoints.
 """
 
 import uuid
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 import pytest
 from rest_framework import status
@@ -107,6 +107,8 @@ class TestTeamAccessEnvGrant:
         self.m["Team"].objects.get.return_value = self.team
         self.m["App"].objects.get.side_effect = lambda id, **kw: self.apps[id]
         self.m["Environment"].objects.filter.side_effect = self._filter_envs
+        # Revoking reaches environments pending deletion too.
+        self.m["Environment"].all_objects.filter.side_effect = self._filter_envs
         self.tae_rows = MagicMock()
         self.tae_rows.__iter__.side_effect = lambda: iter(
             Mock(app_id=app.id, environment_id=env.id) for app, env in self.current
@@ -226,6 +228,39 @@ class TestTeamAccessEnvGrant:
         self.m["revoke"].assert_called_once_with(self.team, environments=[self.dev])
         self.tae_rows.delete.assert_called_once()
         self.m["provision"].assert_called_once_with(self.team, self.app)
+
+    def test_drops_access_to_what_is_pending_deletion(self):
+        # Neither can be in the desired scope. Left alone, the team's access
+        # would come back with a restore.
+        pending_env = Mock(id=str(uuid.uuid4()))
+        self.envs_by_app[self.app.id].append(pending_env)
+        pending_app = Mock(id=str(uuid.uuid4()), sse_enabled=True)
+        old_env = Mock(id=str(uuid.uuid4()))
+        self.current = [
+            (self.app, self.dev),
+            (self.app, pending_env),
+            (pending_app, old_env),
+        ]
+        self.accessible = {self.dev.id}
+        # all_objects: App.objects can't see an app pending deletion.
+        self.m["App"].all_objects.filter.return_value.first.return_value = pending_app
+
+        response = self._put([(self.app, [self.dev])])
+
+        assert response.status_code == status.HTTP_200_OK
+        # The team's whole scope, not narrowed to what is live.
+        self.m["TeamAppEnvironment"].objects.filter.assert_any_call(team=self.team)
+        self.m["App"].all_objects.filter.assert_called_once_with(id=pending_app.id)
+        assert self.m["revoke"].call_args_list == [
+            call(self.team, app=pending_app),
+            call(self.team, environments=[pending_env]),
+        ]
+        self.m["TeamAppEnvironment"].objects.filter.assert_any_call(
+            team=self.team, app_id=pending_app.id
+        )
+        self.m["TeamAppEnvironment"].objects.filter.assert_any_call(
+            team=self.team, environment_id__in={pending_env.id}
+        )
 
     def test_global_access_caller_is_exempt(self):
         response = self._put([(self.app, [self.prod])], role="admin")

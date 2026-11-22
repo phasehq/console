@@ -163,3 +163,19 @@ def test_custom_role_with_null_permission_map_is_not_eligible(permissions):
     """
     role = _custom_role("custom-null", permissions)
     assert _resolve_with_roles([role, _default_role("Owner")]) == {"role-owner"}
+
+
+def test_app_service_accounts_permission_check_is_app_scoped():
+    """A team role override can grant ServiceAccounts:read on an app, so the
+    check must be app-contextualised, not org-role only."""
+    from backend.graphene.queries.service_accounts import resolve_app_service_accounts
+
+    app = MagicMock()
+    with patch(f"{_M}.App") as mock_app_cls, patch(
+        f"{_M}.user_has_permission", return_value=True
+    ) as mock_has_permission, patch(f"{_M}.user_can_access_app", return_value=True):
+        mock_app_cls.objects.get.return_value = app
+        result = resolve_app_service_accounts(None, _info(), app_id="app1")
+
+    assert mock_has_permission.call_args.kwargs.get("app") is app
+    assert result is app.service_accounts.filter.return_value

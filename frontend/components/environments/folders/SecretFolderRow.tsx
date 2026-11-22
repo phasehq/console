@@ -3,22 +3,16 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { FaFolder, FaKey } from 'react-icons/fa'
 import { DeleteFolderConfirmDialog } from './DeleteDialog'
-import { organisationContext } from '@/contexts/organisationContext'
-import { useContext, memo } from 'react'
-import { userHasPermission } from '@/utils/access/permissions'
+import { memo } from 'react'
 
-const SecretFolderRowComponent = (props: { folder: SecretFolderType; handleDelete: Function }) => {
-  const { folder, handleDelete } = props
+type SecretFolderRowProps = {
+  folder: SecretFolderType
+  handleDelete: Function
+  userCanDeleteFolders: boolean
+}
 
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-
-  // Permissions
-  const userCanDeleteFolders = userHasPermission(
-    organisation?.role?.permissions,
-    'Secrets',
-    'delete',
-    true
-  )
+const SecretFolderRowComponent = (props: SecretFolderRowProps) => {
+  const { folder, handleDelete, userCanDeleteFolders } = props
 
   const pathname = usePathname()
 
@@ -60,11 +54,8 @@ const SecretFolderRowComponent = (props: { folder: SecretFolderType; handleDelet
   )
 }
 
-// Only re-render if folder fields or handler reference change.
-const areEqual = (
-  prev: { folder: SecretFolderType; handleDelete: Function },
-  next: { folder: SecretFolderType; handleDelete: Function }
-) => {
+// Only re-render if folder fields, handler reference or permission change.
+const areEqual = (prev: SecretFolderRowProps, next: SecretFolderRowProps) => {
   const pf = prev.folder
   const nf = next.folder
   return (
@@ -72,7 +63,8 @@ const areEqual = (
     pf.name === nf.name &&
     pf.folderCount === nf.folderCount &&
     pf.secretCount === nf.secretCount &&
-    prev.handleDelete === next.handleDelete
+    prev.handleDelete === next.handleDelete &&
+    prev.userCanDeleteFolders === next.userCanDeleteFolders
   )
 }
 

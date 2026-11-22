@@ -288,12 +288,13 @@ def test_gitlab_sync_without_scope_excludes_scopes_of_other_syncs(
     mock_other_scopes.assert_called_once_with(env_sync)
 
 
+@patch("api.tasks.syncing.environment_is_locked", return_value=False)
 @patch("api.tasks.syncing.organisation_is_locked", return_value=False)
 @patch("api.tasks.syncing.apps.get_model")
 @patch("api.tasks.syncing.resolve_gitlab_resource_id", return_value="42")
 @patch("api.tasks.syncing.handle_sync_event")
 def test_gitlab_sync_that_only_stored_the_path_stores_the_id(
-    mock_handle, mock_resolve, mock_get_model, mock_is_locked
+    mock_handle, mock_resolve, mock_get_model, mock_is_locked, mock_env_is_locked
 ):
     """Syncs created before July 2024 only stored the project or group path."""
     env_sync = _gitlab_sync()
@@ -359,3 +360,90 @@ def test_gitlab_sync_with_id_does_not_look_it_up(mock_handle, mock_resolve):
     perform_gitlab_sync(_gitlab_sync())
 
     mock_resolve.assert_not_called()
+
+
+# --- several environments changed together (an app restore) ---
+
+
+@patch("api.tasks.syncing.trigger_sync_tasks")
+@patch("api.tasks.syncing.apps.get_model")
+def test_one_pass_covers_every_changed_env(mock_get_model, mock_trigger_sync):
+    """A candidate that references any of the changed envs is triggered, once."""
+    changed_env = _make_changed_env()
+    references_both = _sync("candidate-1")
+    references_the_other = _sync("candidate-2")
+    unrelated = _sync("candidate-3")
+    mock_get_model.side_effect = _mock_models(
+        [references_both, references_the_other, unrelated]
+    )
+
+    graph = {
+        "candidate-1": {"changed-env-id", "other-changed-id"},
+        "candidate-2": {"other-changed-id"},
+        "candidate-3": {"somewhere-else"},
+    }
+    with _patch_refs(graph) as refs:
+        trigger_syncs_for_referencing_envs(
+            changed_env, also_changed=["other-changed-id"]
+        )
+
+    assert mock_trigger_sync.call_args_list == [
+        ((references_both,),),
+        ((references_the_other,),),
+    ]
+    # The graph was read once per environment, not once per changed env.
+    assert sorted(c.args[0] for c in refs.call_args_list) == [
+        "candidate-1",
+        "candidate-2",
+        "candidate-3",
+        "somewhere-else",
+    ]
+
+
+@patch("api.tasks.syncing.trigger_sync_tasks")
+@patch("api.tasks.syncing.apps.get_model")
+def test_the_changed_envs_are_not_candidates(mock_get_model, mock_trigger_sync):
+    """Their own syncs are resumed by the restore job."""
+    changed_env = _make_changed_env()
+    mock_get_model.side_effect = _mock_models([])
+
+    with _patch_refs({}):
+        trigger_syncs_for_referencing_envs(
+            changed_env, also_changed=["other-changed-id"]
+        )
+
+    env_sync_model = mock_get_model("api", "EnvironmentSync")
+    excluded = env_sync_model.objects.filter.return_value.exclude.call_args.kwargs
+    assert excluded == {"environment_id__in": {"changed-env-id", "other-changed-id"}}
+
+
+@patch("api.tasks.syncing.trigger_syncs_for_referencing_envs")
+@patch("api.tasks.syncing.apps.get_model")
+def test_batch_job_runs_one_pass(mock_get_model, mock_trigger):
+    from api.tasks.syncing import detect_and_trigger_referencing_syncs_for
+
+    first, second, third = (MagicMock(id=f"env-{n}") for n in (1, 2, 3))
+    environment_model = MagicMock()
+    lookup = environment_model.objects.select_related.return_value.filter
+    lookup.return_value = [first, second, third]
+    mock_get_model.return_value = environment_model
+
+    detect_and_trigger_referencing_syncs_for(["env-1", "env-2", "env-3"])
+
+    lookup.assert_called_once_with(id__in=["env-1", "env-2", "env-3"])
+    mock_trigger.assert_called_once_with(first, also_changed=["env-2", "env-3"])
+
+
+@patch("api.tasks.syncing.trigger_syncs_for_referencing_envs")
+@patch("api.tasks.syncing.apps.get_model")
+def test_batch_job_does_nothing_when_none_is_live(mock_get_model, mock_trigger):
+    """Deleted again before the job ran: the default manager hides them."""
+    from api.tasks.syncing import detect_and_trigger_referencing_syncs_for
+
+    environment_model = MagicMock()
+    environment_model.objects.select_related.return_value.filter.return_value = []
+    mock_get_model.return_value = environment_model
+
+    detect_and_trigger_referencing_syncs_for(["env-1"])
+
+    mock_trigger.assert_not_called()

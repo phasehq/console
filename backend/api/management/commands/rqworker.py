@@ -122,9 +122,12 @@ class Command(BaseCommand):
             logger.exception("Failed to register log stream sweeper at worker startup")
 
     def bootstrap_org_deletion_schedule(self):
-        """(Re-)register the organisation deletion sweep at worker startup, for
-        the same reason as the log stream sweep: if its schedule is lost,
-        purges stop until the next deploy."""
+        """Schedule the organisation deletion sweep, if it isn't scheduled.
+
+        Workers do this, and not `migrate`: a job scheduled before the new
+        workers exist is taken by an old one, which can't import a job that
+        is new in this release. It also brings a lost schedule back, as for
+        the log stream sweep."""
         try:
             from api.tasks.organisation_deletion import (
                 init_organisation_deletion_sweeper,
@@ -136,9 +139,21 @@ class Command(BaseCommand):
                 "Failed to register organisation deletion sweeper at worker startup"
             )
 
+    def bootstrap_resource_deletion_schedule(self):
+        """Schedule the app and environment deletion sweep, as the
+        organisation sweep above."""
+        try:
+            from api.tasks.resource_deletion import init_resource_deletion_sweeper
+
+            init_resource_deletion_sweeper()
+        except Exception:
+            logger.exception(
+                "Failed to register app and environment deletion sweeper at "
+                "worker startup"
+            )
+
     def bootstrap_session_purge_schedule(self):
-        """(Re-)register the expired session purge at worker startup, for the
-        same reason as the sweeps above."""
+        """Schedule the expired session purge, as the sweeps above."""
         try:
             from api.tasks.sessions import init_expired_session_purge
 
@@ -154,6 +169,7 @@ class Command(BaseCommand):
 
         self.bootstrap_log_stream_schedule()
         self.bootstrap_org_deletion_schedule()
+        self.bootstrap_resource_deletion_schedule()
         self.bootstrap_session_purge_schedule()
 
         processes = [

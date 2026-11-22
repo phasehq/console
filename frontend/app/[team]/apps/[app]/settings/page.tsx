@@ -16,7 +16,7 @@ import { UpdateAppInfoOp } from '@/graphql/mutations/apps/updateAppInfo.gql'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
 import { AppDescriptionEditor } from './_components/AppDescriptionEditor'
-import { MAX_APP_NAME_LENGTH } from '@/constants'
+import { DELETION_GRACE_PERIOD, MAX_APP_NAME_LENGTH } from '@/constants'
 
 export default function AppSettings(props: { params: Promise<{ team: string; app: string }> }) {
   const params = use(props.params)
@@ -208,7 +208,10 @@ export default function AppSettings(props: { params: Promise<{ team: string; app
           <div className="flex items-center justify-between p-3 rounded-lg ring-1 ring-inset ring-red-500/40 bg-red-400/10 ">
             <div>
               <h3 className="text-red-400 font-semibold">Delete App</h3>
-              <p className="text-neutral-500">Permanently delete this App</p>
+              <p className="text-neutral-500">
+                Delete this App. It is kept for {DELETION_GRACE_PERIOD} and can be restored, unless
+                you choose to delete it immediately.
+              </p>
             </div>
 
             {organisation && app && (
