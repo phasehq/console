@@ -85,6 +85,26 @@
       },
       {
         "method": "POST",
+        "pattern": "/api/v4/projects/*/deploy_keys",
+        "operation": "GitLab project deploy key"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v4/projects/*/deploy_keys/*/enable",
+        "operation": "GitLab project deploy key enablement"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v4/user/keys",
+        "operation": "GitLab user SSH key"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v4/users/*/keys",
+        "operation": "GitLab user SSH key"
+      },
+      {
+        "method": "POST",
         "pattern": "/api/v4/projects/*/triggers",
         "operation": "GitLab pipeline trigger token"
       },

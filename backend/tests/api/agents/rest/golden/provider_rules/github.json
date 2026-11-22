@@ -86,6 +86,16 @@
         "method": "POST",
         "pattern": "/api/v3/repos/*/*/keys",
         "operation": "GitHub repository deploy key"
+      },
+      {
+        "method": "POST",
+        "pattern": "/user/keys",
+        "operation": "GitHub user SSH key"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/user/keys",
+        "operation": "GitHub user SSH key"
       }
     ]
   }

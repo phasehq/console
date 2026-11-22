@@ -58,6 +58,12 @@ _MINTING_CALLS = {
         ("POST", "/api/v4/projects/42/triggers"),
         ("POST", "/api/v4/user/runners"),
         ("POST", "/api/v4/runners"),
+        # A deploy key, or an SSH key on a user, is a key the caller supplies
+        # that keeps its access after the Connection's grant ends.
+        ("POST", "/api/v4/projects/42/deploy_keys"),
+        ("POST", "/api/v4/projects/42/deploy_keys/7/enable"),
+        ("POST", "/api/v4/user/keys"),
+        ("POST", "/api/v4/users/3/keys"),
         # A respelled path reaches the same route.
         ("POST", "/API/v4/Projects/42/access_tokens/"),
     ],
@@ -88,9 +94,12 @@ _MINTING_CALLS = {
         ("POST", "/api/v3/repos/acme/app/actions/runners/generate-jitconfig"),
         ("POST", "/api/v3/orgs/acme/actions/runners/generate-jitconfig"),
         ("POST", "/api/v3/enterprises/acme/actions/runners/generate-jitconfig"),
-        # A deploy key is an SSH key the caller supplies, with no expiry.
+        # A deploy key is an SSH key the caller supplies, with no expiry, as
+        # is an SSH key added to the token's user.
         ("POST", "/repos/acme/app/keys"),
         ("POST", "/api/v3/repos/acme/app/keys"),
+        ("POST", "/user/keys"),
+        ("POST", "/api/v3/user/keys"),
     ],
 }
 _OTHER_CALLS = {
@@ -101,6 +110,10 @@ _OTHER_CALLS = {
         ("POST", "/api/v4/projects/42/issues"),
         ("POST", "/api/v4/projects/42/triggers/5/take_ownership"),
         ("GET", "/api/v4/runners"),
+        ("GET", "/api/v4/projects/42/deploy_keys"),
+        ("DELETE", "/api/v4/projects/42/deploy_keys/7"),
+        ("GET", "/api/v4/user/keys"),
+        ("DELETE", "/api/v4/user/keys/7"),
     ],
     "cloudflare": [
         ("GET", "/client/v4/user/tokens"),
@@ -120,6 +133,8 @@ _OTHER_CALLS = {
         ("DELETE", "/repos/acme/app/keys/7"),
         ("GET", "/repos/acme/app/actions/runners"),
         ("POST", "/user/repos"),
+        ("GET", "/user/keys"),
+        ("DELETE", "/user/keys/7"),
     ],
 }
 
