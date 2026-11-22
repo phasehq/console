@@ -330,6 +330,82 @@ def _session_identity(request, session):
     return identity
 
 
+# How many times a session's config is built when changes keep landing while
+# it is being built.
+_CONFIG_BUILDS = 3
+
+
+def _confirmed_config(session, build, *, refresh=False):
+    """Build a session's config and confirm it is still current before it is
+    sent: the session live, each grant it released still active, and its
+    generation unmoved, which every grant, Connection and policy change moves.
+
+    A build that a change overtook is built again. ``refresh`` moves the
+    generation on and extends the session in the same step, as a config read does.
+    """
+
+    for _ in range(_CONFIG_BUILDS):
+        generation = (
+            AgentSession.objects.filter(pk=session.pk)
+            .values_list("config_generation", flat=True)
+            .first()
+        )
+        config = build()
+        now = timezone.now()
+        released = {
+            connection["grant_id"]
+            for connection in config["connections"]
+            if connection["authorization"]["state"] == "allowed"
+        }
+        unchanged = AgentSession.objects.filter(
+            pk=session.pk,
+            revoked_at__isnull=True,
+            expires_at__gt=now,
+            config_generation=generation,
+        )
+        if (
+            AgentWorkflowGrant.objects.active(now).filter(id__in=released).count()
+            == len(released)
+        ):
+            if not refresh and unchanged.exists():
+                session.config_generation = generation
+                return config
+            if refresh:
+                update = {"config_generation": F("config_generation") + 1}
+                hard_limit = session.max_expires_at or session.expires_at
+                next_expiry = min(now + SESSION_TTL, hard_limit)
+                if next_expiry > session.expires_at:
+                    update["expires_at"] = next_expiry
+                if unchanged.update(**update):
+                    session.config_generation = generation + 1
+                    session.expires_at = update.get("expires_at", session.expires_at)
+                    return config
+        ended = (
+            AgentSession.objects.filter(pk=session.pk)
+            .values("revoked_at", "expires_at")
+            .first()
+        )
+        if ended is None or ended["revoked_at"] is not None:
+            # Revoked while its config was being built: nothing is released.
+            raise AgentRuntimeError(
+                "agent_session_revoked",
+                "The Agent session has been revoked.",
+                status.HTTP_401_UNAUTHORIZED,
+            )
+        if ended["expires_at"] <= now:
+            raise AgentRuntimeError(
+                "agent_session_expired",
+                "The Agent session has expired.",
+                status.HTTP_401_UNAUTHORIZED,
+            )
+    raise AgentRuntimeError(
+        "agent_session_config_changed",
+        "This Workflow's Connections kept changing while the session's "
+        "configuration was being built. Try again.",
+        status.HTTP_409_CONFLICT,
+    )
+
+
 def _session_response(request, session, config, *, session_credential=None):
     payload = {
         "schema_version": SCHEMA_VERSION,
@@ -494,13 +570,16 @@ class AgentSessionCollectionView(AgentRuntimeAPIView):
             # Check the Workflow again now that the session holds its locks. The
             # check above only gives early feedback; access may have changed
             # while this request waited.
-            prepared = prepare_workflow(session.workflow)
-            negotiate_client(client, prepared)
-            config = resolve_workflow_config(
-                session,
-                include_secrets=True,
-                prepared_grants=prepared,
-            )
+            def build():
+                prepared = prepare_workflow(session.workflow)
+                negotiate_client(client, prepared)
+                return resolve_workflow_config(
+                    session,
+                    include_secrets=True,
+                    prepared_grants=prepared,
+                )
+
+            config = _confirmed_config(session, build)
         except AgentRuntimeError:
             raise
         except ValueError as exc:
@@ -520,26 +599,11 @@ class AgentSessionConfigView(AgentRuntimeAPIView):
 
     def get(self, request, session_uid):
         session = resolve_session_for_request(request, session_uid)
-        config = resolve_workflow_config(
+        config = _confirmed_config(
             session,
-            include_secrets=True,
+            lambda: resolve_workflow_config(session, include_secrets=True),
+            refresh=True,
         )
-        hard_limit = session.max_expires_at or session.expires_at
-        next_expiry = min(timezone.now() + SESSION_TTL, hard_limit)
-        update = {"config_generation": F("config_generation") + 1}
-        if next_expiry > session.expires_at:
-            update["expires_at"] = next_expiry
-        live = AgentSession.objects.filter(
-            pk=session.pk, revoked_at__isnull=True
-        ).update(**update)
-        if not live:
-            # Revoked while its config was being built: nothing is released.
-            raise AgentRuntimeError(
-                "agent_session_revoked",
-                "The Agent session has been revoked.",
-                status.HTTP_401_UNAUTHORIZED,
-            )
-        session.refresh_from_db()
         return Response(_session_response(request, session, config))
 
 
