@@ -291,6 +291,14 @@ def _audited_title(agent_request, member):
     return agent_request.title, {}
 
 
+def _require_connection_editor(member):
+    """Changing a Connection takes update, and read as well: the reply carries
+    the Connection as it then stands."""
+
+    require_role(member, "update", "AgentConnections")
+    require_role(member, "read", "AgentConnections")
+
+
 @contextmanager
 def _custom_connection_errors():
     """Report a refused definition, key or sealed value to the caller."""
@@ -313,7 +321,7 @@ def _custom_connection_member(info, connection_id):
     except (AgentConnection.DoesNotExist, ValueError) as exc:
         raise GraphQLError("Agent Connection not found") from exc
     member = organisation_member(info, initial.organisation_id)
-    require_role(member, "update", "AgentConnections")
+    _require_connection_editor(member)
     if not is_custom_service(initial.service_type):
         raise GraphQLError("This is not a custom Connection")
     return member
@@ -929,7 +937,7 @@ class UpdateAgentConnectionMutation(graphene.Mutation):
         except (AgentConnection.DoesNotExist, ValueError) as exc:
             raise GraphQLError("Agent Connection not found") from exc
         member = organisation_member(info, initial.organisation_id)
-        require_role(member, "update", "AgentConnections")
+        _require_connection_editor(member)
         if is_custom_service(initial.service_type):
             raise GraphQLError(
                 "Change a custom Connection with updateCustomAgentConnection"
@@ -1262,7 +1270,7 @@ class UpdateAgentAppConnectionMutation(graphene.Mutation):
         except (AgentConnection.DoesNotExist, ValueError) as exc:
             raise GraphQLError("Agent Connection not found") from exc
         member = organisation_member(info, initial.organisation_id)
-        require_role(member, "update", "AgentConnections")
+        _require_connection_editor(member)
         if name is None and environment_ids is None:
             raise GraphQLError("Nothing to change")
         if name is not None:
@@ -1354,7 +1362,7 @@ class AllowAgentConnectionHostMutation(graphene.Mutation):
         except (AgentEvent.DoesNotExist, ValueError) as exc:
             raise GraphQLError("Blocked Agent event not found") from exc
         member = organisation_member(info, event.organisation_id)
-        require_role(member, "update", "AgentConnections")
+        _require_connection_editor(member)
         if event.agent is None:
             raise GraphQLError("The blocked event no longer has an active Agent")
         require_workflow(member, event.workflow, "update")
@@ -1522,7 +1530,7 @@ class ApproveAgentConnectionHostRulesMutation(graphene.Mutation):
         except (AgentConnection.DoesNotExist, ValueError) as exc:
             raise GraphQLError("Agent Connection not found") from exc
         member = organisation_member(info, initial.organisation_id)
-        require_role(member, "update", "AgentConnections")
+        _require_connection_editor(member)
         expected_version = _text(expected_version, "expectedVersion", maximum=128)
         with transaction.atomic():
             connection = AgentConnection.objects.select_for_update(of=("self",)).select_related(
@@ -1670,7 +1678,7 @@ class SetAgentConnectionPolicyMutation(graphene.Mutation):
         except (AgentConnection.DoesNotExist, ValueError) as exc:
             raise GraphQLError("Agent Connection not found") from exc
         member = organisation_member(info, initial.organisation_id)
-        require_role(member, "update", "AgentConnections")
+        _require_connection_editor(member)
         workflow_ids = []
         with transaction.atomic():
             try:
