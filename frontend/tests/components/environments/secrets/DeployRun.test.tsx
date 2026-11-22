@@ -49,13 +49,19 @@ describe('useDeployRun', () => {
   let root: Root
   let run: DeployRun
 
-  const Probe = ({ syncs }: { syncs: EnvironmentSyncType[] }) => {
+  const Probe = ({
+    syncs,
+    ...state
+  }: { syncs: EnvironmentSyncType[] } & Partial<
+    Pick<Parameters<typeof DeployControls>[0], 'changes' | 'dirty' | 'deploying' | 'unread'>
+  >) => {
     run = useDeployRun(syncs)
     return (
       <DeployControls
         changes={NO_CHANGES}
         dirty={false}
         deploying={false}
+        {...state}
         run={run}
         syncs={syncs}
         syncsByEnvId={new Map()}
@@ -91,6 +97,23 @@ describe('useDeployRun', () => {
     await act(async () => root.unmount())
     container.remove()
     jest.useRealTimers()
+  })
+
+  it('says the changes are deployed, not pending, while a saved deploy is read back', async () => {
+    const one = { changes: [{}], groups: [], kindCounts: [] } as unknown as SecretChanges
+    // Each button's label, without its spinner's own "Loading..."
+    const buttons = () =>
+      [...container.querySelectorAll('button')].map((button) =>
+        button.textContent?.replace('Loading...', '').trim()
+      )
+    await act(async () => root.render(<Probe syncs={[]} changes={one} dirty deploying />))
+    expect(buttons()).toEqual(['1 undeployed change', 'Deploying'])
+
+    await act(async () => root.render(<Probe syncs={[]} changes={one} dirty deploying unread />))
+    expect(buttons()).toEqual(['Loading'])
+    expect(container.querySelector('button')!.disabled).toBe(true)
+    expect(container.textContent).toContain('Deployed 1 change')
+    expect(container.textContent).not.toContain('undeployed')
   })
 
   it('follows a run until it ends', async () => {

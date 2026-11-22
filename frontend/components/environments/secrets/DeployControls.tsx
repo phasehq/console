@@ -470,6 +470,8 @@ export type DeployControlsProps = {
   changes: SecretChanges
   dirty: boolean
   deploying: boolean
+  /** The deploy is saved, but the page can't read it back yet: nothing is pending any more */
+  unread?: boolean
   run: DeployRun
   /** All of the app's syncs (empty when they can't be read) */
   syncs: EnvironmentSyncType[]
@@ -926,6 +928,7 @@ export const DeployControls = ({
   onDiscard,
   onDeploy,
   onDiscardChanges,
+  unread = false,
 }: DeployControlsProps) => {
   // The card stays, with nothing left to deploy, while a discard made in it can still be undone
   const [undoable, setUndoable] = useState(false)
@@ -942,8 +945,16 @@ export const DeployControls = ({
   )
   const pending = dirty || deploying || undoable
   const following = !pending && run.phase !== 'idle' && run.phase !== 'deploying'
+  const deployedLine = (count: number) => (
+    <span className="hidden items-center gap-1.5 whitespace-nowrap text-neutral-500 lg:flex">
+      <FaCheckCircle className="shrink-0 text-emerald-500" />
+      Deployed {plural(count, 'change')}
+    </span>
+  )
 
-  const line: ReactNode = pending ? (
+  const line: ReactNode = unread ? (
+    deployedLine(changes.changes.length)
+  ) : pending ? (
     <PendingChanges
       changes={changes}
       syncsByEnvId={syncsByEnvId}
@@ -955,21 +966,20 @@ export const DeployControls = ({
       onUndoable={setUndoable}
     />
   ) : following ? (
-    <span className="hidden items-center gap-1.5 whitespace-nowrap text-neutral-500 lg:flex">
-      <FaCheckCircle className="shrink-0 text-emerald-500" />
-      Deployed {plural(run.changeCount, 'change')}
-    </span>
+    deployedLine(run.changeCount)
   ) : null
 
   // Keeps the last line up while it fades away
   const lastLine = useRef<ReactNode>(null)
   if (line) lastLine.current = line
 
-  const announcement = pending
-    ? plural(changes.changes.length, 'undeployed change')
-    : following
-      ? `Deployed ${plural(run.changeCount, 'change')}`
-      : ''
+  const announcement = unread
+    ? `Deployed ${plural(changes.changes.length, 'change')}`
+    : pending
+      ? plural(changes.changes.length, 'undeployed change')
+      : following
+        ? `Deployed ${plural(run.changeCount, 'change')}`
+        : ''
 
   const face = pending ? (
     <button
@@ -983,7 +993,7 @@ export const DeployControls = ({
       ) : (
         <FaCloudUploadAlt className="shrink-0 text-sm text-emerald-400" />
       )}
-      {deploying ? 'Deploying' : 'Deploy'}
+      {unread ? 'Loading' : deploying ? 'Deploying' : 'Deploy'}
     </button>
   ) : syncs.length === 0 && run.runs.length === 0 ? (
     <span className={FACE}>

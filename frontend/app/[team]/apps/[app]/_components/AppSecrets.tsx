@@ -219,8 +219,14 @@ const NO_DIRTY_ENVS = new Set<string>()
 const NO_ROW_KEYS: ReadonlyMap<string, string> = new Map()
 const NO_ROWS: ReadonlySet<string> = new Set()
 const NO_ENVS: ReadonlySet<string> = new Set()
-// How long a deploy stays busy for its snapshot before handing control back anyway (ms)
+// Once the saved secrets are read again, how long a deploy stays busy for the snapshot that has it
+// before handing control back anyway (ms)
 const DEPLOY_LANDS_WITHIN = 60000
+// How long that read may take before another is sent, and the pause before one that failed is
+const READ_ANSWERS_WITHIN = 20000
+const READ_RETRY_AFTER = 3000
+const DEPLOYED_UNREAD =
+  "Your changes are deployed. Editing is paused until the page can load them. Reload if this doesn't clear."
 
 /** Viewport width and root font size, which the grid's column widths are computed from */
 const useViewportMetrics = () => {
@@ -475,9 +481,23 @@ export const AppSecrets = ({
     [dirtyKey]
   )
   const unsavedChanges = dirtyEnvSet.size > 0
+  // A deploy that is saved but not read back yet: its rows are still the staged ones, with nothing
+  // left to lose by leaving
+  const [deploySaved, setDeploySaved] = useState(false)
+  // ...and whose read has failed at least once, which the controls then say
+  const [deployUnread, setDeployUnread] = useState(false)
   // Leaving with undeployed changes asks in the app (the deploy preview), not the browser
   const leaveDialogRef = useRef<LeaveDialogHandle>(null)
-  useWarnIfUnsavedChanges(unsavedChanges, (leave) => leaveDialogRef.current?.open(leave))
+  useWarnIfUnsavedChanges(unsavedChanges && !deploySaved, (leave) =>
+    leaveDialogRef.current?.open(leave)
+  )
+  // Aborted when the page is left, for a deploy still waiting to be read back
+  const leftRef = useRef<AbortController | null>(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    leftRef.current = controller
+    return () => controller.abort()
+  }, [])
 
   const { selectedEnvIds, toggleEnv, soloEnv, showAllEnvs, setDirtyEnvIds, withEnvSelection } =
     useEnvSelection()
@@ -486,7 +506,7 @@ export const AppSecrets = ({
   // Like a link to another folder: with undeployed changes it asks first
   const goToPath = (path: string) => {
     const go = () => router.push(withEnvSelection(`${basePath}${appFolderRoute(path)}`))
-    if (unsavedChanges) leaveDialogRef.current?.open(go)
+    if (unsavedChanges && !deploySaved) leaveDialogRef.current?.open(go)
     else go()
   }
 
@@ -505,6 +525,7 @@ export const AppSecrets = ({
     fetching,
     failed: loadFailed,
     refetch,
+    readSaved,
   } = useAppSecrets(app, userCanReadSecrets, unsavedChanges ? 0 : 10000, selectedEnvIds)
 
   // Optimistic column order — renders instantly while the mutation + refetch confirm
@@ -1802,17 +1823,36 @@ export const AppSecrets = ({
         landed = new Promise((resolve) => (deployLandedRef.current = resolve))
       }
       if (!landed) await refetch()
-      // Until the snapshot replaces the staged rows, deploying again would send their creates twice
-      else if (
-        !(await deployIsShown(refetch, landed, DEPLOY_LANDS_WITHIN)) &&
-        deployedRef.current
-      ) {
-        // So when it can't be read back the staged rows go, and the deploy is no longer waited for:
-        // the snapshot that shows it would otherwise replace edits made in the meantime
-        deployedRef.current = null
-        deployLandedRef.current = null
-        setClientAppSecrets(serverSnapshotRef.current)
-        toast.info('Your changes are deployed. They will show here once the page can load them.')
+      else {
+        // Saved, but the rows on the page are from before it until they are read again. The editor
+        // stays off for as long as that takes: an edit made on them would deploy their old values
+        // back, and deploying again would send the creates twice
+        setDeploySaved(true)
+        let notice: ReturnType<typeof toast.info> | undefined
+        try {
+          const shown = await deployIsShown(readSaved, landed, {
+            within: DEPLOY_LANDS_WITHIN,
+            answersWithin: READ_ANSWERS_WITHIN,
+            retryAfter: READ_RETRY_AFTER,
+            onUnread: () => {
+              setDeployUnread(true)
+              notice = toast.info(DEPLOYED_UNREAD, { autoClose: false })
+            },
+            signal: leftRef.current?.signal,
+          })
+          if (!shown && deployedRef.current) {
+            // Read back, yet no snapshot matches the deploy (its rows were changed again
+            // elsewhere): the rows as saved replace the staged ones, and the deploy is no longer
+            // waited for
+            deployedRef.current = null
+            deployLandedRef.current = null
+            setClientAppSecrets(serverSnapshotRef.current)
+          }
+        } finally {
+          if (notice !== undefined) toast.dismiss(notice)
+          setDeployUnread(false)
+          setDeploySaved(false)
+        }
       }
     }
   }
@@ -1929,6 +1969,7 @@ export const AppSecrets = ({
     changes: secretChanges,
     dirty: unsavedChanges,
     deploying: savingAndFetching,
+    unread: deployUnread,
     run: deployRun,
     syncs: userCanReadSyncs ? appSyncs : [],
     syncsByEnvId,
@@ -2687,7 +2728,8 @@ export const AppSecrets = ({
               onDiscard={handleDiscardChanges}
               onDeploy={async () => {
                 try {
-                  return (await handleSaveChanges()) !== false
+                  // Not once the page has been left another way, while the deploy was read back
+                  return (await handleSaveChanges()) !== false && !leftRef.current?.signal.aborted
                 } catch {
                   return false
                 }

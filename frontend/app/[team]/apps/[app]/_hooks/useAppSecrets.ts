@@ -1,5 +1,5 @@
-import { useEffect, useState, useContext, useRef } from 'react'
-import { useQuery } from '@apollo/client'
+import { useCallback, useEffect, useState, useContext, useRef } from 'react'
+import { useApolloClient, useQuery } from '@apollo/client'
 import { unwrapEnvSecretsForUser, decryptEnvSecretKVs } from '@/utils/crypto'
 import { AppSecret, AppFolder } from '../types'
 import { GetAppSecrets } from '@/graphql/queries/secrets/getAppSecrets.gql'
@@ -265,6 +265,22 @@ export const useAppSecrets = (
     setFetching(false)
   }, [error, data])
 
+  const client = useApolloClient()
+  /**
+   * Reads the saved secrets with a request of its own. `refetch` can be answered by one already
+   * on its way, which may have left before the write it is asked to show.
+   */
+  const readSaved = useCallback(
+    () =>
+      client.query({
+        query: GetAppSecrets,
+        variables: { appId, path: null },
+        fetchPolicy: 'network-only',
+        context: { queryDeduplication: false },
+      }),
+    [client, appId]
+  )
+
   return {
     environments: processed?.environments ?? NO_ENVIRONMENTS,
     appSecrets: processed?.appSecrets ?? NO_SECRETS,
@@ -276,5 +292,6 @@ export const useAppSecrets = (
     /** The latest load or decrypt failed; a later one that works clears it */
     failed,
     refetch,
+    readSaved,
   }
 }

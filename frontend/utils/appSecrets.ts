@@ -532,23 +532,60 @@ export const snapshotHasDeploy = (snapshot: AppSecret[], deployed: DeployedChang
   return true
 }
 
+export type DeployWait = {
+  /** How long the snapshot with the deploy is waited for once the saved secrets have been read */
+  within: number
+  /** How long one read may take before another is sent */
+  answersWithin: number
+  /** The pause before a read that failed, or went unanswered, is sent again */
+  retryAfter: number
+  /** Told once, when a read first fails or goes unanswered */
+  onUnread?: () => void
+  /** Aborted when the page is left: nobody is waiting any more */
+  signal?: AbortSignal
+}
+
 /**
- * Reads the saved secrets again and waits, up to `within` ms, for the snapshot that has the deploy.
- * False when that read fails or no such snapshot comes in time: the deploy is saved all the same.
+ * Reads the saved secrets again after a deploy and waits for the snapshot that has it. A read that
+ * fails, or isn't answered in time, is sent again for as long as it takes: until one comes back
+ * the rows on the page are from before the deploy, and the caller keeps them from being edited.
+ * False when a read came back and no snapshot showed the deploy within the limit after it.
  */
 export const deployIsShown = async (
   read: () => Promise<unknown>,
   landed: Promise<unknown>,
-  within: number
+  { within, answersWithin, retryAfter, onUnread, signal }: DeployWait
 ): Promise<boolean> => {
+  const timers = new Set<ReturnType<typeof setTimeout>>()
+  const after = <T>(ms: number, outcome: T) =>
+    new Promise<T>((resolve) => timers.add(setTimeout(() => resolve(outcome), ms)))
+  const shown = landed.then(() => 'shown' as const)
+  const left = new Promise<'left'>((resolve) => {
+    if (signal?.aborted) resolve('left')
+    signal?.addEventListener('abort', () => resolve('left'), { once: true })
+  })
   try {
-    await read()
-  } catch {
-    return false
+    for (let told = false; ; told = true) {
+      const answer = await Promise.race([
+        shown,
+        left,
+        read().then(
+          () => 'read' as const,
+          () => 'unread' as const
+        ),
+        after(answersWithin, 'unread' as const),
+      ])
+      if (answer === 'shown') return true
+      if (answer === 'left') return false
+      if (answer === 'read') break
+      if (!told) onUnread?.()
+      const next = await Promise.race([shown, left, after(retryAfter, 'again' as const)])
+      if (next !== 'again') return next === 'shown'
+    }
+    return (await Promise.race([shown, left, after(within, 'late' as const)])) === 'shown'
+  } finally {
+    timers.forEach(clearTimeout)
   }
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const late = new Promise<boolean>((resolve) => (timer = setTimeout(() => resolve(false), within)))
-  return Promise.race([landed.then(() => true), late]).finally(() => clearTimeout(timer))
 }
 
 /** React keys for a deployed snapshot's rows: each takes over from the client row it replaces, keeping its DOM */
