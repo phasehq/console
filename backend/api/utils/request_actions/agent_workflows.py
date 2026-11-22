@@ -69,6 +69,7 @@ class UpdateWorkflowContext(ActionHandler):
 
     type = "agent_workflow.context_update"
     kind = AgentRequest.CONTEXT_UPDATE
+    target_resource = "AgentWorkflows"
 
     def validate(self, request, action, member):
         _members(action, required=("markdown",))

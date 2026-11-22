@@ -60,6 +60,9 @@ class ActionHandler:
     # and the member approving it may grant a different one through
     # ``inputs.durationSeconds`` or ``inputs.untilRevoked``.
     takes_duration = False
+    # What a member must be allowed to read to be shown the target as it is
+    # now, the ``current`` of a description.
+    target_resource = "AgentConnections"
 
     def validate(self, request, action, member):
         """Return the action in canonical form, or raise ``ActionError``.

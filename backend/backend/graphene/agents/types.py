@@ -696,12 +696,40 @@ def _request_view(agent_request, info):
     return agent_request._viewer_app_view
 
 
+def _may_read_target(handler, agent_request, info):
+    """Whether the viewer may see an action's target as it is now, as the
+    target's own query decides."""
+
+    if handler.target_resource == "AgentWorkflows":
+        return _may_read_workflow(agent_request.workflow, info)
+    return _viewer_may_read(
+        info, agent_request.organisation_id, handler.target_resource
+    )
+
+
+def _without_current(review):
+    """A review with the target as it is now left out, including what the
+    request keeps unchanged and so repeats from it."""
+
+    current = review.get("current")
+    if not isinstance(current, dict):
+        return review
+    requested = review.get("requested")
+    if isinstance(requested, dict):
+        requested = {
+            key: None if key in current and value == current[key] else value
+            for key, value in requested.items()
+        }
+    return {**review, "current": None, "requested": requested}
+
+
 def _request_review(agent_request, info):
     if not hasattr(agent_request, "_viewer_review"):
         review = None
         if agent_request.action:
             try:
-                review = action_handler(agent_request.action).describe(
+                handler = action_handler(agent_request.action)
+                review = handler.describe(
                     agent_request,
                     agent_request.action,
                     _member_in(info, agent_request.organisation_id),
@@ -709,6 +737,10 @@ def _request_review(agent_request, info):
                 )
             except ActionError:
                 review = None
+            if review is not None and not _may_read_target(
+                handler, agent_request, info
+            ):
+                review = _without_current(review)
         agent_request._viewer_review = review
     return agent_request._viewer_review
 
