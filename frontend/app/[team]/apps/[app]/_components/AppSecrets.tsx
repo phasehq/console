@@ -2322,10 +2322,11 @@ export const AppSecrets = ({
     if (secretPath !== '/' || searching || filterIsActive(filter) || expandedFolders.size > 0)
       return null
     const shape: GridShape = {
-      envs: orderedEnvironments.map((env) => ({
+      envs: columns.map(({ env, deleted }) => ({
         id: env.id,
         color: envColor(env),
         nameChars: env.name.length,
+        ...(deleted ? { deleted: true as const } : {}),
       })),
       ...measured,
       trailingRem,
@@ -2346,6 +2347,7 @@ export const AppSecrets = ({
   }, [
     fetching,
     orderedEnvironments,
+    columns,
     unsavedChanges,
     secretPath,
     searching,

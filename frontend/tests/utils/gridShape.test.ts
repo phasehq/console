@@ -48,6 +48,17 @@ describe('parseGridShape', () => {
     expect(shape?.envs).toEqual([{ id: 'env-1', color: '', nameChars: 4 }])
   })
 
+  it('keeps the mark of a column that is scheduled for deletion, and only that mark', () => {
+    const shape = parseGridShape({
+      ...stored,
+      envs: [
+        { ...stored.envs[0], deleted: true },
+        { ...stored.envs[1], deleted: 'yes' },
+      ],
+    })
+    expect(shape?.envs).toEqual([{ ...stored.envs[0], deleted: true }, stored.envs[1]])
+  })
+
   it('skips env entries without an id', () => {
     const shape = parseGridShape({ ...stored, envs: [null, { color: '#fff' }, stored.envs[0]] })
     expect(shape?.envs).toEqual([stored.envs[0]])

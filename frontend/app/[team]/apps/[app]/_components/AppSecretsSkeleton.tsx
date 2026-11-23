@@ -4,6 +4,7 @@ import { GROUP_HEADER_BG } from './AppSecretGroup'
 import { filterEnvSelection } from './EnvSelectionProvider'
 import {
   GRID_CELL_BASE,
+  GRID_DELETED_LANE,
   GRID_KEY_CELL,
   GRID_ROW_BG,
   GRID_TABLE,
@@ -67,8 +68,13 @@ export const AppSecretsSkeleton = ({
   keyColumn,
   reorderable,
 }: AppSecretsSkeletonProps) => {
-  const checkedIds = new Set(filterEnvSelection(shape.envs, selectedEnvIds).map((env) => env.id))
-  const envs = shape.envs.map((env) => ({ ...env, checked: checkedIds.has(env.id) }))
+  // An env that is scheduled for deletion is no part of the selection: its column is always slim
+  const live = shape.envs.filter((env) => !env.deleted)
+  const checkedIds = new Set(filterEnvSelection(live, selectedEnvIds).map((env) => env.id))
+  const envs = shape.envs.map((env) => ({
+    ...env,
+    checked: !env.deleted && checkedIds.has(env.id),
+  }))
   const checked = envs.filter((env) => env.checked)
 
   const gutterRem = rowGutterRem(shape.maxRowNumber)
@@ -103,12 +109,12 @@ export const AppSecretsSkeleton = ({
         {keyCell}
       </td>
       {envs.map((env, column) => (
-        <td key={column} className={GRID_CELL_BASE}>
+        <td key={column} className={clsx(GRID_CELL_BASE, env.deleted && GRID_DELETED_LANE)}>
           {env.checked ? (
             value(column)
           ) : (
             <div className="flex h-8 items-center justify-center">
-              <span className={SLIM_DOT} />
+              {!env.deleted && <span className={SLIM_DOT} />}
             </div>
           )}
         </td>
@@ -250,7 +256,12 @@ export const AppSecretsSkeleton = ({
                 </th>
               ) : (
                 <th key={column} className={clsx(TH_BASE, GRID_HEADER_BG, 'z-20')}>
-                  <div className="flex h-9 flex-col items-center justify-center gap-1">
+                  <div
+                    className={clsx(
+                      'flex h-9 flex-col items-center justify-center gap-1',
+                      env.deleted && GRID_DELETED_LANE
+                    )}
+                  >
                     <span className="h-3.5 w-3.5 rounded-full ring-1 ring-inset ring-neutral-500/40" />
                     <span className={clsx(VALUE_BAR, 'h-1.5 w-5')} />
                   </div>

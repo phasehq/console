@@ -4,8 +4,8 @@
  * colours only: never a name, key or value.
  */
 export type GridShape = {
-  /** Env columns in order; a name's length stands in for the name */
-  envs: { id: string; color: string; nameChars: number }[]
+  /** Env columns in order; a name's length stands in for the name. `deleted`: scheduled for deletion */
+  envs: { id: string; color: string; nameChars: number; deleted?: true }[]
   /** The key column's fit (`gridLayout`'s inputs that come from the rows) */
   longestKeyChars: number
   longestFolderChars: number
@@ -37,7 +37,14 @@ export const parseGridShape = (raw: unknown): GridShape | null => {
     if (!env || typeof env.id !== 'string') return []
     // The colour goes into a style, so only a plain hex is let through
     const color = /^#[0-9a-f]{3,8}$/i.test(env.color) ? (env.color as string) : ''
-    return [{ id: env.id as string, color, nameChars: count(env.nameChars, 64) }]
+    return [
+      {
+        id: env.id as string,
+        color,
+        nameChars: count(env.nameChars, 64),
+        ...(env.deleted === true ? { deleted: true as const } : {}),
+      },
+    ]
   })
   if (envs.length === 0) return null
 
