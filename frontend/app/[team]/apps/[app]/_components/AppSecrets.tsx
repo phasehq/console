@@ -14,6 +14,7 @@ import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { UpdateEnvOrder } from '@/graphql/mutations/environments/updateEnvironmentOrder.gql'
 import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
+import { GetDeletedEnvironments } from '@/graphql/queries/secrets/getDeletedEnvironments.gql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotatingSecrets.gql'
 import { GetRotationCloneSpec } from '@/graphql/queries/secrets/rotation/getRotationCloneSpec.gql'
@@ -1642,7 +1643,11 @@ export const AppSecrets = ({
       try {
         await updateEnvOrder({
           variables: { appId: app, environmentOrder: nextOrder },
-          refetchQueries: [{ query: GetAppEnvironments, variables: { appId: app } }],
+          refetchQueries: [
+            { query: GetAppEnvironments, variables: { appId: app } },
+            // One scheduled for deletion keeps its place, under a number that may have changed
+            { query: GetDeletedEnvironments, variables: { appId: app } },
+          ],
           awaitRefetchQueries: true,
         })
         // Unsaved edits survive: the refetch is rebased like any other snapshot
