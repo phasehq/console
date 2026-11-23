@@ -8,7 +8,8 @@ import {
   CreateEnvironmentDialog,
   CreateEnvironmentDialogHandle,
 } from '@/components/environments/CreateEnvironmentDialog'
-import { DeletedEnvironments } from '@/components/environments/DeletedEnvironments'
+import { DeletedEnvironmentDialog } from '@/components/environments/DeletedEnvironmentDialog'
+import { useDeletedEnvironments } from '@/hooks/useDeletedEnvironments'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { UpdateEnvOrder } from '@/graphql/mutations/environments/updateEnvironmentOrder.gql'
 import { GetAppSyncStatus } from '@/graphql/queries/syncing/getAppSyncStatus.gql'
@@ -207,6 +208,7 @@ import {
   columnsSignature,
   gridLayout,
   rowGutterRem,
+  withDeletedColumns,
 } from './gridColumns'
 import {
   GRID_SHAPE_ROWS,
@@ -563,12 +565,21 @@ export const AppSecrets = ({
   const allEnvIdsKey = orderedEnvironments.map((env) => env.id).join(',')
   const allEnvIds = useMemo(() => (allEnvIdsKey ? allEnvIdsKey.split(',') : []), [allEnvIdsKey])
 
+  // An env that is scheduled for deletion keeps a slim column where it stood, to restore it from
+  const deletedEnvs = useDeletedEnvironments(app, userCanReadEnvironments)
+  const [openDeletedId, setOpenDeletedId] = useState<string | null>(null)
+  const openDeleted =
+    (openDeletedId && deletedEnvs.environments.find((env) => env.id === openDeletedId)) || null
+
   // Content-keyed: every data publish brings fresh env objects, and rows reference-compare this
-  const columnsDraft: GridColumn[] = orderedEnvironments.map((env) => ({
-    env,
-    checked: checkedSet.has(env.id),
-    pending: pendingEnvIds.includes(env.id),
-  }))
+  const columnsDraft: GridColumn[] = withDeletedColumns(
+    orderedEnvironments.map((env) => ({
+      env,
+      checked: checkedSet.has(env.id),
+      pending: pendingEnvIds.includes(env.id),
+    })),
+    deletedEnvs.environments
+  )
   const columnsKey = columnsSignature(columnsDraft)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const columns = useMemo(() => columnsDraft, [columnsKey])
@@ -2583,11 +2594,16 @@ export const AppSecrets = ({
     }
 
     // Nothing can be added without an environment to add it to
-    if (orderedEnvironments.length === 0)
+    if (orderedEnvironments.length === 0) {
+      const scheduled = deletedEnvs.environments.length
       return (
         <EmptyState
           title="No environments"
-          subtitle="You have access to 0 Environments in this App."
+          subtitle={
+            scheduled > 0
+              ? `You have access to 0 Environments in this App. ${scheduled} more ${scheduled === 1 ? 'is' : 'are'} scheduled for deletion.`
+              : 'You have access to 0 Environments in this App.'
+          }
           graphic={
             <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
               <BsListColumnsReverse />
@@ -2607,6 +2623,7 @@ export const AppSecrets = ({
           )}
         </EmptyState>
       )
+    }
 
     return (
       <EmptyState
@@ -2973,6 +2990,7 @@ export const AppSecrets = ({
                 selection={headerSelection}
                 syncsByEnvId={syncsByEnvId}
                 syncsHref={`${basePath}/syncing`}
+                onOpenDeleted={setOpenDeletedId}
               />
               <tbody>
                 {hasResults ? (
@@ -3079,14 +3097,17 @@ export const AppSecrets = ({
           />
           </div>
         )}
-        {/* An environment scheduled for deletion has no column: it is listed under the grid, to
-            restore it from. The list takes room from the grid only while there is one: enough
-            for one environment in a short window, and it scrolls past that */}
-        {userCanReadEnvironments && (
-          <div className="max-h-[max(30%,8.5rem)] shrink-0 overflow-y-auto empty:hidden">
-            <DeletedEnvironments appId={app} allowRestore={userCanDeleteEnvironments} />
-          </div>
-        )}
+        <DeletedEnvironmentDialog
+          environment={openDeleted}
+          allowRestore={userCanDeleteEnvironments}
+          restoring={deletedEnvs.restoringId !== null}
+          onRestore={deletedEnvs.restore}
+          onDeleteNow={async (environment) => {
+            await deletedEnvs.deleteNow(environment)
+            setOpenDeletedId(null)
+          }}
+          onClose={() => setOpenDeletedId(null)}
+        />
       </section>
     </SecretReferenceContext.Provider>
   )

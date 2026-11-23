@@ -1,5 +1,3 @@
-'use client'
-
 import { useMutation, useQuery } from '@apollo/client'
 import { useState } from 'react'
 import { toast } from 'react-toastify'
@@ -8,42 +6,43 @@ import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments
 import { GetDeletedEnvironments } from '@/graphql/queries/secrets/getDeletedEnvironments.gql'
 import { RestoreEnvironmentOp } from '@/graphql/mutations/environments/restoreEnvironment.gql'
 import { DeleteEnvironmentNowOp } from '@/graphql/mutations/environments/deleteEnvironmentNow.gql'
-import { PendingDeletion, PendingDeletionList } from '@/components/common/PendingDeletionList'
+import { PendingDeletion } from '@/components/common/PendingDeletionList'
 import { usePendingDeletionRefresh } from '@/hooks/usePendingDeletionRefresh'
-import { DELETION_GRACE_PERIOD } from '@/constants'
 
-/** The app's environments that are scheduled for deletion. Each can be restored, or deleted now. */
-export const DeletedEnvironments = ({
-  appId,
-  allowRestore,
-}: {
-  appId: string
-  allowRestore: boolean
-}) => {
+// One list for every render without any, so what is built from it can be memoized
+const NONE: DeletedEnvironmentType[] = []
+
+/**
+ * The app's environments that are scheduled for deletion, kept current while the page
+ * stays open, and the two things to do with one: restore it, or delete it now.
+ */
+export const useDeletedEnvironments = (appId: string, enabled = true) => {
   const { data, refetch, startPolling, stopPolling } = useQuery(GetDeletedEnvironments, {
     variables: { appId },
     fetchPolicy: 'cache-and-network',
+    skip: !enabled,
   })
   const [restoreEnvironment] = useMutation(RestoreEnvironmentOp)
   const [deleteEnvironmentNow] = useMutation(DeleteEnvironmentNowOp)
   const [restoringId, setRestoringId] = useState<string | null>(null)
 
-  const environments = (data?.deletedEnvironments as DeletedEnvironmentType[]) ?? []
+  const environments = (data?.deletedEnvironments as DeletedEnvironmentType[] | undefined) ?? NONE
   usePendingDeletionRefresh(environments, { refetch, startPolling, stopPolling })
 
-  const handleRestore = async (environment: PendingDeletion) => {
+  const restore = async (environment: PendingDeletion) => {
     setRestoringId(environment.id)
     try {
       await restoreEnvironment({
         variables: { environmentId: environment.id },
         refetchQueries: [
           { query: GetAppEnvironments, variables: { appId } },
-          { query: GetDeletedEnvironments, variables: { appId } },
           // The secrets grid's columns, when it's mounted
           'GetAppSecrets',
         ],
         awaitRefetchQueries: true,
       })
+      // Read last: the grid keeps the environment's struck-out column until it has it back
+      await refetch()
       toast.success(`${environment.name} has been restored`)
     } catch {
       // the global error link shows the error toast
@@ -52,7 +51,7 @@ export const DeletedEnvironments = ({
     }
   }
 
-  const handleDeleteNow = async (environment: PendingDeletion) => {
+  const deleteNow = async (environment: PendingDeletion) => {
     try {
       await deleteEnvironmentNow({
         variables: { environmentId: environment.id },
@@ -65,15 +64,5 @@ export const DeletedEnvironments = ({
     }
   }
 
-  return (
-    <PendingDeletionList
-      kind="Environment"
-      description={`Deleted Environments are kept for ${DELETION_GRACE_PERIOD}, then permanently deleted. Their secrets are unavailable until restored.`}
-      items={environments}
-      allowRestore={() => allowRestore}
-      restoringId={restoringId}
-      onRestore={handleRestore}
-      onDeleteNow={handleDeleteNow}
-    />
-  )
+  return { environments, restoringId, restore, deleteNow }
 }

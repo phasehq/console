@@ -18,6 +18,7 @@ import {
   GridColumn,
 } from './gridColumns'
 import { envColor } from '@/utils/environment'
+import { DeletedEnvCell } from './DeletedEnvCell'
 
 interface AppDynamicSecretKeyRowProps {
   index: number
@@ -77,6 +78,7 @@ const AppDynamicSecretKeyRowBase = ({
       </td>
       {columns.map((column) => {
         const { env } = column
+        if (column.deleted) return <DeletedEnvCell key={env.id} column={column} />
         const state = stateByEnv.get(env.id) ?? 'none'
         const present = state === 'mapped'
 

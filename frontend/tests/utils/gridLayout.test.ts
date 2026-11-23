@@ -1,4 +1,12 @@
-import { gridLayout, rowGutterRem } from '@/app/[team]/apps/[app]/_components/gridColumns'
+import { DeletedEnvironmentType, EnvironmentType } from '@/apollo/graphql'
+import {
+  GridColumn,
+  canMoveColumn,
+  columnsSignature,
+  gridLayout,
+  rowGutterRem,
+  withDeletedColumns,
+} from '@/app/[team]/apps/[app]/_components/gridColumns'
 
 const base = {
   slimCount: 0,
@@ -172,5 +180,137 @@ describe('rowGutterRem', () => {
     // 3.75rem chrome + 18.75rem key + 0.9rem = 374.4px → 376px; + 2.25rem = 396px → 400px
     expect(gridLayout({ ...keys, gutterRem: rowGutterRem(12) }).keyColumnWidth).toBe('376px')
     expect(gridLayout({ ...keys, gutterRem: rowGutterRem(12345) }).keyColumnWidth).toBe('400px')
+  })
+})
+
+const live = (id: string, index: number): GridColumn => ({
+  env: { id, name: id, index } as EnvironmentType,
+  checked: true,
+  pending: false,
+})
+const scheduled = (id: string, index: number, more: Partial<DeletedEnvironmentType> = {}) =>
+  ({
+    id,
+    name: id,
+    envType: 'CUSTOM',
+    index,
+    deletedAt: '2026-11-22T12:00:00Z',
+    deletionScheduledFor: '2026-11-23T12:00:00Z',
+    deletionDelayed: false,
+    canRestore: true,
+    ...more,
+  }) as DeletedEnvironmentType
+const ids = (columns: GridColumn[]) => columns.map((column) => column.env.id)
+
+describe('withDeletedColumns', () => {
+  it('leaves the columns as they are when nothing is scheduled for deletion', () => {
+    const columns = [live('dev', 0), live('prod', 1)]
+    expect(withDeletedColumns(columns, [])).toBe(columns)
+  })
+
+  it('puts an env back where it stood, as a slim column that carries its state', () => {
+    const staging = scheduled('staging', 1)
+    const columns = withDeletedColumns([live('dev', 0), live('prod', 2)], [staging])
+
+    expect(ids(columns)).toEqual(['dev', 'staging', 'prod'])
+    expect(columns[1]).toMatchObject({ checked: false, pending: false, deleted: staging })
+    expect(columns[1].env.name).toBe('staging')
+    // The live columns are untouched
+    expect(columns[0].deleted).toBeUndefined()
+    expect(columns[2].checked).toBe(true)
+  })
+
+  it('keeps one that stood first or last at that end', () => {
+    const columns = [live('staging', 1), live('qa', 2)]
+    expect(ids(withDeletedColumns(columns, [scheduled('dev', 0)]))).toEqual([
+      'dev',
+      'staging',
+      'qa',
+    ])
+    expect(ids(withDeletedColumns(columns, [scheduled('prod', 3)]))).toEqual([
+      'staging',
+      'qa',
+      'prod',
+    ])
+  })
+
+  it('keeps several in the order they stood in, however they are listed', () => {
+    const columns = withDeletedColumns(
+      [live('dev', 0), live('prod', 3)],
+      [scheduled('qa', 2), scheduled('staging', 1)]
+    )
+    expect(ids(columns)).toEqual(['dev', 'staging', 'qa', 'prod'])
+  })
+
+  it('stands after an env that has taken its place since', () => {
+    // The live envs were reordered while it was scheduled, and one now has its index
+    const columns = withDeletedColumns([live('prod', 0), live('dev', 1)], [scheduled('staging', 1)])
+    expect(ids(columns)).toEqual(['prod', 'dev', 'staging'])
+  })
+
+  it('holds its place while the envs around it are reordered', () => {
+    // dev, (staging), qa, prod. Prod is dragged to the front: the grid shows the new order at
+    // once, with the indexes the server gave before
+    const reordered = [live('prod', 3), live('dev', 0), live('qa', 2)]
+    expect(ids(withDeletedColumns(reordered, [scheduled('staging', 1)]))).toEqual([
+      'prod',
+      'staging',
+      'dev',
+      'qa',
+    ])
+    // The server then numbers them as shown, the scheduled one keeping its place
+    const confirmed = [live('prod', 0), live('dev', 2), live('qa', 3)]
+    expect(ids(withDeletedColumns(confirmed, [scheduled('staging', 1)]))).toEqual([
+      'prod',
+      'staging',
+      'dev',
+      'qa',
+    ])
+  })
+
+  it('draws an env that is in both lists once, as the env it is', () => {
+    // Around a deletion or a restore the two lists, read separately, can both hold it
+    const columns = [live('dev', 0), live('staging', 1)]
+    expect(withDeletedColumns(columns, [scheduled('staging', 1)])).toBe(columns)
+
+    const merged = withDeletedColumns(columns, [scheduled('staging', 1), scheduled('qa', 2)])
+    expect(ids(merged)).toEqual(['dev', 'staging', 'qa'])
+    expect(merged[1].deleted).toBeUndefined()
+  })
+
+  it('shows them alone when the app has no other env', () => {
+    expect(ids(withDeletedColumns([], [scheduled('staging', 1), scheduled('dev', 0)]))).toEqual([
+      'dev',
+      'staging',
+    ])
+  })
+})
+
+describe('columnsSignature', () => {
+  const signature = (more: Partial<DeletedEnvironmentType>) =>
+    columnsSignature(withDeletedColumns([live('dev', 0)], [scheduled('staging', 1, more)]))
+
+  it('changes when a scheduled env starts being deleted, or its deletion is held up', () => {
+    const waiting = signature({})
+    expect(signature({})).toBe(waiting)
+    expect(signature({ canRestore: false })).not.toBe(waiting)
+    expect(signature({ deletionDelayed: true })).not.toBe(waiting)
+    expect(signature({ deletionScheduledFor: '2026-11-24T12:00:00Z' })).not.toBe(waiting)
+  })
+})
+
+describe('canMoveColumn', () => {
+  it('lets an env move only past another env, not past one scheduled for deletion', () => {
+    const columns = withDeletedColumns(
+      [live('dev', 1), live('prod', 2)],
+      [scheduled('old', 0), scheduled('staging', 3)]
+    )
+    expect(ids(columns)).toEqual(['old', 'dev', 'prod', 'staging'])
+
+    // Development is the first env that is left, with only the scheduled one before it
+    expect(canMoveColumn(columns, 1, 'left')).toBe(false)
+    expect(canMoveColumn(columns, 1, 'right')).toBe(true)
+    expect(canMoveColumn(columns, 2, 'left')).toBe(true)
+    expect(canMoveColumn(columns, 2, 'right')).toBe(false)
   })
 })

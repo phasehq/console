@@ -1,4 +1,4 @@
-import { EnvironmentType } from '@/apollo/graphql'
+import { DeletedEnvironmentType, EnvironmentType } from '@/apollo/graphql'
 
 /** One environment column in the secrets grid */
 export type GridColumn = {
@@ -7,6 +7,8 @@ export type GridColumn = {
   checked: boolean
   /** Still decrypting in the background */
   pending: boolean
+  /** An env that is scheduled for deletion: a slim column where it stood, with nothing in it */
+  deleted?: DeletedEnvironmentType
 }
 
 // Cell contents can only fill their row (h-full) in every browser when the table, rows and
@@ -24,6 +26,9 @@ export const GRID_KEY_CELL = 'sticky left-0 z-30 border-l hover:z-[45] focus-wit
 export const GRID_TRAILING_CELL = 'border-l !border-r-0'
 /** Marks the cells of the new-environment column: the grid opens the dialog from any of them */
 export const NEW_ENV_CELL = { 'data-new-env-cell': '' }
+/** The lane of an env that is scheduled for deletion: struck out, as nothing in it can be read or edited */
+export const GRID_DELETED_LANE =
+  'bg-[repeating-linear-gradient(135deg,transparent_0_5px,rgb(113_113_122/0.22)_5px_6px)] dark:bg-[repeating-linear-gradient(135deg,transparent_0_5px,rgb(255_255_255/0.09)_5px_6px)]'
 /** A field's hover menu: the hovered field's own fill, lifted off the row it covers */
 export const GRID_TRAY =
   'rounded-t-md border border-b-0 border-neutral-500/20 bg-zinc-200 px-1 pt-1 shadow-[0_-6px_16px_-6px_rgb(0_0_0/0.3)] dark:bg-zinc-700'
@@ -229,5 +234,57 @@ export const clampColumnPx = (px: number) =>
 /** Content signature, so rows can reference-compare a memoized column list */
 export const columnsSignature = (columns: GridColumn[]) =>
   columns
-    .map((c) => [c.env.id, c.env.name, c.env.color, c.checked ? 1 : 0, c.pending ? 1 : 0].join(':'))
+    .map((c) =>
+      [
+        c.env.id,
+        c.env.name,
+        c.env.color,
+        c.checked ? 1 : 0,
+        c.pending ? 1 : 0,
+        c.deleted
+          ? `${c.deleted.deletionScheduledFor}${c.deleted.canRestore ? 1 : 0}${c.deleted.deletionDelayed ? 1 : 0}`
+          : '',
+      ].join(':')
+    )
     .join(',')
+
+/** Whether an env has another to trade places with on that side: one scheduled for deletion is no place to move to */
+export const canMoveColumn = (columns: GridColumn[], index: number, direction: 'left' | 'right') =>
+  (direction === 'left' ? columns.slice(0, index) : columns.slice(index + 1)).some(
+    (column) => !column.deleted
+  )
+
+/**
+ * The env columns, with the envs that are scheduled for deletion slotted in where they stood.
+ * A place is counted in envs, not read off the columns' order: each stands after as many envs
+ * as come before it in the app's order (one with the same index among them), so it holds its
+ * place while the envs around it are being reordered. The server keeps it the same way.
+ */
+export const withDeletedColumns = (
+  columns: GridColumn[],
+  deleted: DeletedEnvironmentType[]
+): GridColumn[] => {
+  // The two lists are read separately: around a deletion or a restore an env can be in both,
+  // and it is drawn once, as the env it still is or is again
+  const liveIds = new Set(columns.map((column) => column.env.id))
+  const scheduled = deleted.filter((environment) => !liveIds.has(environment.id))
+  if (scheduled.length === 0) return columns
+  const indexes = columns.map((column) => column.env.index ?? 0)
+  const merged = [...columns]
+  scheduled
+    .sort((a, b) => a.index - b.index)
+    .forEach((environment, nth) => {
+      const before = indexes.filter((index) => index <= environment.index).length
+      merged.splice(before + nth, 0, {
+        env: {
+          id: environment.id,
+          name: environment.name,
+          index: environment.index,
+        } as EnvironmentType,
+        checked: false,
+        pending: false,
+        deleted: environment,
+      })
+    })
+  return merged
+}

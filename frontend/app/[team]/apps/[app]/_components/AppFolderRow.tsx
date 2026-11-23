@@ -26,6 +26,7 @@ import {
   GridColumn,
 } from './gridColumns'
 import { envColor } from '@/utils/environment'
+import { DeletedEnvCell } from './DeletedEnvCell'
 
 const HOVER_BG = 'group-hover:bg-zinc-50 dark:group-hover:bg-zinc-700/80'
 
@@ -154,6 +155,7 @@ const AppFolderRowBase = ({
 
       {columns.map((column) => {
         const { env } = column
+        if (column.deleted) return <DeletedEnvCell key={env.id} column={column} />
         const folder = folderByEnv.get(env.id) ?? null
 
         if (!column.checked) {

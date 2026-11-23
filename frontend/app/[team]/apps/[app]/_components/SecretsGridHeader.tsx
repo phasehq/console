@@ -17,6 +17,7 @@ import {
   FaArrowRight,
   FaCheckSquare,
   FaChevronDown,
+  FaClock,
   FaDownload,
   FaEye,
   FaEyeSlash,
@@ -29,6 +30,8 @@ import { IconType } from 'react-icons'
 import { EnvironmentSyncType, EnvironmentType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import { Checkbox } from '@/components/common/Checkbox'
+import { deletionStatus, isBeingDeleted } from '@/components/common/PendingDeletionList'
+import Spinner from '@/components/common/Spinner'
 import {
   CreateEnvironmentDialog,
   CreateEnvironmentDialogHandle,
@@ -36,7 +39,14 @@ import {
 import { ManageEnvironmentDialog } from '@/components/environments/ManageEnvironmentDialog'
 import { envColor } from '@/utils/environment'
 import { MENU_LIT, MENU_SURFACE } from '@/components/common/menuStyles'
-import { COLUMN_MAX_PX, COLUMN_MIN_PX, GridColumn, NEW_ENV_CELL } from './gridColumns'
+import {
+  COLUMN_MAX_PX,
+  COLUMN_MIN_PX,
+  GRID_DELETED_LANE,
+  GridColumn,
+  NEW_ENV_CELL,
+  canMoveColumn,
+} from './gridColumns'
 import { envColumnId } from '../_hooks/useColumnWidths'
 import { EnvSyncsMenu } from '@/components/syncing/EnvSyncsMenu'
 import { EnvContents } from '@/utils/environmentClone'
@@ -174,6 +184,8 @@ type SecretsGridHeaderProps = {
   /** Each env's syncs, shown in its column header */
   syncsByEnvId?: ReadonlyMap<string, EnvironmentSyncType[]>
   syncsHref?: string
+  /** Opens an env that is scheduled for deletion: when it goes, and the way back */
+  onOpenDeleted?: (envId: string) => void
 }
 
 type DropTarget = { envId: string; after: boolean }
@@ -214,6 +226,7 @@ const SecretsGridHeaderBase = ({
   selection,
   syncsByEnvId,
   syncsHref,
+  onOpenDeleted,
 }: SecretsGridHeaderProps) => {
   const checkedCount = columns.filter((c) => c.checked).length
 
@@ -370,6 +383,46 @@ const SecretsGridHeaderBase = ({
           const { env } = column
           const color = envColor(env)
 
+          if (column.deleted) {
+            const beingDeleted = isBeingDeleted(column.deleted)
+            return (
+              <th
+                key={env.id}
+                data-env-column=""
+                data-deleted={beingDeleted ? 'deleting' : 'scheduled'}
+                className={clsx(TH_BASE, GRID_HEADER_BG, ENV_TH_HOVERED, 'z-20')}
+              >
+                <button
+                  type="button"
+                  onClick={() => onOpenDeleted?.(env.id)}
+                  title={`${env.name}: ${deletionStatus(column.deleted)}`}
+                  aria-label={`${env.name}: ${deletionStatus(column.deleted)}`}
+                  className={clsx(
+                    'flex h-9 w-full flex-col items-center justify-center gap-0.5 px-0.5 transition-colors hover:bg-zinc-300/60 dark:hover:bg-zinc-700/60',
+                    GRID_DELETED_LANE
+                  )}
+                >
+                  {/* The list's own marks: a red clock while it waits for its date, an amber spinner once it is being deleted */}
+                  {beingDeleted ? (
+                    <Spinner size="xs" color="amber" />
+                  ) : (
+                    <FaClock className="h-3.5 w-3.5 text-red-500" />
+                  )}
+                  <span className="w-full overflow-hidden [mask-image:linear-gradient(to_right,#000_calc(100%_-_8px),transparent)]">
+                    <span
+                      className={clsx(
+                        'mx-auto block w-max max-w-full whitespace-nowrap text-3xs line-through',
+                        beingDeleted ? 'text-amber-500' : 'text-red-500'
+                      )}
+                    >
+                      {env.name}
+                    </span>
+                  </span>
+                </button>
+              </th>
+            )
+          }
+
           if (!column.checked) {
             return (
               <th
@@ -490,8 +543,8 @@ const SecretsGridHeaderBase = ({
                   <EnvColumnMenu
                     env={env}
                     allowReordering={allowReordering}
-                    canMoveLeft={index > 0}
-                    canMoveRight={index < columns.length - 1}
+                    canMoveLeft={canMoveColumn(columns, index, 'left')}
+                    canMoveRight={canMoveColumn(columns, index, 'right')}
                     onMove={onMove}
                     onExport={onExport}
                     onClone={

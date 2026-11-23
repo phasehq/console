@@ -62,3 +62,49 @@ it('marks a key only where a lease returns it', async () => {
   await act(async () => root.unmount())
   container.remove()
 })
+
+it('leaves the lane of an env that is scheduled for deletion empty', async () => {
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  const deleted = {
+    id: 'staging',
+    name: 'Staging',
+    envType: 'STAGING',
+    index: 1,
+    deletedAt: '2026-11-22T12:00:00Z',
+    deletionScheduledFor: '2026-11-23T12:00:00Z',
+    deletionDelayed: true,
+    canRestore: true,
+  }
+  await act(async () => {
+    root.render(
+      <table>
+        <tbody>
+          <AppDynamicSecretKeyRow
+            index={0}
+            depth={0}
+            keyName="AWS_IAM_USERNAME"
+            envs={[{ env: dev, dynamicSecret: dynamicSecret('AWS_IAM_USERNAME') }]}
+            columns={[
+              { env: dev, checked: true, pending: false },
+              { env: staging, checked: false, pending: false, deleted },
+            ]}
+            showEnv={() => {}}
+          />
+        </tbody>
+      </table>
+    )
+  })
+
+  const [, inDev, inStaging] = [...container.querySelectorAll('td')]
+  expect(inDev.textContent).toContain('••••••')
+  // Nothing to click through to: it is not a hidden env
+  expect(inStaging.querySelector('button')).toBeNull()
+  expect(inStaging.getAttribute('title')).toBe(
+    "Staging: Deletion delayed: Phase couldn't revoke some credentials"
+  )
+
+  await act(async () => root.unmount())
+  container.remove()
+})

@@ -14,6 +14,7 @@ import {
   GridColumn,
   NEW_ENV_CELL,
 } from './gridColumns'
+import { DeletedEnvCell } from './DeletedEnvCell'
 
 export const GROUP_HEADER_BG = 'bg-zinc-200 dark:bg-zinc-900'
 
@@ -114,15 +115,19 @@ export const AppSecretGroup = ({
             )}
           </div>
         </td>
-        {columns.map(({ env, checked }) => (
-          <td key={env.id} className={clsx(GRID_CELL_BASE, 'align-middle')}>
-            {sourceByEnvId.has(env.id) ? (
-              checked && renderPresent?.(env.id)
-            ) : setUp.envIds.has(env.id) ? (
-              <SetUpCell setUp={setUp} envId={env.id} envName={env.name} header slim={!checked} />
-            ) : null}
-          </td>
-        ))}
+        {columns.map((column) => {
+          const { env, checked } = column
+          if (column.deleted) return <DeletedEnvCell key={env.id} column={column} />
+          return (
+            <td key={env.id} className={clsx(GRID_CELL_BASE, 'align-middle')}>
+              {sourceByEnvId.has(env.id) ? (
+                checked && renderPresent?.(env.id)
+              ) : setUp.envIds.has(env.id) ? (
+                <SetUpCell setUp={setUp} envId={env.id} envName={env.name} header slim={!checked} />
+              ) : null}
+            </td>
+          )
+        })}
         <td className={clsx(GRID_CELL_BASE, GRID_TRAILING_CELL, GROUP_HEADER_BG)} {...NEW_ENV_CELL} />
       </tr>
       <GroupSetUpContext.Provider value={setUp}>{children}</GroupSetUpContext.Provider>

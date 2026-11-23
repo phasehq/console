@@ -32,6 +32,7 @@ import {
 import { tintFade } from './cellStatus'
 import { envColor } from '@/utils/environment'
 import { GroupSetUpContext, SetUpCell } from './GroupSetUp'
+import { DeletedEnvCell } from './DeletedEnvCell'
 
 // Transparent and square: the key's part of the cell is the field (it lights up on hover/focus)
 const KEY_INPUT_STYLE =
@@ -372,7 +373,7 @@ const AppSecretRowComponent = ({
                   title={
                     stagedForDelete
                       ? 'Restore this secret'
-                      : checkedColumns.length < columns.length
+                      : columns.some((column) => !column.checked && !column.deleted)
                         ? 'Delete this secret from the shown environments'
                         : 'Delete this secret'
                   }
@@ -405,6 +406,7 @@ const AppSecretRowComponent = ({
 
       {columns.map((column) => {
         const { env } = column
+        if (column.deleted) return <DeletedEnvCell key={env.id} column={column} />
         const clientEntry = clientByEnv.get(env.id) ?? { env, secret: null }
         const serverEntry = serverByEnv.get(env.id)
 
