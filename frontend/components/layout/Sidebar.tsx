@@ -660,10 +660,16 @@ const SidebarCollapseToggle = ({
   )
 }
 
+// No side padding: the links are flex items and More is wrapped in one, so padding made them unequal
 const MOBILE_TAB_STYLE =
-  'flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 transition ease'
+  'flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 transition ease'
 const MOBILE_MENU_ROW =
   'flex h-10 w-full items-center gap-2.5 rounded-md px-2.5 text-sm transition ease'
+// Tab labels are short enough to fit under an icon
+const MOBILE_TAB_NAMES: Record<string, string> = {
+  'Access Control': 'Access',
+  'Audit Logs': 'Logs',
+}
 
 // The highlight sits behind the icon, as it does on the icon rail
 const MobileTab = ({
@@ -688,19 +694,11 @@ const MobileTab = ({
   </>
 )
 
-// On phones the tab bar is the whole shell, so More also carries the account menu and search
-const MobileMoreMenu = ({
-  overflowLinks,
-  team,
-  settingsActive,
-}: {
-  overflowLinks: SidebarLinkT[]
-  team: string
-  settingsActive: boolean
-}) => (
+// On phones the tab bar is the whole shell, so More is the account menu with Search added
+const MobileMoreMenu = ({ team, settingsActive }: { team: string; settingsActive: boolean }) => (
   <Menu as="div" className="relative min-w-0 flex-1">
     {({ open }) => {
-      const highlighted = open || settingsActive || overflowLinks.some((link) => link.active)
+      const highlighted = open || settingsActive
       const rowStyle = (active: boolean, current = false) =>
         clsx(
           MOBILE_MENU_ROW,
@@ -732,7 +730,7 @@ const MobileMoreMenu = ({
           >
             <Menu.Items className="absolute bottom-full right-1 mb-2 max-h-[calc(100dvh_-_4.5rem)] w-64 origin-bottom-right divide-y divide-neutral-500/20 overflow-y-auto rounded-md bg-neutral-200 shadow-2xl ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-neutral-800">
               <AccountHeader />
-              <div className="space-y-0.5 p-1">
+              <div className="p-1">
                 <Menu.Item>
                   {({ active }) => (
                     <button type="button" onClick={openCommandPalette} className={rowStyle(active)}>
@@ -741,20 +739,6 @@ const MobileMoreMenu = ({
                     </button>
                   )}
                 </Menu.Item>
-                {overflowLinks.map((link) => (
-                  <Menu.Item key={link.name}>
-                    {({ active }) => (
-                      <Link
-                        href={link.href}
-                        aria-current={link.active ? 'page' : undefined}
-                        className={rowStyle(active, link.active)}
-                      >
-                        <span className="text-neutral-500">{link.icon}</span>
-                        {link.name}
-                      </Link>
-                    )}
-                  </Menu.Item>
-                ))}
               </div>
               <OrgMenuItems heading="Organisations" touch />
               <div className="space-y-0.5 p-1">
@@ -985,8 +969,8 @@ const Sidebar = () => {
     return () => clearTimeout(timeout)
   }, [pathname, appLinks.length])
 
-  const mobileLinks = links.slice(0, 4)
-  const overflowLinks = links.slice(4)
+  // Home only links on to the other pages, so on phones its place in the tab bar goes to Audit Logs
+  const mobileLinks = links.filter((link) => link.name !== 'Home')
 
   return (
     <>
@@ -1098,13 +1082,13 @@ const Sidebar = () => {
             title={link.name}
           >
             <MobileTab
-              name={link.name === 'Access Control' ? 'Access' : link.name}
+              name={MOBILE_TAB_NAMES[link.name] ?? link.name}
               icon={link.icon}
               active={link.active}
             />
           </Link>
         ))}
-        <MobileMoreMenu overflowLinks={overflowLinks} team={team} settingsActive={settingsActive} />
+        <MobileMoreMenu team={team} settingsActive={settingsActive} />
       </nav>
     </>
   )
