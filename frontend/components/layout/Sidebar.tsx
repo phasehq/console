@@ -239,7 +239,9 @@ const SidebarItem = ({
         </div>
       )}
 
+      {/* Not while the sidebar is still closing: the pointer that clicked Collapse is over the rail */}
       {collapsed &&
+        !animating &&
         (hasSublinks ? (
           // pl-4 bridges the hover gap. Hidden with opacity, not visibility: it shows and hides at once,
           // so two flyouts are never open together as the pointer crosses the rail, and its links
@@ -367,7 +369,7 @@ const SidebarFooterMenu = ({
             />
           </FooterLabel>
         </Popover.Button>
-        {collapsed && !open && <div className={TOOLTIP_STYLE}>{name}</div>}
+        {collapsed && !animating && !open && <div className={TOOLTIP_STYLE}>{name}</div>}
         <Transition
           as={Fragment}
           enter="transition ease-out duration-100"
@@ -567,7 +569,9 @@ const AccountMenu = ({
               </span>
             </span>
           </Popover.Button>
-          {collapsed && !open && <div className={TOOLTIP_STYLE}>{session.user?.name}</div>}
+          {collapsed && !animating && !open && (
+            <div className={TOOLTIP_STYLE}>{session.user?.name}</div>
+          )}
           <Transition
             as={Fragment}
             enter="transition ease-out duration-100"
@@ -628,7 +632,7 @@ const AccountMenu = ({
 }
 
 // Opens the command palette. It sits at the right of the header row, which on the rail is all of it
-const SidebarSearchButton = ({ collapsed }: { collapsed: boolean }) => {
+const SidebarSearchButton = ({ collapsed, animating }: FooterMenuProps) => {
   const modifierKey = useModifierKey()
 
   return (
@@ -646,7 +650,7 @@ const SidebarSearchButton = ({ collapsed }: { collapsed: boolean }) => {
       >
         <FaSearch />
       </button>
-      {collapsed && <div className={TOOLTIP_STYLE}>Search</div>}
+      {collapsed && !animating && <div className={TOOLTIP_STYLE}>Search</div>}
     </div>
   )
 }
@@ -678,7 +682,8 @@ const SidebarCollapseToggle = ({
           Collapse
         </FooterLabel>
       </button>
-      {collapsed && <div className={TOOLTIP_STYLE}>Expand sidebar</div>}
+      {/* Held back until the sidebar has closed: the click that collapses it is made on this button */}
+      {collapsed && !animating && <div className={TOOLTIP_STYLE}>Expand sidebar</div>}
     </div>
   )
 }
@@ -1034,7 +1039,7 @@ const Sidebar = () => {
               <PlanLabel plan={activeOrganisation.plan} size="sm" />
             )}
           </div>
-          <SidebarSearchButton collapsed={collapsed} />
+          <SidebarSearchButton collapsed={collapsed} animating={animating} />
         </div>
 
         {/* The settled rail lets tooltips and flyouts overflow it. Otherwise the list scrolls and fades at its edges */}
