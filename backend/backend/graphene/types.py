@@ -1108,6 +1108,8 @@ class DeletedEnvironmentType(ObjectType):
     id = graphene.ID(required=True)
     name = graphene.String(required=True)
     env_type = graphene.String(required=True)
+    # Its place among the app's environments, which it keeps while pending.
+    index = graphene.Int(required=True)
     deleted_at = graphene.DateTime(required=True)
     deletion_scheduled_for = graphene.DateTime(required=True)
     # A credential that can't be revoked holds up the purge. It can be

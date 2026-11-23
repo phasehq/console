@@ -1074,6 +1074,7 @@ type DeletedEnvironmentType {
   id: ID!
   name: String!
   envType: String!
+  index: Int!
   deletedAt: DateTime!
   deletionScheduledFor: DateTime!
   deletionDelayed: Boolean!

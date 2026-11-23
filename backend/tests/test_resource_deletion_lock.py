@@ -260,12 +260,33 @@ class TestPendingDeletionTypes:
                 "id",
                 "name",
                 "env_type",
+                "index",
                 "deleted_at",
                 "deletion_scheduled_for",
                 "deletion_delayed",
                 "can_restore",
                 "viewer_can_delete",
             }
+
+    def test_an_environment_says_where_it_stood_among_the_apps_environments(self):
+        """The secrets grid keeps a column for it in that place."""
+        import graphene
+        from api.models import Environment
+
+        class Query(graphene.ObjectType):
+            pending = graphene.Field(types.DeletedEnvironmentType)
+
+            def resolve_pending(root, info):
+                return Environment(
+                    id="env-1", name="Staging", index=2, deleted_at=timezone.now()
+                )
+
+        result = graphene.Schema(query=Query).execute("{ pending { id name index } }")
+
+        assert result.errors is None
+        assert result.data["pending"] == {"id": "env-1", "name": "Staging", "index": 2}
+        # Apps are listed by name: there is no place to keep
+        assert "index" not in types.DeletedAppType._meta.fields
 
     @pytest.mark.parametrize("allowed", [True, False])
     def test_an_app_says_whether_the_caller_may_restore_it_or_delete_it_now(
