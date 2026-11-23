@@ -105,7 +105,7 @@ export type SecretRequirement = {
 }
 
 type RequirementShape = Pick<HttpDefinition, 'hosts' | 'fields' | 'allowPlainHttp'> &
-  Partial<Pick<HttpDefinition, 'injections' | 'operationClasses'>>
+  Partial<Pick<HttpDefinition, 'injections'>>
 
 const PLAIN_HTTP_REASON =
   'Plain HTTP was turned on, so the secret may now be sent unencrypted. Enter the secret again to confirm it.'

@@ -197,11 +197,7 @@ describe('asking for the secret again', () => {
       ...bearer,
       injections: [{ type: 'header', name: 'Authorization', prefix: 'Token ', field: 'token' }],
     }
-    const classes: HttpDefinition = {
-      ...bearer,
-      operationClasses: [{ match: { methods: ['POST'], path: '/v1/search' }, class: 'read' }],
-    }
-    for (const changed of [withPath('/v2/*'), decoy, query, prefix, classes]) {
+    for (const changed of [withPath('/v2/*'), decoy, query, prefix]) {
       const requirement = secretRequirement(bearer, changed)
       expect(requirement).toEqual({
         required: true,

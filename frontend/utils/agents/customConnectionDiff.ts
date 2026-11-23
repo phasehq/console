@@ -10,7 +10,6 @@ import {
   type HttpField,
   type HttpHostRule,
   type HttpInjection,
-  type HttpOperationClass,
 } from '@/utils/agents/httpDefinition'
 
 export type DiffChange = 'added' | 'removed' | 'changed' | 'unchanged'
@@ -35,8 +34,6 @@ export type ConnectionDiff = {
   hosts: DiffEntry[]
   injections: DiffEntry[]
   fields: DiffEntry[]
-  /** How calls are classified for access rules. */
-  operationClasses: DiffEntry[]
   settings: DiffEntry[]
   /** False when the request changes nothing. */
   changed: boolean
@@ -132,45 +129,6 @@ const diffKeyed = <T>(
   return entries
 }
 
-const classMatchKey = (entry: HttpOperationClass) =>
-  JSON.stringify([
-    (entry.match.methods ?? []).map((method) => method.toUpperCase()).sort(),
-    entry.match.path ?? '',
-  ])
-
-const classMatchLabel = (entry: HttpOperationClass) =>
-  [(entry.match.methods ?? []).join(', '), entry.match.path].filter(Boolean).join(' ') || 'Any call'
-
-const describeClass = (entry: HttpOperationClass) => `counted as ${entry.class} calls`
-
-const diffOperationClasses = (
-  before: HttpOperationClass[],
-  after: HttpOperationClass[]
-): DiffEntry[] => {
-  const entries = diffKeyed(before, after, classMatchKey, classMatchLabel, describeClass)
-  // The first match wins, so the same rules in another order are a change too.
-  const keptBefore = before
-    .map(classMatchKey)
-    .filter((key) => after.some((a) => classMatchKey(a) === key))
-  const keptAfter = after
-    .map(classMatchKey)
-    .filter((key) => before.some((b) => classMatchKey(b) === key))
-  if (keptBefore.join() !== keptAfter.join()) {
-    const order = (items: HttpOperationClass[], kept: string[]) =>
-      items
-        .filter((item) => kept.includes(classMatchKey(item)))
-        .map(classMatchLabel)
-        .join(', then ')
-    entries.push({
-      change: 'changed',
-      label: 'Order',
-      before: order(before, keptBefore),
-      after: order(after, keptAfter),
-    })
-  }
-  return entries
-}
-
 /**
  * Compare a Connection as it is with what is requested. `current` is null for
  * a new Connection; a missing requested name or definition means "unchanged".
@@ -213,11 +171,6 @@ export const diffConnections = (
     describeField
   )
 
-  const operationClasses = diffOperationClasses(
-    before?.operationClasses ?? [],
-    after?.operationClasses ?? []
-  )
-
   const settings: DiffEntry[] = []
   const plainBefore = before?.allowPlainHttp === true
   const plainAfter = after?.allowPlainHttp === true
@@ -231,7 +184,7 @@ export const diffConnections = (
     })
   }
 
-  const changed = [name, ...hosts, ...injections, ...fields, ...operationClasses, ...settings].some(
+  const changed = [name, ...hosts, ...injections, ...fields, ...settings].some(
     (entry) => entry && entry.change !== 'unchanged'
   )
   const unreadable = requested?.definitionUnreadable === true
@@ -240,7 +193,6 @@ export const diffConnections = (
     hosts,
     injections,
     fields,
-    operationClasses,
     settings,
     changed: changed || unreadable,
     unreadable,

@@ -30,7 +30,6 @@ const github = {
       },
     ],
     preset: 'bearer',
-    operationClasses: [{ match: { methods: ['POST'], path: '/graphql' }, class: 'read' }],
   },
 }
 const stripe = {
@@ -45,7 +44,6 @@ const stripe = {
   definition: {
     ...github.definition,
     hosts: [{ match: 'exact', value: 'api.stripe.com', port: 443 }],
-    operationClasses: undefined,
   },
 }
 const datadog = {
@@ -77,7 +75,7 @@ const mcp = {
   category: 'mcp',
   hosts: [],
   hostsEditable: true,
-  definition: { ...github.definition, hosts: [], operationClasses: undefined },
+  definition: { ...github.definition, hosts: [] },
 }
 
 describe('provider presets', () => {
@@ -122,8 +120,6 @@ describe('provider presets', () => {
     expect(built.definition?.hosts).toEqual([
       { match: 'exact', value: 'api.github.com', port: 443 },
     ])
-    // How its calls are classified rides along, though the form does not edit it.
-    expect(built.definition?.operationClasses).toEqual(github.definition.operationClasses)
     expect(JSON.stringify(built.definition)).not.toMatch(/secret value/i)
   })
 

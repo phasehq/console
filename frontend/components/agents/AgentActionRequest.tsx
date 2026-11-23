@@ -241,7 +241,6 @@ export function AgentActionDiff({
       <DiffSection title="Allowed hosts" entries={diff.hosts} />
       <DiffSection title="Where the secret goes" entries={diff.injections} />
       <DiffSection title="Fields" entries={diff.fields} />
-      <DiffSection title="Call classes" entries={diff.operationClasses} />
       <DiffSection title="Settings" entries={diff.settings} />
     </div>
   )
@@ -892,11 +891,7 @@ export function AgentActionApproveDialog({
                 aria-controls={`${id}-edit`}
                 onClick={() => setEditing((open) => !open)}
               >
-                {isAllow
-                  ? allowDraft.scope === 'operation'
-                    ? 'Change the action'
-                    : 'Narrow the rule'
-                  : 'Edit request'}
+                {isAllow ? 'Narrow the rule' : 'Edit request'}
               </Button>
               {(allowChanged || contextChanged) && (
                 <Button
@@ -923,46 +918,25 @@ export function AgentActionApproveDialog({
                 className="space-y-3 rounded-lg border border-neutral-500/20 p-3"
               >
                 <p className="text-xs text-neutral-500">
-                  {allowDraft.scope === 'operation'
-                    ? 'This allows one AWS action. You can swap it for another exact action; it cannot be widened to a kind of call or a path.'
-                    : 'A narrower rule lets fewer calls through: fewer methods, or a longer path.'}
+                  A narrower rule lets fewer calls through: fewer methods, or a longer path.
                 </p>
-                {allowDraft.scope === 'operation' && (
-                  <Input
-                    id={`${id}-allow-operation`}
-                    label="AWS action"
-                    value={allowDraft.operation}
-                    setValue={(operation) => setAllowDraft({ ...allowDraft, operation })}
-                    placeholder="ec2:TerminateInstances"
-                    maxLength={POLICY_LIMITS.operation}
-                    autoComplete="off"
-                    spellCheck={false}
+                <div className="space-y-2">
+                  <label htmlFor={`${id}-allow-scope`} className="block text-xs text-neutral-500">
+                    Allow
+                  </label>
+                  <AgentSelect
+                    id={`${id}-allow-scope`}
+                    value={allowDraft.scope}
+                    onChange={(scope) =>
+                      setAllowDraft({ ...allowDraft, scope: scope as AllowDraft['scope'] })
+                    }
+                    options={[
+                      { value: 'match', label: 'Calls matching a method and path' },
+                      { value: 'class', label: 'Every call of one kind' },
+                    ]}
                   />
-                )}
-                {allowDraft.scope === 'operation' && allowDraftProblem(allowDraft) && (
-                  <p role="alert" className="text-xs text-red-600 dark:text-red-400">
-                    {allowDraftProblem(allowDraft)}
-                  </p>
-                )}
-                {allowDraft.scope !== 'operation' && (
-                  <div className="space-y-2">
-                    <label htmlFor={`${id}-allow-scope`} className="block text-xs text-neutral-500">
-                      Allow
-                    </label>
-                    <AgentSelect
-                      id={`${id}-allow-scope`}
-                      value={allowDraft.scope}
-                      onChange={(scope) =>
-                        setAllowDraft({ ...allowDraft, scope: scope as AllowDraft['scope'] })
-                      }
-                      options={[
-                        { value: 'match', label: 'Calls matching a method and path' },
-                        { value: 'class', label: 'Every call of one kind' },
-                      ]}
-                    />
-                  </div>
-                )}
-                {allowDraft.scope === 'operation' ? null : allowDraft.scope === 'class' ? (
+                </div>
+                {allowDraft.scope === 'class' ? (
                   <div className="space-y-2">
                     <label htmlFor={`${id}-allow-class`} className="block text-xs text-neutral-500">
                       Kind of call

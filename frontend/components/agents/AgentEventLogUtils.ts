@@ -152,8 +152,7 @@ export const describePolicyRule = (rule: unknown): string => {
   if (!isRecordValue(rule)) return ''
   const effect = typeof rule.effect === 'string' ? titleCase(rule.effect) : ''
   let target = ''
-  if (typeof rule.operation === 'string') target = `AWS action ${rule.operation}`
-  else if (typeof rule.class === 'string') target = `${titleCase(rule.class)} calls`
+  if (typeof rule.class === 'string') target = `${titleCase(rule.class)} calls`
   else if (isRecordValue(rule.match)) {
     const methods = Array.isArray(rule.match.methods)
       ? rule.match.methods.filter((method): method is string => typeof method === 'string')

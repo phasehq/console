@@ -34,7 +34,7 @@ jest.mock('react-toastify', () => ({ toast: { error: jest.fn(), success: jest.fn
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true
 
-const bearer = (host: string, extra = {}) => ({
+const bearer = (host: string) => ({
   specVersion: 1,
   hosts: host ? [{ match: 'exact', value: host, port: 443 }] : [],
   fields: [{ name: 'token', kind: 'secret', source: { type: 'sealed' }, env: 'PRESET_TOKEN' }],
@@ -48,7 +48,6 @@ const bearer = (host: string, extra = {}) => ({
     },
   ],
   preset: 'bearer',
-  ...extra,
 })
 const raw = [
   {
@@ -71,9 +70,7 @@ const raw = [
     hosts: [{ match: 'exact', value: 'api.github.com' }],
     hostsEditable: true,
     labels: { token: 'Access token' },
-    definition: bearer('api.github.com', {
-      operationClasses: [{ match: { methods: ['POST'], path: '/graphql' }, class: 'read' }],
-    }),
+    definition: bearer('api.github.com'),
   },
   {
     id: 'mcp-server',
@@ -237,7 +234,7 @@ describe('provider presets in Create Connection', () => {
       expect(buttonNamed(container, 'Create Connection')!.disabled).toBe(false)
     })
 
-    test('creates with the preset definition, its operation classes included, and no secret in the clear', async () => {
+    test('creates with the preset definition and no secret in the clear', async () => {
       await form('github')
       await type(field(container, 'Access token'), 'ghp_real-secret-value')
       await submit()
@@ -247,9 +244,6 @@ describe('provider presets in Create Connection', () => {
       expect(variables.name).toBe('my-connection')
       expect(variables.definition.hosts).toEqual([
         { match: 'exact', value: 'api.github.com', port: 443 },
-      ])
-      expect(variables.definition.operationClasses).toEqual([
-        { match: { methods: ['POST'], path: '/graphql' }, class: 'read' },
       ])
       expect(variables.definition.fields[0]).toMatchObject({ name: 'token', env: 'PRESET_TOKEN' })
       expect(JSON.stringify(variables)).not.toContain('ghp_real-secret-value')

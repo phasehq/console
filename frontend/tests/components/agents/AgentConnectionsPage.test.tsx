@@ -151,7 +151,7 @@ describe('Agent Connections', () => {
               default: 'allow',
               rules: [
                 { class: 'delete', effect: 'block' },
-                { operation: 'ec2:TerminateInstances', effect: 'ask' },
+                { match: { methods: ['POST'], path: '/repos/*/*/issues' }, effect: 'ask' },
               ],
             },
           }),
@@ -385,7 +385,7 @@ describe('Agent Connections', () => {
       expect(managed('guarded')!.textContent).toContain('cannot be turned off')
       const rules = details('guarded').querySelector('[aria-label="Access rules in force"]')!
       expect(rules.textContent).toContain('DeleteBlock')
-      expect(rules.textContent).toContain('AWS action ec2:TerminateInstancesAsk')
+      expect(rules.textContent).toContain('POST /repos/*/*/issuesAsk')
       expect(button(blocks('guarded')!, 'Edit')).toBeDefined()
     })
 

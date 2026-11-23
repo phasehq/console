@@ -193,7 +193,7 @@ describe('temporary allows on a grant', () => {
         <GrantTemporaryAllows
           grant={grant([
             { id: 'a', match: { methods: ['DELETE'], path: '/repos/acme/x' }, expiresAt: soon() },
-            { id: 'b', operation: 'ec2:TerminateInstances', expiresAt: soon() },
+            { id: 'b', class: 'delete', expiresAt: soon() },
             { id: 'c', class: 'read', expiresAt: past },
           ])}
           canRemove
@@ -204,17 +204,25 @@ describe('temporary allows on a grant', () => {
     await act(async () => buttonNamed(container, 'Temporary allows (2)')!.click())
     const list = container.querySelector('[aria-label="Temporary allows"]')!
     expect(list.textContent).toContain('DELETE /repos/acme/x')
-    expect(list.textContent).toContain('AWS action ec2:TerminateInstances')
+    expect(list.textContent).toContain('Delete calls')
     expect(list.textContent).toContain('ends in 3 hours')
     expect(list.textContent).not.toContain('Read calls')
     expect(list.querySelectorAll('[data-confirm]')).toHaveLength(2)
   })
 
   test('each allow can be removed early, after a confirmation', async () => {
-    await open(grant([{ id: 'allow-1', operation: 'ec2:TerminateInstances', expiresAt: soon() }]))
+    await open(
+      grant([
+        {
+          id: 'allow-1',
+          match: { methods: ['DELETE'], path: '/repos/acme/x' },
+          expiresAt: soon(),
+        },
+      ])
+    )
     expect(
       container.querySelector(
-        'button[aria-label="Remove temporary allow for AWS action ec2:TerminateInstances"]'
+        'button[aria-label="Remove temporary allow for DELETE /repos/acme/x"]'
       )
     ).not.toBeNull()
     expect(remove).not.toHaveBeenCalled()

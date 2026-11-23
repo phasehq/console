@@ -85,7 +85,6 @@ describe('editing the access rules of a Connection', () => {
       'Create calls',
       'Update calls',
       'Delete calls',
-      'Admin calls',
       'Everything else',
     ])
       expect(checked(label)).toBe('Allow')
@@ -154,12 +153,12 @@ describe('editing the access rules of a Connection', () => {
         ],
       })
     )
-    await choose('Admin calls', 'Ask')
+    await choose('Update calls', 'Ask')
     await submit()
 
     const sent = JSON.stringify(save.mock.calls[0][0].variables)
     expect(sent).not.toContain('credential_minting')
-    expect(sent).toContain('"admin"')
+    expect(sent).toContain('"update"')
   })
 
   test('rules by method and path: add, fill in, save, remove', async () => {
@@ -208,76 +207,6 @@ describe('editing the access rules of a Connection', () => {
     expect(
       container.querySelector<HTMLInputElement>('input[aria-label="Path for rule 1"]')!.maxLength
     ).toBe(1024)
-  })
-
-  test('rules by AWS action are offered only on an AWS Connection', async () => {
-    await open(connection(null, 'github'))
-    await act(async () => buttonNamed(container, 'Advanced: rules by method and path')!.click())
-    expect(container.textContent).not.toContain('Rules by AWS action')
-    expect(buttonNamed(container, 'Add AWS action rule')).toBeUndefined()
-
-    await act(async () => root.render(<div />))
-    await open(connection(null, 'aws'))
-    await act(async () =>
-      buttonNamed(container, 'Advanced: rules by method, path and AWS action')!.click()
-    )
-    expect(container.textContent).toContain('Rules by AWS action')
-    expect(buttonNamed(container, 'Add AWS action rule')).toBeDefined()
-  })
-
-  test('an AWS action rule: validated, capped at 193 characters, saved as an operation', async () => {
-    await open(connection(null, 'aws'))
-    await act(async () =>
-      buttonNamed(container, 'Advanced: rules by method, path and AWS action')!.click()
-    )
-    await act(async () => buttonNamed(container, 'Add AWS action rule')!.click())
-    const input = () =>
-      container.querySelector<HTMLInputElement>('input[aria-label="AWS action for rule 1"]')!
-    expect(input().maxLength).toBe(193)
-    expect(container.textContent).toContain('enter an AWS action')
-    expect(saveButton().disabled).toBe(true)
-
-    await type(input(), 'ec2:Terminate*')
-    expect(container.textContent).toContain('one exact action as service:Action')
-    expect(saveButton().disabled).toBe(true)
-
-    await type(input(), 'ec2:TerminateInstances')
-    expect(saveButton().disabled).toBe(false)
-    expect(checked('Effect for AWS action rule 1')).toBe('Block')
-    await choose('Effect for AWS action rule 1', 'Ask')
-    await submit()
-
-    expect(save.mock.calls[0][0].variables).toEqual({
-      connectionId: 'connection-1',
-      policy: {
-        version: 1,
-        default: 'allow',
-        rules: [{ operation: 'ec2:TerminateInstances', effect: 'ask' }],
-      },
-    })
-
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Remove AWS action rule 1"]')!.click()
-    )
-    expect(input()).toBeNull()
-  })
-
-  test('saved AWS action rules come back into the editor', async () => {
-    await open(
-      connection(
-        {
-          version: 1,
-          default: 'allow',
-          rules: [{ operation: 's3:DeleteBucket', effect: 'block' }],
-        },
-        'aws'
-      )
-    )
-    // Rules exist, so Advanced starts open.
-    expect(
-      container.querySelector<HTMLInputElement>('input[aria-label="AWS action for rule 1"]')!.value
-    ).toBe('s3:DeleteBucket')
-    expect(saveButton().disabled).toBe(true)
   })
 
   test('a failed save keeps the editor and says why', async () => {
@@ -402,7 +331,6 @@ describe('the access blocks in the details of a Connection', () => {
               { class: 'read', effect: 'allow' },
               { class: 'delete', effect: 'block' },
               { match: { methods: ['POST'], path: '/v1/charges/*' }, effect: 'ask' },
-              { operation: 'ec2:TerminateInstances', effect: 'block' },
             ],
           },
           'aws'
@@ -420,7 +348,6 @@ describe('the access blocks in the details of a Connection', () => {
     expect(row('Create').textContent).toContain('Ask')
     expect(row('Everything else').textContent).toContain('Ask')
     expect(row('POST /v1/charges/*').textContent).toContain('Ask')
-    expect(row('AWS action ec2:TerminateInstances').textContent).toContain('Block')
   })
 
   test('Edit is for members who can update Connections', async () => {
@@ -454,7 +381,7 @@ describe('the summary on a collapsed row', () => {
             default: 'allow',
             rules: [
               { class: 'delete', effect: 'block' },
-              { operation: 'ec2:TerminateInstances', effect: 'ask' },
+              { match: { methods: ['POST'], path: '/v1/charges/*' }, effect: 'ask' },
             ],
           }}
         />

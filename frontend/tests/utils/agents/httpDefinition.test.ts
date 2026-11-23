@@ -95,7 +95,7 @@ describe('custom Connection definitions', () => {
     ])
   })
 
-  test('refuses a secret written into a host path or a call class path', () => {
+  test('refuses a secret written into a host path', () => {
     const secret = 'xoxb-abcdef0123456789'
     const inPath: HttpDefinition = {
       ...definition,
@@ -104,11 +104,6 @@ describe('custom Connection definitions', () => {
     expect(secretValueProblem(secret, inPath)).toBe(
       'The secret also appears in the path of host 1, which the Agent can read.'
     )
-    const inClass: HttpDefinition = {
-      ...definition,
-      operationClasses: [{ match: { path: `/jobs/${secret}` }, class: 'delete' }],
-    }
-    expect(secretValueProblem(secret, inClass)).toMatch(/the path of call class 1/)
   })
 
   test('counts secret length in bytes, not characters', () => {

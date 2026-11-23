@@ -158,10 +158,11 @@ describe('blocked host actions', () => {
     expect(agentConnectionTakesHostOverride('aws', new Map())).toBe(false)
   })
 
-  test('a rule by AWS action is described as one', () => {
-    expect(describePolicyRule({ operation: 'ec2:TerminateInstances', effect: 'block' })).toBe(
-      'AWS action ec2:TerminateInstances: Block'
-    )
+  test('describes the rule that decided a call by class or by method and path', () => {
+    expect(describePolicyRule({ class: 'delete', effect: 'block' })).toBe('Delete calls: Block')
+    expect(
+      describePolicyRule({ match: { methods: ['POST'], path: '/v1/x/*' }, effect: 'ask' })
+    ).toBe('POST /v1/x/*: Ask')
   })
 
   test.each([

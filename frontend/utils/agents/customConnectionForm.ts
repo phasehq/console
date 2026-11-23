@@ -42,8 +42,6 @@ export type CustomConnectionForm = {
   allowPlainHttp: boolean
   /** Field order of the definition this form was read from, kept on save. */
   fieldOrder: string[]
-  /** How calls are classified for access policies. The form does not edit it; it is kept as read. */
-  operationClasses?: HttpDefinition['operationClasses']
 }
 
 export type FormIssue = {
@@ -495,7 +493,6 @@ export const buildCustomConnectionDefinition = (form: CustomConnectionForm): Bui
       preset: form.preset,
       // Stored only when set, so the default has one spelling.
       ...(form.allowPlainHttp ? { allowPlainHttp: true } : {}),
-      ...(form.operationClasses?.length ? { operationClasses: form.operationClasses } : {}),
     },
     issues,
     secretFields,
@@ -538,7 +535,6 @@ export const canonicalDefinition = (definition: HttpDefinition) => ({
     whenAbsent: injection.whenAbsent ?? 'attach',
   })),
   allowPlainHttp: definition.allowPlainHttp === true,
-  operationClasses: definition.operationClasses ?? [],
 })
 
 /** Whether two definitions mean the same thing. The preset is only a UI hint. */
@@ -609,9 +605,6 @@ export const customConnectionFormFromDefinition = (
     blockWhenAbsent: modes.has('block'),
     allowPlainHttp: definition.allowPlainHttp === true,
     fieldOrder: definition.fields.map((field) => field.name),
-    ...(definition.operationClasses?.length
-      ? { operationClasses: definition.operationClasses }
-      : {}),
   }
   // Only a form that builds back to the same definition may edit it.
   const rebuilt = buildCustomConnectionDefinition({ ...form, name: name || 'connection' })

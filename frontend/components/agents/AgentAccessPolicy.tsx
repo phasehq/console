@@ -27,18 +27,15 @@ import {
   POLICY_LIMITS,
   draftFromPolicy,
   newAdvancedRule,
-  newOperationRule,
   policyOverview,
   policyPayload,
   policyProblem,
   policySummary,
   readManagedPolicies,
   samePolicy,
-  takesOperations,
   withDefault,
   type AdvancedRuleDraft,
   type ManagedPolicy,
-  type OperationRuleDraft,
   type PolicyDraft,
   type PolicyEffect,
 } from '@/utils/agents/accessPolicy'
@@ -121,22 +118,16 @@ export function ManagedPolicies({ entries }: { entries: unknown }) {
 export function PolicyEditor({
   draft,
   onChange,
-  allowOperations = false,
   variant = 'http',
 }: {
   draft: PolicyDraft
   onChange: (draft: PolicyDraft) => void
-  /** Offer rules by AWS action; only an AWS Connection takes them. */
-  allowOperations?: boolean
   variant?: PolicyVariant
 }) {
   const app = variant === 'app'
   const id = useId()
-  const [advancedOpen, setAdvancedOpen] = useState(
-    draft.advanced.length > 0 || draft.operations.length > 0
-  )
+  const [advancedOpen, setAdvancedOpen] = useState(draft.advanced.length > 0)
   const problem = policyProblem(draft)
-  const advancedCount = draft.advanced.length + (allowOperations ? draft.operations.length : 0)
   const setRule = (rule: AdvancedRuleDraft, patch: Partial<AdvancedRuleDraft>) =>
     onChange({
       ...draft,
@@ -144,14 +135,6 @@ export function PolicyEditor({
         candidate.id === rule.id ? { ...candidate, ...patch } : candidate
       ),
     })
-  const setOperation = (rule: OperationRuleDraft, patch: Partial<OperationRuleDraft>) =>
-    onChange({
-      ...draft,
-      operations: draft.operations.map((candidate) =>
-        candidate.id === rule.id ? { ...candidate, ...patch } : candidate
-      ),
-    })
-  const ruleCount = draft.advanced.length + draft.operations.length
   return (
     <div className="space-y-4">
       <section aria-label="Access rules" className="space-y-2">
@@ -208,18 +191,11 @@ export function PolicyEditor({
             aria-controls={`${id}-advanced`}
             onClick={() => setAdvancedOpen((open) => !open)}
           >
-            {allowOperations
-              ? 'Advanced: rules by method, path and AWS action'
-              : 'Advanced: rules by method and path'}
-            {advancedCount > 0 && ` (${advancedCount})`}
+            Advanced: rules by method and path
+            {draft.advanced.length > 0 && ` (${draft.advanced.length})`}
           </Button>
           {advancedOpen && (
             <div id={`${id}-advanced`} className="space-y-3">
-              {allowOperations && (
-                <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">
-                  Rules by method and path
-                </h4>
-              )}
               {draft.advanced.length === 0 && (
                 <p className="text-xs text-neutral-500">
                   No rules by method and path. Add one to cover a call the classes above do not,
@@ -277,80 +253,13 @@ export function PolicyEditor({
                 type="button"
                 variant="secondary"
                 icon={FaPlus}
-                disabled={ruleCount >= POLICY_LIMITS.rules}
+                disabled={draft.advanced.length >= POLICY_LIMITS.rules}
                 onClick={() =>
                   onChange({ ...draft, advanced: [...draft.advanced, newAdvancedRule()] })
                 }
               >
                 Add rule
               </Button>
-
-              {allowOperations && (
-                <div className="space-y-3 border-t border-neutral-500/10 pt-3">
-                  <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">
-                    Rules by AWS action
-                  </h4>
-                  {draft.operations.length === 0 && (
-                    <p className="text-xs text-neutral-500">
-                      No rules by AWS action. Name one exact action, such as{' '}
-                      <code>ec2:TerminateInstances</code>, to set it apart from the classes above.
-                    </p>
-                  )}
-                  {draft.operations.map((rule, index) => (
-                    <div
-                      key={rule.id}
-                      className="space-y-2 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-48 flex-1">
-                          <Input
-                            id={`${id}-action-${rule.id}`}
-                            aria-label={`AWS action for rule ${index + 1}`}
-                            value={rule.action}
-                            setValue={(action) => setOperation(rule, { action })}
-                            placeholder="ec2:TerminateInstances"
-                            maxLength={POLICY_LIMITS.operation}
-                            autoComplete="off"
-                            spellCheck={false}
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          icon={FaTrashAlt}
-                          title={`Remove AWS action rule ${index + 1}`}
-                          aria-label={`Remove AWS action rule ${index + 1}`}
-                          onClick={() =>
-                            onChange({
-                              ...draft,
-                              operations: draft.operations.filter(
-                                (candidate) => candidate.id !== rule.id
-                              ),
-                            })
-                          }
-                        />
-                      </div>
-                      <ChoiceGroup
-                        label={`Effect for AWS action rule ${index + 1}`}
-                        value={rule.effect}
-                        options={EFFECT_OPTIONS}
-                        onChange={(effect) => setOperation(rule, { effect })}
-                      />
-                    </div>
-                  ))}
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    icon={FaPlus}
-                    disabled={ruleCount >= POLICY_LIMITS.rules}
-                    onClick={() =>
-                      onChange({ ...draft, operations: [...draft.operations, newOperationRule()] })
-                    }
-                  >
-                    Add AWS action rule
-                  </Button>
-                </div>
-              )}
             </div>
           )}
         </section>
@@ -477,12 +386,7 @@ export function EditConnectionPolicyDialog({ connection }: { connection: PolicyC
           These rules apply to every Workflow granted <strong>{connection.name}</strong>. They can
           narrow what the Connection allows, never widen it.
         </p>
-        <PolicyEditor
-          draft={draft}
-          onChange={setDraft}
-          allowOperations={takesOperations(connection.serviceType)}
-          variant={variant}
-        />
+        <PolicyEditor draft={draft} onChange={setDraft} variant={variant} />
         {failure && (
           <div role="alert">
             <Alert variant="danger" icon size="sm">

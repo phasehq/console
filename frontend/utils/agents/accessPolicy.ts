@@ -8,7 +8,7 @@ export const POLICY_VERSION = 1
 export const EFFECTS = ['allow', 'ask', 'block'] as const
 export type PolicyEffect = (typeof EFFECTS)[number]
 
-export const OPERATION_CLASSES = ['read', 'create', 'update', 'delete', 'admin'] as const
+export const OPERATION_CLASSES = ['read', 'create', 'update', 'delete'] as const
 export type OperationClass = (typeof OPERATION_CLASSES)[number]
 
 export const HTTP_METHODS = [
@@ -24,15 +24,7 @@ export const HTTP_METHODS = [
 ] as const
 export type HttpMethod = (typeof HTTP_METHODS)[number]
 
-/** An AWS action is `<service>:<Action>`, written out in full: no wildcards. */
-export const AWS_ACTION_FORMAT = /^[a-z0-9-]{1,64}:[A-Za-z0-9]{1,128}$/
-
-/** 64 + ":" + 128. */
-export const POLICY_LIMITS = { rules: 50, path: 1024, operation: 193 } as const
-
-/** Only AWS Connections take rules or allows by AWS action. */
-export const takesOperations = (serviceType?: string | null): boolean =>
-  serviceType?.toLowerCase() === 'aws'
+export const POLICY_LIMITS = { rules: 50, path: 1024 } as const
 
 export const EFFECT_LABEL: Record<PolicyEffect, string> = {
   allow: 'Allow',
@@ -45,14 +37,12 @@ export const CLASS_LABEL: Record<OperationClass, { name: string; hint: string }>
   create: { name: 'Create', hint: 'Add something new' },
   update: { name: 'Update', hint: 'Change something that exists' },
   delete: { name: 'Delete', hint: 'Remove something' },
-  admin: { name: 'Admin', hint: 'Permissions, accounts and other account-level changes' },
 }
 
 export type PolicyMatch = { methods?: string[]; path?: string }
 export type PolicyRule =
   | { class: OperationClass; effect: PolicyEffect }
   | { match: PolicyMatch; effect: PolicyEffect }
-  | { operation: string; effect: PolicyEffect }
 export type AccessPolicy = {
   version: number
   default: PolicyEffect
@@ -63,8 +53,6 @@ export type TemporaryAllow = {
   id: string
   class?: OperationClass
   match?: PolicyMatch
-  /** An AWS action such as `ec2:TerminateInstances`. */
-  operation?: string
   expiresAt: string
   requestId?: string | null
 }
@@ -104,9 +92,6 @@ const isEffect = (value: unknown): value is PolicyEffect =>
 const isClass = (value: unknown): value is OperationClass =>
   typeof value === 'string' && (OPERATION_CLASSES as readonly string[]).includes(value)
 
-const readOperation = (value: unknown): string | null =>
-  typeof value === 'string' && AWS_ACTION_FORMAT.test(value) ? value : null
-
 const readMatch = (value: unknown): PolicyMatch | null => {
   if (!isRecord(value)) return null
   const match: PolicyMatch = {}
@@ -127,10 +112,7 @@ export const readPolicy = (value: unknown): AccessPolicy => {
     for (const raw of value.rules) {
       if (!isRecord(raw) || !isEffect(raw.effect)) continue
       if (isClass(raw.class)) policy.rules.push({ class: raw.class, effect: raw.effect })
-      else if (raw.operation !== undefined) {
-        const operation = readOperation(raw.operation)
-        if (operation) policy.rules.push({ operation, effect: raw.effect })
-      } else {
+      else {
         const match = readMatch(raw.match)
         if (match) policy.rules.push({ match, effect: raw.effect })
       }
@@ -153,11 +135,7 @@ export const readTemporaryAllows = (value: unknown, now = Date.now()): Temporary
       requestId: typeof raw.requestId === 'string' ? raw.requestId : null,
     }
     if (isClass(raw.class)) allow.class = raw.class
-    else if (raw.operation !== undefined) {
-      const operation = readOperation(raw.operation)
-      if (!operation) continue
-      allow.operation = operation
-    } else {
+    else {
       const match = readMatch(raw.match)
       if (!match) continue
       allow.match = match
@@ -171,20 +149,9 @@ export const readTemporaryAllows = (value: unknown, now = Date.now()): Temporary
 export const describeMatch = (match: PolicyMatch): string =>
   [match.methods?.join(', '), match.path].filter(Boolean).join(' ')
 
-/** `AWS action ec2:TerminateInstances`. */
-export const describeOperation = (operation: string): string => `AWS action ${operation}`
-
 /** What a rule or an allow covers, in words. */
-export const describeTarget = (target: {
-  class?: OperationClass
-  match?: PolicyMatch
-  operation?: string
-}): string =>
-  target.operation
-    ? describeOperation(target.operation)
-    : target.class
-      ? `${CLASS_LABEL[target.class].name} calls`
-      : describeMatch(target.match ?? {})
+export const describeTarget = (target: { class?: OperationClass; match?: PolicyMatch }): string =>
+  target.class ? `${CLASS_LABEL[target.class].name} calls` : describeMatch(target.match ?? {})
 
 // --- The editor's draft --------------------------------------------------
 
@@ -195,29 +162,16 @@ export type AdvancedRuleDraft = {
   effect: PolicyEffect
 }
 
-export type OperationRuleDraft = {
-  id: string
-  action: string
-  effect: PolicyEffect
-}
-
 export type PolicyDraft = {
   default: PolicyEffect
   classes: Record<OperationClass, PolicyEffect>
   advanced: AdvancedRuleDraft[]
-  /** Rules by AWS action; only an AWS Connection has any. */
-  operations: OperationRuleDraft[]
 }
 
 let nextRule = 0
 export const newAdvancedRule = (): AdvancedRuleDraft => {
   nextRule += 1
   return { id: `rule-${nextRule}`, methods: [], path: '', effect: 'block' }
-}
-
-export const newOperationRule = (): OperationRuleDraft => {
-  nextRule += 1
-  return { id: `operation-${nextRule}`, action: '', effect: 'block' }
 }
 
 const STRENGTH: Record<PolicyEffect, number> = { allow: 0, ask: 1, block: 2 }
@@ -235,11 +189,8 @@ export const draftFromPolicy = (value: unknown): PolicyDraft => {
   ) as Record<OperationClass, PolicyEffect>
   const seen = new Set<OperationClass>()
   const advanced: AdvancedRuleDraft[] = []
-  const operations: OperationRuleDraft[] = []
   for (const rule of policy.rules) {
-    if ('operation' in rule) {
-      operations.push({ id: newOperationRule().id, action: rule.operation, effect: rule.effect })
-    } else if ('class' in rule) {
+    if ('class' in rule) {
       classes[rule.class] = seen.has(rule.class)
         ? strongest(classes[rule.class], rule.effect)
         : rule.effect
@@ -253,7 +204,7 @@ export const draftFromPolicy = (value: unknown): PolicyDraft => {
       })
     }
   }
-  return { default: policy.default, classes, advanced, operations }
+  return { default: policy.default, classes, advanced }
 }
 
 /**
@@ -282,11 +233,11 @@ const advancedRule = (rule: AdvancedRuleDraft): PolicyRule | null => {
 
 /**
  * The class rows that need a rule. A row equal to "Everything else" still needs one
- * when a path or action rule is weaker: the proxy applies the strongest matching
- * rule, so without it that weaker rule would decide the class's calls.
+ * when a path rule is weaker: the proxy applies the strongest matching rule, so
+ * without it that weaker rule would decide the class's calls.
  */
 const classRuleNames = (draft: PolicyDraft): OperationClass[] => {
-  const weakest = [...draft.advanced, ...draft.operations].reduce<number | null>(
+  const weakest = draft.advanced.reduce<number | null>(
     (lowest, rule) =>
       lowest === null ? STRENGTH[rule.effect] : Math.min(lowest, STRENGTH[rule.effect]),
     null
@@ -306,10 +257,6 @@ export const policyFromDraft = (draft: PolicyDraft): AccessPolicy | null => {
     const built = advancedRule(rule)
     if (built) rules.push(built)
   }
-  for (const rule of draft.operations) {
-    const action = rule.action.trim()
-    if (action) rules.push({ operation: action, effect: rule.effect })
-  }
   if (draft.default === 'allow' && rules.length === 0) return null
   return { version: POLICY_VERSION, default: draft.default, rules }
 }
@@ -319,7 +266,7 @@ const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/
 /** Why the draft cannot be saved, or ''. */
 export const policyProblem = (draft: PolicyDraft): string => {
   const classRules = classRuleNames(draft)
-  if (classRules.length + draft.advanced.length + draft.operations.length > POLICY_LIMITS.rules)
+  if (classRules.length + draft.advanced.length > POLICY_LIMITS.rules)
     return `Use at most ${POLICY_LIMITS.rules} rules.`
   for (const [index, rule] of draft.advanced.entries()) {
     const position = `Rule ${index + 1}`
@@ -331,13 +278,6 @@ export const policyProblem = (draft: PolicyDraft): string => {
         return `${position}: use at most ${POLICY_LIMITS.path} characters in a path.`
       if (CONTROL_CHARACTER.test(path)) return `${position}: the path has a control character.`
     }
-  }
-  for (const [index, rule] of draft.operations.entries()) {
-    const position = `AWS action rule ${index + 1}`
-    const action = rule.action.trim()
-    if (!action) return `${position}: enter an AWS action such as ec2:TerminateInstances.`
-    if (!AWS_ACTION_FORMAT.test(action))
-      return `${position}: write one exact action as service:Action, with no wildcards.`
   }
   return ''
 }
@@ -371,7 +311,7 @@ export type PolicyOverview = {
   /** What each class of call is set to, in the editor's order. */
   classes: Array<{ name: string; effect: PolicyEffect }>
   default: PolicyEffect
-  /** Rules by method and path, then by AWS action. */
+  /** Rules by method and path. */
   rules: Array<{ label: string; effect: PolicyEffect }>
 }
 
@@ -384,18 +324,12 @@ export const policyOverview = (value: unknown): PolicyOverview => {
       effect: draft.classes[name],
     })),
     default: draft.default,
-    rules: [
-      ...draft.advanced.map((rule) => ({
-        label: describeMatch({
-          methods: rule.methods.length > 0 ? rule.methods : undefined,
-          path: rule.path || undefined,
-        }),
-        effect: rule.effect,
-      })),
-      ...draft.operations.map((rule) => ({
-        label: describeOperation(rule.action),
-        effect: rule.effect,
-      })),
-    ],
+    rules: draft.advanced.map((rule) => ({
+      label: describeMatch({
+        methods: rule.methods.length > 0 ? rule.methods : undefined,
+        path: rule.path || undefined,
+      }),
+      effect: rule.effect,
+    })),
   }
 }

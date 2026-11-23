@@ -42,11 +42,6 @@ export function BlockedCallDetails({ call }: { call: NonNullable<AllowReview['bl
       <Field label="Path">
         <code>{call.path || '/'}</code>
       </Field>
-      {call.operation && (
-        <Field label="AWS action">
-          <code>{call.operation}</code>
-        </Field>
-      )}
       {call.class && (
         <Field label="Kind of call">
           <code>{call.class}</code>
@@ -97,9 +92,7 @@ export function AllowDetails({
   return (
     <div className="space-y-3">
       <p className="text-xs">
-        {shown.operation
-          ? 'Asks to let one AWS action through on'
-          : 'Asks to let one kind of call through on'}{' '}
+        Asks to let one kind of call through on{' '}
         <strong>{review.connectionName || 'this Connection'}</strong>, which the access rules
         refused with Ask.
       </p>
