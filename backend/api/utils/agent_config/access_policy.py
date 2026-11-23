@@ -11,12 +11,15 @@ Versioning: the CLI refuses, failing closed, a Connection whose policy has a
 ``version`` above the one it supports, or holds a class, effect or rule kind
 it does not know, and tells the person to update the Phase CLI. It ignores
 unknown keys at the top level of the session payload, of a Connection and of
-a policy. It reads a Connection's ``secretGuard`` members and its
-``environmentBindings`` entries strictly: one it does not know makes that
-Connection unavailable in the CLI. So ``POLICY_VERSION`` stays 1 until the
+a policy. It reads each Connection's ``secretGuard`` members and
+``environmentBindings`` entries strictly: one it does not know makes only that
+Connection unavailable, with a reason to update the Phase CLI. An injection's
+``whenAbsent`` is read strictly too, as the one injection setting not
+negotiated when the session opens. So ``POLICY_VERSION`` stays 1 until the
 Console adds something to a policy that an older CLI would have to enforce,
-and must be raised when it does; adding a member to ``secretGuard`` or to an
-``environmentBindings`` entry is a version bump too.
+and must be raised when it does; a new ``secretGuard`` or
+``environmentBindings`` member, or a new ``whenAbsent`` value, is a version
+bump too.
 """
 
 from __future__ import annotations
