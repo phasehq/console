@@ -657,7 +657,7 @@ export function MintAgentTokenDialog({
           </h3>
           <p className="mt-1 max-w-md text-2xs leading-4 text-neutral-500">
             Agent tokens only authorize the Phase AI runtime for the selected Workflow. They read an
-            app's secrets only through an app Connection granted to that Workflow.
+            app&apos;s secrets only through an app Connection granted to that Workflow.
           </p>
         </div>
       }
