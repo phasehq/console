@@ -235,6 +235,8 @@ describe('editing the access rules of a Connection', () => {
     await toggleMethod(1, 'POST')
     await toggleMethod(1, 'DELETE')
     await type(path(1), '/repos/*/*/issues')
+    // Allow is not offered: the stricter of rule and row wins, so it would change nothing.
+    expect(options('Effect for rule 1')).toEqual(['Ask', 'Block'])
     expect(checked('Effect for rule 1')).toBe('Block')
     expect(saveButton().disabled).toBe(false)
     await submit()
@@ -283,47 +285,82 @@ describe('editing the access rules of a Connection', () => {
     expect(container.textContent).not.toContain('No effect')
     await choose('Read calls', 'Block')
     expect(container.textContent).toContain('No effect: Read and Delete are already Block.')
+  })
 
-    await choose('Effect for rule 1', 'Allow')
-    expect(container.textContent).toContain('No effect: a rule can only make calls stricter.')
+  test('a stored Allow rule shows with its note and can be changed or removed, never chosen', async () => {
+    await open(
+      connection({
+        version: 1,
+        default: 'allow',
+        rules: [
+          { class: 'delete', effect: 'block' },
+          { match: { methods: ['GET'], path: '/repos/*' }, effect: 'allow' },
+        ],
+      })
+    )
+    const effect = () =>
+      group('Effect for rule 1').querySelector<HTMLElement>('[aria-checked="true"]')!
+    expect(path(1).value).toBe('/repos/*')
+    expect(options('Effect for rule 1')).toEqual(['Allow', 'Ask', 'Block'])
+    expect(checked('Effect for rule 1')).toBe('Allow')
+    expect(effect().className).toContain('bg-neutral-500/20')
+    expect(container.textContent).toContain(
+      'No effect: a rule can only make calls stricter. Choose Ask or Block, or remove it.'
+    )
+
+    // Once changed, Allow is no longer offered.
+    await choose('Effect for rule 1', 'Ask')
+    expect(options('Effect for rule 1')).toEqual(['Ask', 'Block'])
+    expect(container.textContent).not.toContain('No effect')
+
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Remove rule 1"]')!.click()
+    )
+    expect(path(1)).toBeNull()
+    await submit()
+    expect(save.mock.calls[0][0].variables.policy).toEqual({
+      version: 1,
+      default: 'allow',
+      rules: [{ class: 'delete', effect: 'block' }],
+    })
   })
 
   test('a saved policy opens again just as it was shown', async () => {
     await open(connection(null))
-    await choose('Default', 'Ask')
+    await choose('Default', 'Block')
     await choose('Read calls', 'Allow')
-    await choose('Delete calls', 'Ask')
+    await choose('Delete calls', 'Block')
     await addRule()
     await toggleMethod(1, 'GET')
     await type(path(1), '/repos/*/*/issues')
-    await choose('Effect for rule 1', 'Allow')
+    await choose('Effect for rule 1', 'Ask')
     await submit()
     const policy = save.mock.calls[0][0].variables.policy
-    // The Allow rule is weaker than Default, so the rows on Default are saved as rules.
+    // The Ask rule is weaker than Default, so the rows on Default are saved as rules.
     expect(policy).toEqual({
       version: 1,
-      default: 'ask',
+      default: 'block',
       rules: [
         { class: 'read', effect: 'allow' },
-        { class: 'create', effect: 'ask' },
-        { class: 'update', effect: 'ask' },
-        { class: 'delete', effect: 'ask' },
-        { match: { methods: ['GET'], path: '/repos/*/*/issues' }, effect: 'allow' },
+        { class: 'create', effect: 'block' },
+        { class: 'update', effect: 'block' },
+        { class: 'delete', effect: 'block' },
+        { match: { methods: ['GET'], path: '/repos/*/*/issues' }, effect: 'ask' },
       ],
     })
 
     await act(async () => root.render(<div />))
     await open(connection(policy))
-    expect(checked('Default')).toBe('Ask')
+    expect(checked('Default')).toBe('Block')
     expect(rows.map((label) => checked(label))).toEqual([
       'Allow',
-      'Default · Ask',
-      'Default · Ask',
+      'Default · Block',
+      'Default · Block',
       // Set to the effect Default has, it reads back on Default.
-      'Default · Ask',
+      'Default · Block',
     ])
     expect(path(1).value).toBe('/repos/*/*/issues')
-    expect(checked('Effect for rule 1')).toBe('Allow')
+    expect(checked('Effect for rule 1')).toBe('Ask')
     expect(saveButton().disabled).toBe(true)
   })
 

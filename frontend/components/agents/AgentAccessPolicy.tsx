@@ -59,11 +59,18 @@ const EFFECT_OPTIONS = EFFECTS.map((effect) => ({
   selectedClass: EFFECT_STYLE[effect],
 }))
 
-// A rule that changes nothing does not show its effect in colour.
-const INERT_OPTIONS = EFFECT_OPTIONS.map((option) => ({
-  ...option,
-  selectedClass: 'bg-neutral-500/20 text-neutral-700 dark:text-neutral-300',
-}))
+/**
+ * An HTTP rule's effects: Ask and Block, since the stricter of rule and row wins and Allow
+ * would change nothing. A stored Allow rule still shows it. A rule that changes nothing
+ * does not show its effect in colour.
+ */
+const ruleOptions = (rule: AdvancedRuleDraft, inert: boolean) =>
+  EFFECT_OPTIONS.filter((option) => option.value !== 'allow' || rule.effect === 'allow').map(
+    (option) =>
+      inert
+        ? { ...option, selectedClass: 'bg-neutral-500/20 text-neutral-700 dark:text-neutral-300' }
+        : option
+  )
 
 /** A row's choices: Default, with the effect it gives the row now, then an effect of its own. */
 const rowOptions = (fallback: PolicyEffect) => [
@@ -88,7 +95,8 @@ const rowHint = (name: OperationClass, app: boolean) =>
 /** Why an HTTP rule changes nothing, or '' when it can change an answer. */
 const noEffectLine = (draft: PolicyDraft, rule: AdvancedRuleDraft): string => {
   if (ruleTakesEffect(draft, rule)) return ''
-  if (rule.effect === 'allow') return 'No effect: a rule can only make calls stricter.'
+  if (rule.effect === 'allow')
+    return 'No effect: a rule can only make calls stricter. Choose Ask or Block, or remove it.'
   const rows = ruleRows(rule)
   const effects = EFFECTS.filter((effect) => rows.some((name) => rowEffect(draft, name) === effect))
   return `No effect: ${listWords(rows.map((name) => CLASS_LABEL[name].name))} ${
@@ -263,7 +271,7 @@ export function PolicyEditor({
                   <ChoiceGroup
                     label={`Effect for rule ${index + 1}`}
                     value={rule.effect}
-                    options={inert ? INERT_OPTIONS : EFFECT_OPTIONS}
+                    options={ruleOptions(rule, !!inert)}
                     onChange={(effect) => setRule(rule, { effect })}
                   />
                 </div>
