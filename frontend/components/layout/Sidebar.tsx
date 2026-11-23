@@ -604,12 +604,12 @@ const AccountMenu = ({
   )
 }
 
-// Opens the command palette. It sits beside the logo, and under it on the rail
+// Opens the command palette. It sits at the right of the header row, which on the rail is all of it
 const SidebarSearchButton = ({ collapsed }: { collapsed: boolean }) => {
   const modifierKey = useModifierKey()
 
   return (
-    <div className="group/item absolute bottom-2 right-3">
+    <div className="group/item absolute right-3 top-2">
       <button
         type="button"
         onClick={openCommandPalette}
@@ -986,31 +986,25 @@ const Sidebar = () => {
           collapsed && 'w-16'
         )}
       >
-        {/* The search button is pinned bottom right, so it slides under the logo as this box narrows and grows */}
-        <div
-          className={clsx('relative shrink-0', animating && SLIDE, collapsed ? 'h-[84px]' : 'h-12')}
-        >
-          {/* pl-[23px] centres the logo mark on the nav icons in both states */}
-          <div className="flex h-12 items-center gap-1.5 overflow-hidden pl-[23px] pr-14">
+        {/* The search button is pinned to the right edge, so it slides left along this row as the */}
+        {/* sidebar narrows. The row keeps its height, so nothing under it moves */}
+        <div className="relative h-12 shrink-0">
+          {/* The rail has no logo: this row ends where the button starts, so it is clipped away as it */}
+          {/* fades. pl-[23px] puts the logo mark over the nav icons */}
+          <div
+            inert={collapsed}
+            className={clsx(
+              'mr-14 flex h-12 items-center gap-1.5 overflow-hidden pl-[23px]',
+              animating && SLIDE,
+              collapsed && 'opacity-0'
+            )}
+          >
             <Link href="/" aria-label="Phase" className="shrink-0">
-              {/* The rail clips the wordmark down to its mark */}
-              <div
-                className={clsx(
-                  'overflow-hidden',
-                  animating && SLIDE,
-                  collapsed ? 'w-[18px]' : 'w-16'
-                )}
-              >
-                <LogoWordMark className="w-16 max-w-none fill-black dark:fill-white" />
-              </div>
+              <LogoWordMark className="w-16 fill-black dark:fill-white" />
             </Link>
             {/* A paid plan reads as "Phase Pro". The free plan is just the logo */}
             {activeOrganisation && activeOrganisation.plan !== ApiOrganisationPlanChoices.Fr && (
-              <Fade show={!collapsed}>
-                <span className="flex">
-                  <PlanLabel plan={activeOrganisation.plan} size="sm" />
-                </span>
-              </Fade>
+              <PlanLabel plan={activeOrganisation.plan} size="sm" />
             )}
           </div>
           <SidebarSearchButton collapsed={collapsed} />
