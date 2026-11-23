@@ -29,14 +29,14 @@ describe('DeletedEnvironmentDialog', () => {
 
   const render = (
     environment: DeletedEnvironmentType | null,
-    { allowRestore = true, restoring = false } = {}
+    { allowRestore = true, restoringId = null as string | null } = {}
   ) =>
     act(async () => {
       root.render(
         <DeletedEnvironmentDialog
           environment={environment}
           allowRestore={allowRestore}
-          restoring={restoring}
+          restoringId={restoringId}
           onRestore={onRestore}
           onDeleteNow={onDeleteNow}
           onClose={onClose}
@@ -119,9 +119,19 @@ describe('DeletedEnvironmentDialog', () => {
     expect(buttons('Delete now')).toHaveLength(0)
   })
 
-  it('holds its actions while a restore is under way', async () => {
-    await render(staging, { restoring: true })
+  it('holds its actions while it is being restored', async () => {
+    await render(staging, { restoringId: 'env-2' })
 
+    expect((buttons('Delete now')[0] as HTMLButtonElement).disabled).toBe(true)
+    // Its Restore button shows the spinner in place of its label
+    expect(buttons('Restore')).toHaveLength(0)
+    expect(document.body.querySelector('[role="dialog"] [role="status"]')).not.toBeNull()
+  })
+
+  it('holds its actions while another environment is being restored, without a spinner of its own', async () => {
+    await render(staging, { restoringId: 'env-9' })
+
+    expect((buttons('Restore')[0] as HTMLButtonElement).disabled).toBe(true)
     expect((buttons('Delete now')[0] as HTMLButtonElement).disabled).toBe(true)
   })
 

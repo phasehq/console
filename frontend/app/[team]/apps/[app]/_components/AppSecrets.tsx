@@ -3102,7 +3102,7 @@ export const AppSecrets = ({
         <DeletedEnvironmentDialog
           environment={openDeleted}
           allowRestore={userCanDeleteEnvironments}
-          restoring={deletedEnvs.restoringId !== null}
+          restoringId={deletedEnvs.restoringId}
           onRestore={deletedEnvs.restore}
           onDeleteNow={async (environment) => {
             await deletedEnvs.deleteNow(environment)

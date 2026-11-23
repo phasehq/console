@@ -25,7 +25,7 @@ const about = (environment: DeletedEnvironmentType) => {
 export const DeletedEnvironmentDialog = ({
   environment,
   allowRestore,
-  restoring,
+  restoringId,
   onRestore,
   onDeleteNow,
   onClose,
@@ -33,7 +33,8 @@ export const DeletedEnvironmentDialog = ({
   environment: DeletedEnvironmentType | null
   /** Whoever may delete an environment may restore it, or delete it now */
   allowRestore: boolean
-  restoring: boolean
+  /** The environment being restored, if any: one restore at a time */
+  restoringId: string | null
   onRestore: (environment: PendingDeletion) => void
   onDeleteNow: (environment: PendingDeletion) => Promise<void>
   onClose: () => void
@@ -94,7 +95,8 @@ export const DeletedEnvironmentDialog = ({
                           <Button
                             variant="secondary"
                             icon={FaUndo}
-                            isLoading={restoring}
+                            isLoading={restoringId === shown.id}
+                            disabled={restoringId !== null}
                             onClick={() => onRestore(shown)}
                           >
                             Restore
@@ -104,7 +106,7 @@ export const DeletedEnvironmentDialog = ({
                             <DeleteNowDialog
                               item={shown}
                               kind="Environment"
-                              disabled={restoring}
+                              disabled={restoringId !== null}
                               onConfirm={onDeleteNow}
                             />
                           )}

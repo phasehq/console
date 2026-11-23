@@ -402,7 +402,7 @@ const SecretsGridHeaderBase = ({
                     GRID_DELETED_LANE
                   )}
                 >
-                  {/* The list's own marks: a red clock while it waits for its date, an amber spinner once it is being deleted */}
+                  {/* As where apps are listed: a red clock while it waits for its date, an amber spinner once it is being deleted */}
                   {beingDeleted ? (
                     <Spinner size="xs" color="amber" />
                   ) : (
