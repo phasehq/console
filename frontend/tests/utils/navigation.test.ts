@@ -106,11 +106,11 @@ describe('Integrations page title', () => {
 })
 
 describe('App page titles', () => {
-  test('names the secrets list on the app home', () => {
+  test('names the app on its home and the page elsewhere', () => {
     const activeApp = { id: 'app-1', name: 'payments' } as NavigationContext['activeApp']
 
     expect(generatePageTitle({ team: 'phase', context: 'apps', activeApp })).toBe(
-      'Secrets \u00b7 Payments \u00b7 phase | Phase Console'
+      'Payments \u00b7 phase | Phase Console'
     )
     expect(generatePageTitle({ team: 'phase', context: 'apps', activeApp, page: 'syncs' })).toBe(
       'Syncs \u00b7 Payments \u00b7 phase | Phase Console'

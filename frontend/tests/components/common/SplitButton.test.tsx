@@ -56,6 +56,7 @@ describe('Split button menu accessibility', () => {
     })
   }
 
+  // The anchored menu renders in a portal on document.body, outside the container.
   test('names the menu trigger and registers every action separately', async () => {
     expect(trigger().getAttribute('aria-label')).toBe('More options for New Secret')
     expect(trigger().type).toBe('button')
@@ -63,7 +64,7 @@ describe('Split button menu accessibility', () => {
       trigger().click()
       await settle()
     })
-    const items = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+    const items = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
     expect(items.map((item) => item.textContent)).toEqual([
       'Providers',
       'Unavailable action',
@@ -76,8 +77,8 @@ describe('Split button menu accessibility', () => {
   test('ArrowDown and Enter activate the selected action while skipping disabled entries', async () => {
     await act(async () => trigger().focus())
     await press(trigger(), 'ArrowDown')
-    const menu = container.querySelector<HTMLElement>('[role="menu"]')!
-    const items = container.querySelectorAll<HTMLElement>('[role="menuitem"]')
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')!
+    const items = document.querySelectorAll<HTMLElement>('[role="menuitem"]')
     expect(menu.getAttribute('aria-activedescendant')).toBe(items[0].id)
     await press(menu, 'ArrowDown')
     expect(menu.getAttribute('aria-activedescendant')).toBe(items[2].id)
@@ -91,7 +92,7 @@ describe('Split button menu accessibility', () => {
   test('Escape closes the menu and restores trigger focus without invoking an action', async () => {
     await act(async () => trigger().focus())
     await press(trigger(), 'ArrowDown')
-    await press(container.querySelector('[role="menu"]')!, 'Escape')
+    await press(document.querySelector('[role="menu"]')!, 'Escape')
     expect(trigger().getAttribute('aria-expanded')).toBe('false')
     expect(document.activeElement).toBe(trigger())
     expect(providers).not.toHaveBeenCalled()

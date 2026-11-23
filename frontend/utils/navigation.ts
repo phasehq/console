@@ -145,9 +145,6 @@ export const generateBreadcrumbs = (ctx: NavigationContext): NavigationItem[] =>
 
 export const generatePageTitle = (ctx: NavigationContext): string => {
   const breadcrumbs = generateBreadcrumbs(ctx)
-  // The app home lists the app's secrets; its breadcrumb is only the app name.
-  if (ctx.activeApp && !ctx.page && !ctx.activeEnv)
-    breadcrumbs.push({ label: 'Secrets', isLink: false })
 
   const filteredCrumbs = breadcrumbs.filter((crumb) => crumb.label && crumb.label.trim())
 
