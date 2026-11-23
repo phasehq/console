@@ -6,6 +6,7 @@ import clsx from 'clsx'
 import {
   FaCubes,
   FaHome,
+  FaInbox,
   FaUsersCog,
   FaProjectDiagram,
   FaBook,
@@ -47,10 +48,16 @@ import { OrgMenuItems } from './OrgSwitcher'
 import { SIDEBAR_WIDTH, SidebarResizeHandle } from './SidebarResizeHandle'
 import { ModeToggle } from '../common/ModeToggle'
 import { PlanLabel } from '../settings/organisation/PlanLabel'
-import { FaCodeMerge, FaListUl } from 'react-icons/fa6'
+import { FaCodeMerge, FaListUl, FaRobot } from 'react-icons/fa6'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 import { sortApps } from '@/utils/app'
 import { ACCESS_PAGES, getIntegrationPages } from '@/utils/navigation'
+import { agentsPath, requestsPath } from '@/utils/agents/routes'
+import {
+  useCanReadAgentRequests,
+  usePendingAgentRequestCount,
+} from '@/utils/agents/pendingRequests'
+import { StageBadge } from '../common/StageBadge'
 
 type SidebarSubLinkT = {
   name: string
@@ -61,12 +68,29 @@ type SidebarSubLinkT = {
 
 export type SidebarLinkT = {
   name: string
+  /** Release stage, shown as a pill. Never baked into `name`, which is also the tab label and tooltip */
+  stage?: string
   href: string
   icon: React.ReactNode
   active: boolean
   sublinks?: SidebarSubLinkT[]
   defaultOpen?: boolean
+  /** An amber count, or a dot on the rail; the label joins the accessible name */
+  attention?: { count: number; label: string }
 }
+
+// The accessible name, which always carries the stage and the count
+const linkTitle = (link: Pick<SidebarLinkT, 'name' | 'stage' | 'attention'>) =>
+  [link.stage ? `${link.name} (${link.stage})` : link.name, link.attention?.label]
+    .filter(Boolean)
+    .join(', ')
+
+const AttentionDot = () => (
+  <span
+    aria-hidden="true"
+    className="absolute -right-1 -top-0.5 size-2 rounded-full bg-amber-500 ring-2 ring-neutral-100 dark:ring-neutral-900"
+  />
+)
 
 const MAX_SIDEBAR_APPS = 5
 const OPEN_GROUPS_KEY = 'sidebar-groups'
@@ -184,16 +208,30 @@ const SidebarItem = ({
           href={link.href}
           onClick={() => setOpen?.(true)}
           aria-current={highlighted ? 'page' : undefined}
-          aria-label={collapsed ? link.name : undefined}
+          aria-label={collapsed || link.stage || link.attention ? linkTitle(link) : undefined}
           className={clsx(
             'flex h-full min-w-0 flex-1 items-center gap-2 px-3 text-xs font-semibold whitespace-nowrap transition ease',
             link.active ? NAV_ACTIVE_TEXT : NAV_INACTIVE_TEXT
           )}
         >
-          <div className="text-base">{link.icon}</div>
+          <div className="relative text-base">
+            {link.icon}
+            {collapsed && !!link.attention?.count && <AttentionDot />}
+          </div>
           <Fade show={!collapsed}>
-            {/* Clipped, not ellipsised, while the sidebar opens over it */}
-            <span className={clsx('truncate', animating && 'text-clip')}>{link.name}</span>
+            <span className="flex min-w-0 flex-1 items-center gap-1.5">
+              {/* Clipped, not ellipsised, while the sidebar opens over it */}
+              <span className={clsx('truncate', animating && 'text-clip')}>{link.name}</span>
+              {link.stage && <StageBadge stage={link.stage} />}
+              {!!link.attention?.count && (
+                <span
+                  aria-hidden="true"
+                  className="ml-auto min-w-5 rounded-full bg-amber-500 px-1.5 text-center text-2xs font-semibold leading-5 text-white dark:bg-amber-400 dark:text-amber-950"
+                >
+                  {link.attention.count}
+                </span>
+              )}
+            </span>
           </Fade>
         </Link>
         <Fade show={hasSublinks && !collapsed}>
@@ -247,7 +285,7 @@ const SidebarItem = ({
             </div>
           </div>
         ) : (
-          <div className={TOOLTIP_STYLE}>{link.name}</div>
+          <div className={TOOLTIP_STYLE}>{linkTitle(link)}</div>
         ))}
     </div>
   )
@@ -667,6 +705,8 @@ const MOBILE_MENU_ROW =
   'flex h-10 w-full items-center gap-2.5 rounded-md px-2.5 text-sm transition ease'
 // Tab labels are short enough to fit under an icon
 const MOBILE_TAB_NAMES: Record<string, string> = {
+  'AI Agents': 'Agents',
+  'Change Requests': 'Requests',
   'Access Control': 'Access',
   'Audit Logs': 'Logs',
 }
@@ -676,10 +716,12 @@ const MobileTab = ({
   name,
   icon,
   active,
+  attention = false,
 }: {
   name: string
   icon: React.ReactNode
   active: boolean
+  attention?: boolean
 }) => (
   <>
     <span
@@ -688,7 +730,10 @@ const MobileTab = ({
         active && NAV_ACTIVE_BG
       )}
     >
-      {icon}
+      <span className="relative">
+        {icon}
+        {attention && <AttentionDot />}
+      </span>
     </span>
     <span className="max-w-full truncate text-3xs font-medium">{name}</span>
   </>
@@ -877,6 +922,8 @@ const Sidebar = () => {
   const userCanReadApps = userHasPermission(permissions, 'Apps', 'read')
   const userCanReadLogStreams =
     userHasPermission(permissions, 'LogStreams', 'read') && userHasGlobalAccess(permissions)
+  const canReadRequests = useCanReadAgentRequests()
+  const pendingRequestCount = usePendingAgentRequestCount()
 
   const { data: appsData } = useQuery(GetApps, {
     variables: { organisationId: activeOrganisation?.id },
@@ -921,14 +968,38 @@ const Sidebar = () => {
       defaultOpen: true,
     },
     {
+      name: 'AI Agents',
+      stage: 'Beta',
+      href: agentsPath(team),
+      icon: <FaRobot />,
+      active: section === 'agents',
+    },
+    // Requests carry the pending count, and only show to members who can read them
+    ...(canReadRequests
+      ? [
+          {
+            name: 'Change Requests',
+            href: requestsPath(team),
+            icon: <FaInbox />,
+            active: section === 'requests',
+            attention: pendingRequestCount
+              ? {
+                  count: pendingRequestCount,
+                  label: `${pendingRequestCount} pending ${pendingRequestCount === 1 ? 'change request' : 'change requests'}`,
+                }
+              : undefined,
+          },
+        ]
+      : []),
+    {
       name: 'Integrations',
-      href: `/${team}/integrations/syncs`,
+      href: `/${team}/integrations`,
       icon: <FaProjectDiagram />,
       active: section === `integrations`,
       sublinks: getIntegrationPages(userCanReadLogStreams).map(({ name, link }) => ({
         name,
-        href: `/${team}/integrations/${link}`,
-        active: section === 'integrations' && page === link,
+        href: link ? `/${team}/integrations/${link}` : `/${team}/integrations`,
+        active: section === 'integrations' && (page ?? '') === link,
       })),
     },
     {
@@ -1072,14 +1143,15 @@ const Sidebar = () => {
             key={link.name}
             href={link.href}
             className={clsx(MOBILE_TAB_STYLE, link.active ? NAV_ACTIVE_TEXT : NAV_INACTIVE_TEXT)}
-            aria-label={link.name}
+            aria-label={linkTitle(link)}
             aria-current={link.active ? 'page' : undefined}
-            title={link.name}
+            title={linkTitle(link)}
           >
             <MobileTab
               name={MOBILE_TAB_NAMES[link.name] ?? link.name}
               icon={link.icon}
               active={link.active}
+              attention={!!link.attention?.count}
             />
           </Link>
         ))}

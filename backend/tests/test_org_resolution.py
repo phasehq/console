@@ -360,7 +360,7 @@ class ResolveOrgIdTest(unittest.TestCase):
             cache.clear()
             mock_model = MagicMock()
             (
-                mock_model.objects.filter.return_value.values_list.return_value.first.return_value
+                mock_model._base_manager.filter.return_value.values_list.return_value.first.return_value
             ) = "agent-org"
             with patch(
                 "api.utils.access.org_resolution.apps.get_model",
@@ -377,7 +377,7 @@ class ResolveOrgIdTest(unittest.TestCase):
 
         mock_model = MagicMock()
         (
-            mock_model.objects.filter.return_value.values_list.return_value.first.return_value
+            mock_model._base_manager.filter.return_value.values_list.return_value.first.return_value
         ) = "agent-org"
         with patch(
             "api.utils.access.org_resolution.apps.get_model",
@@ -389,7 +389,7 @@ class ResolveOrgIdTest(unittest.TestCase):
             result = resolve_org_id("session_uid", "runtime-session-1", {})
 
         self.assertEqual(result, "agent-org")
-        mock_model.objects.filter.assert_called_once_with(
+        mock_model._base_manager.filter.assert_called_once_with(
             session_uid="runtime-session-1"
         )
 

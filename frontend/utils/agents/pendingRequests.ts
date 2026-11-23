@@ -21,7 +21,7 @@ export function useCanReadAgentRequests() {
 
 /**
  * How many pending requests wait on this member: the ones they may resolve.
- * Only the navbar polls; other callers read the cache.
+ * Only the page title polls; other callers read the cache.
  */
 export function usePendingAgentRequestCount({ poll = false }: { poll?: boolean } = {}) {
   const { activeOrganisation: organisation } = useContext(organisationContext)

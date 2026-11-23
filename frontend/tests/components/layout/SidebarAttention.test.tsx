@@ -12,6 +12,20 @@ jest.mock('@/utils/agents/pendingRequests', () => ({
   usePendingAgentRequestCount: jest.fn(),
 }))
 jest.mock('next/navigation', () => ({ usePathname: () => '/acme/apps' }))
+jest.mock('@apollo/client', () => ({ useQuery: () => ({ data: undefined }) }))
+jest.mock('@/graphql/queries/getApps.gql', () => ({ GetApps: 'GetApps' }))
+jest.mock('@/utils/app', () => ({ sortApps: (apps: unknown[]) => apps }))
+jest.mock('@/apollo/client', () => ({ handleSignout: jest.fn() }))
+jest.mock('@/contexts/userContext', () => ({ useSession: () => ({ data: null }) }))
+jest.mock('@/components/common/StatusIndicator', () => ({
+  STATUS_PAGE_BASE_URL: '',
+  statusColor: () => '',
+  useSystemStatus: () => ({ status: null, isLoading: false }),
+}))
+jest.mock('@/components/common/CommandPalette', () => ({
+  openCommandPalette: jest.fn(),
+  useModifierKey: () => 'Ctrl',
+}))
 jest.mock('next/link', () => ({
   __esModule: true,
   default: ({ children, href, ...props }: any) => (
@@ -102,7 +116,7 @@ describe('Sidebar attention', () => {
     expect(desktop.indexOf('/acme/requests')).toBe(desktop.indexOf('/acme/agents') + 1)
     const [link] = requestsLinks()
     expect(link.textContent).toBe('Change Requests')
-    expect(link.getAttribute('aria-label')).toBe('Change Requests')
+    expect(link.getAttribute('aria-label')).toBeNull()
   })
 
   test('shows a dot on the icon when the sidebar is collapsed', async () => {
@@ -110,14 +124,14 @@ describe('Sidebar attention', () => {
 
     const [desktop] = requestsLinks()
     expect(desktop.getAttribute('aria-label')).toBe('Change Requests, 1 pending change request')
-    expect(desktop.querySelector('.text-lg .bg-amber-500')).not.toBeNull()
+    expect(desktop.querySelector('.text-base .bg-amber-500')).not.toBeNull()
   })
 
   test('adds nothing without pending requests', async () => {
     await render(0, 'expanded')
 
     const [desktop, mobile] = requestsLinks()
-    expect(desktop.getAttribute('aria-label')).toBe('Change Requests')
+    expect(desktop.getAttribute('aria-label')).toBeNull()
     expect(desktop.textContent).toBe('Change Requests')
     expect(container.querySelector('.bg-amber-500')).toBeNull()
     expect(mobile.getAttribute('aria-label')).toBe('Change Requests')
@@ -128,7 +142,8 @@ describe('Sidebar attention', () => {
 
     expect(requestsLinks()).toHaveLength(0)
     expect(container.querySelector('.bg-amber-500')).toBeNull()
-    // The mobile tab bar keeps its first four destinations.
-    expect(linksTo('/acme/integrations')).toHaveLength(2)
+    // The mobile tab bar still lists the other sections.
+    const tabBar = container.querySelectorAll('nav')[1]
+    expect(tabBar.querySelector('a[href="/acme/integrations"]')).not.toBeNull()
   })
 })

@@ -1,6 +1,6 @@
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { usePageTitle } from '@/utils/usePageTitle'
+import { usePageTitle } from '@/hooks/usePageTitle'
 ;(
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true

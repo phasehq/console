@@ -2338,39 +2338,28 @@ type Mutation {
   """
   Create a Connection for an HTTP service Phase has no integration for.
   
-  The browser generates the Connection keypair, seals the secret to it and
-  wraps the private key to the server, so the secret never arrives in the
-  clear. No integration credential is involved.
+  The browser seals the secret to a new keypair, so it never arrives in the clear.
   """
   createCustomAgentConnection(definition: GenericScalar!, encryptionPublicKey: String!, name: String!, organisationId: ID!, sealedValue: String!, serverWrappedKey: String!): CreateCustomAgentConnectionMutation
 
   """
   Create a Connection to an app's secrets, for some of its environments.
   
-  The app must have server-side encryption. ``policy`` takes rules by the
-  classes read, create, update and delete; without it reads are allowed and
-  writes ask. The member must reach the app and every environment, and hold
-  the ``Secrets`` permissions for what the policy allows.
+  The member must reach the app and every environment, and hold the ``Secrets`` permissions.
   """
   createAgentAppConnection(appId: ID!, environmentIds: [ID!]!, name: String!, organisationId: ID!, policy: GenericScalar): CreateAgentAppConnectionMutation
 
   """
   Rename an app Connection or change the environments it covers.
   
-  Nothing ends by itself: every Workflow granted the Connection is held to
-  the new environments from its next call. Adding an environment needs what
-  creating the Connection needs, for what its grants allow.
+  Each granted Workflow is held to the new environments from its next call.
   """
   updateAgentAppConnection(connectionId: ID!, environmentIds: [ID!], name: String): UpdateAgentAppConnectionMutation
 
   """
-  Rename a custom Connection, change its definition, replace its secret,
-  or any of these together.
+  Rename a custom Connection, change its definition, replace its secret, or any of these.
   
-  ``sealedValue`` is the secret sealed again; nothing is ever read back. A
-  definition that changes the bound hosts or the set of secret fields must
-  come with it, sealed over the new definition. A call that changes nothing
-  returns the Connection as it is and records nothing.
+  A changed host or secret field set needs a new ``sealedValue``. The secret is never read back.
   """
   updateCustomAgentConnection(connectionId: ID!, definition: GenericScalar, name: String, sealedValue: String): UpdateCustomAgentConnectionMutation
   allowAgentConnectionHost(connectionId: ID!, eventIngestSeq: ID!, expectedVersion: String!): AllowAgentConnectionHostMutation
@@ -2380,10 +2369,7 @@ type Mutation {
   """
   Give a Workflow a Connection, or change the grant it already has.
   
-  ``expiresAt`` is when access stops; a grant a member creates has no expiry
-  unless they give one. On a Workflow that already has the Connection, an
-  ``expiresAt`` that is given replaces what the grant has, and an explicit
-  null removes its expiry.
+  A given ``expiresAt`` replaces the grant's expiry; an explicit null removes it.
   """
   grantAgentWorkflow(connectionId: ID!, expiresAt: String, workflowId: ID!): GrantAgentWorkflowMutation
   revokeAgentWorkflowGrant(grantId: ID!): RevokeAgentWorkflowGrantMutation
@@ -2391,17 +2377,14 @@ type Mutation {
   """
   Set the access policy of an HTTP Connection.
   
-  ``policy`` is ``{version: 1, default, rules}``; null or an empty object
-  clears it. One policy applies to every Workflow granted the Connection.
-  A call that changes nothing records nothing.
+  ``policy`` is ``{version: 1, default, rules}``; null or an empty object clears it.
   """
   setAgentConnectionPolicy(connectionId: ID!, policy: GenericScalar): SetAgentConnectionPolicyMutation
 
   """
   End one temporary allow of a grant early.
   
-  Needs what granting the Connection to the Workflow needs. An id that is
-  not among the grant's live allows is reported as not found.
+  An id that is not among the grant's live allows is reported as not found.
   """
   removeAgentWorkflowGrantAllow(allowId: ID!, grantId: ID!): RemoveAgentWorkflowGrantAllowMutation
 
@@ -2409,12 +2392,9 @@ type Mutation {
   setAgentWorkflowContext(markdown: String!, workflowId: ID!): SetAgentWorkflowContextMutation
 
   """
-  Change the organisation's Agent settings.
+  Change the organisation's Agent settings. Needs ``update`` on AgentRequests.
   
-  Both durations must lie between 300 and 2592000 seconds, and the default
-  must not exceed the maximum. Needs ``update`` on AgentRequests: the
-  settings bound what a request may ask for, and that is the permission of
-  the members who resolve requests.
+  Durations must be 300 to 2592000 seconds, with the default not above the maximum.
   """
   updateAgentSettings(defaultRequestDurationSeconds: Int, maxRequestDurationSeconds: Int, organisationId: ID!): UpdateAgentSettingsMutation
   mintAgentToken(agentId: ID!, expiresAt: String, name: String!, workflowId: ID!): MintAgentTokenMutation
@@ -2425,10 +2405,7 @@ type Mutation {
   """
   Approve a request that carries a typed action, and carry the action out.
   
-  ``action`` is the reviewer's edited version of what was requested; without
-  it the request is applied as it stands. ``inputs`` holds what the action's
-  handler needs from the reviewer and is never stored, for example a secret
-  sealed in their browser.
+  ``inputs`` is never stored, for example a secret sealed in the reviewer's browser.
   """
   approveAgentRequestAction(action: GenericScalar, durationSeconds: Int, expectedRevision: String!, inputs: GenericScalar, requestId: ID!, resolutionNote: String, untilRevoked: Boolean): ApproveAgentRequestActionMutation
   revokeAgentSession(sessionUid: String!): RevokeAgentSessionMutation
@@ -3305,9 +3282,7 @@ type UpdateAgentConnectionMutation {
 """
 Create a Connection for an HTTP service Phase has no integration for.
 
-The browser generates the Connection keypair, seals the secret to it and
-wraps the private key to the server, so the secret never arrives in the
-clear. No integration credential is involved.
+The browser seals the secret to a new keypair, so it never arrives in the clear.
 """
 type CreateCustomAgentConnectionMutation {
   connection: AgentConnectionType!
@@ -3316,10 +3291,7 @@ type CreateCustomAgentConnectionMutation {
 """
 Create a Connection to an app's secrets, for some of its environments.
 
-The app must have server-side encryption. ``policy`` takes rules by the
-classes read, create, update and delete; without it reads are allowed and
-writes ask. The member must reach the app and every environment, and hold
-the ``Secrets`` permissions for what the policy allows.
+The member must reach the app and every environment, and hold the ``Secrets`` permissions.
 """
 type CreateAgentAppConnectionMutation {
   connection: AgentConnectionType!
@@ -3328,22 +3300,16 @@ type CreateAgentAppConnectionMutation {
 """
 Rename an app Connection or change the environments it covers.
 
-Nothing ends by itself: every Workflow granted the Connection is held to
-the new environments from its next call. Adding an environment needs what
-creating the Connection needs, for what its grants allow.
+Each granted Workflow is held to the new environments from its next call.
 """
 type UpdateAgentAppConnectionMutation {
   connection: AgentConnectionType!
 }
 
 """
-Rename a custom Connection, change its definition, replace its secret,
-or any of these together.
+Rename a custom Connection, change its definition, replace its secret, or any of these.
 
-``sealedValue`` is the secret sealed again; nothing is ever read back. A
-definition that changes the bound hosts or the set of secret fields must
-come with it, sealed over the new definition. A call that changes nothing
-returns the Connection as it is and records nothing.
+A changed host or secret field set needs a new ``sealedValue``. The secret is never read back.
 """
 type UpdateCustomAgentConnectionMutation {
   connection: AgentConnectionType!
@@ -3366,10 +3332,7 @@ type DeleteAgentConnectionMutation {
 """
 Give a Workflow a Connection, or change the grant it already has.
 
-``expiresAt`` is when access stops; a grant a member creates has no expiry
-unless they give one. On a Workflow that already has the Connection, an
-``expiresAt`` that is given replaces what the grant has, and an explicit
-null removes its expiry.
+A given ``expiresAt`` replaces the grant's expiry; an explicit null removes it.
 """
 type GrantAgentWorkflowMutation {
   grant: AgentWorkflowGrantType!
@@ -3382,9 +3345,7 @@ type RevokeAgentWorkflowGrantMutation {
 """
 Set the access policy of an HTTP Connection.
 
-``policy`` is ``{version: 1, default, rules}``; null or an empty object
-clears it. One policy applies to every Workflow granted the Connection.
-A call that changes nothing records nothing.
+``policy`` is ``{version: 1, default, rules}``; null or an empty object clears it.
 """
 type SetAgentConnectionPolicyMutation {
   connection: AgentConnectionType!
@@ -3393,8 +3354,7 @@ type SetAgentConnectionPolicyMutation {
 """
 End one temporary allow of a grant early.
 
-Needs what granting the Connection to the Workflow needs. An id that is
-not among the grant's live allows is reported as not found.
+An id that is not among the grant's live allows is reported as not found.
 """
 type RemoveAgentWorkflowGrantAllowMutation {
   grant: AgentWorkflowGrantType!
@@ -3406,12 +3366,9 @@ type SetAgentWorkflowContextMutation {
 }
 
 """
-Change the organisation's Agent settings.
+Change the organisation's Agent settings. Needs ``update`` on AgentRequests.
 
-Both durations must lie between 300 and 2592000 seconds, and the default
-must not exceed the maximum. Needs ``update`` on AgentRequests: the
-settings bound what a request may ask for, and that is the permission of
-the members who resolve requests.
+Durations must be 300 to 2592000 seconds, with the default not above the maximum.
 """
 type UpdateAgentSettingsMutation {
   settings: AgentSettingsType!
@@ -3445,10 +3402,7 @@ type FulfillAgentRequestMutation {
 """
 Approve a request that carries a typed action, and carry the action out.
 
-``action`` is the reviewer's edited version of what was requested; without
-it the request is applied as it stands. ``inputs`` holds what the action's
-handler needs from the reviewer and is never stored, for example a secret
-sealed in their browser.
+``inputs`` is never stored, for example a secret sealed in the reviewer's browser.
 """
 type ApproveAgentRequestActionMutation {
   request: AgentRequestType!
