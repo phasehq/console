@@ -2,13 +2,13 @@
 
 import { useLazyQuery, useQuery } from '@apollo/client'
 import { useContext, useEffect, useMemo } from 'react'
-import { useSearchParams } from 'next/navigation'
 
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { AppType, EnvironmentType } from '@/apollo/graphql'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasPermission } from '@/utils/access/permissions'
+import { usePageTitle } from '@/hooks/usePageTitle'
 import { generatePageTitle, NavigationContext } from '@/utils/navigation'
 import { useParsedRoute } from '@/utils/route'
 
@@ -57,12 +57,7 @@ export const useNavigationContext = (): NavigationContext => {
 
 // Keeps the browser tab title in step with the route. Renders nothing
 export const PageTitle = () => {
-  const navigationContext = useNavigationContext()
-  const tab = useSearchParams()?.get('tab')
-
-  useEffect(() => {
-    document.title = generatePageTitle(navigationContext)
-  }, [navigationContext, tab])
+  usePageTitle(generatePageTitle(useNavigationContext()))
 
   return null
 }
