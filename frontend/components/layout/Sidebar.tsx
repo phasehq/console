@@ -82,6 +82,12 @@ const ACTIVE_TEXT = 'text-zinc-900 dark:text-zinc-100'
 const HOVER_BG = 'hover:bg-zinc-900/5 dark:hover:bg-white/5'
 const INACTIVE_STYLE =
   'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+// The navigation borrows the docs' palette: the current page gets a faint highlight and bright text and,
+// in a sublist, an emerald marker on the guide line. Nothing but the text changes on hover
+const NAV_ACTIVE_BG = 'bg-zinc-800/[0.025] dark:bg-white/[0.025]'
+const NAV_ACTIVE_TEXT = 'text-zinc-900 dark:text-white'
+const NAV_INACTIVE_TEXT =
+  'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
 const TOOLTIP_STYLE =
   'invisible group-hover/item:visible absolute left-full ml-4 top-1/2 -translate-y-1/2 bg-zinc-800 text-white px-2 py-1 rounded text-xs whitespace-nowrap z-50'
 
@@ -107,25 +113,50 @@ const Fade = ({ show, children }: { show: boolean; children: React.ReactElement 
   </Transition>
 )
 
-const SidebarSubLink = ({ sublink }: { sublink: SidebarSubLinkT }) => (
-  <Link
-    href={sublink.href}
-    title={sublink.name}
-    aria-current={sublink.active ? 'page' : undefined}
+// A group's sub-pages, hung off a guide line. The current page's highlight reaches left past the line by
+// `bleed`, to the edge of whatever holds the list
+const SidebarSubLinks = ({
+  sublinks,
+  bleed,
+  className,
+}: {
+  sublinks: SidebarSubLinkT[]
+  bleed: string
+  className?: string
+}) => (
+  <ul
     className={clsx(
-      'block truncate rounded-md px-2 py-0.5 text-xs font-medium transition ease',
-      sublink.active
-        ? [ACTIVE_BG, ACTIVE_TEXT]
-        : [
-            HOVER_BG,
-            sublink.muted
-              ? 'text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100'
-              : INACTIVE_STYLE,
-          ]
+      'space-y-0.5 border-l border-zinc-900/10 pl-[7px] dark:border-white/5',
+      className
     )}
   >
-    {sublink.name}
-  </Link>
+    {sublinks.map((sublink) => (
+      <li key={sublink.href} className="relative">
+        {sublink.active && (
+          <>
+            <span className={clsx('absolute inset-y-0 right-0 rounded-lg', bleed, NAV_ACTIVE_BG)} />
+            {/* Drawn over the guide line: the 7px of padding and the 1px line itself */}
+            <span className="absolute inset-y-1 -left-2 w-px bg-emerald-500" />
+          </>
+        )}
+        <Link
+          href={sublink.href}
+          title={sublink.name}
+          aria-current={sublink.active ? 'page' : undefined}
+          className={clsx(
+            'relative block truncate rounded-md px-2 py-0.5 text-xs font-medium transition ease',
+            sublink.active
+              ? NAV_ACTIVE_TEXT
+              : sublink.muted
+                ? 'text-neutral-500 hover:text-zinc-900 dark:hover:text-white'
+                : NAV_INACTIVE_TEXT
+          )}
+        >
+          {sublink.name}
+        </Link>
+      </li>
+    ))}
+  </ul>
 )
 
 const SidebarItem = ({
@@ -152,7 +183,7 @@ const SidebarItem = ({
       <div
         className={clsx(
           'flex h-9 items-center rounded-lg transition ease',
-          highlighted ? ACTIVE_BG : HOVER_BG
+          highlighted && NAV_ACTIVE_BG
         )}
       >
         <Link
@@ -162,7 +193,7 @@ const SidebarItem = ({
           aria-label={collapsed ? link.name : undefined}
           className={clsx(
             'flex h-full min-w-0 flex-1 items-center gap-2 px-3 text-xs font-semibold whitespace-nowrap transition ease',
-            link.active ? ACTIVE_TEXT : INACTIVE_STYLE
+            link.active ? NAV_ACTIVE_TEXT : NAV_INACTIVE_TEXT
           )}
         >
           <div className="text-base">{link.icon}</div>
@@ -197,18 +228,12 @@ const SidebarItem = ({
           )}
         >
           <div className="overflow-hidden">
-            <ul
-              className={clsx(
-                'ml-5 mt-1 space-y-0.5 border-l border-neutral-500/20 pl-[7px]',
-                animating && '[&_a]:text-clip'
-              )}
-            >
-              {sublinks.map((sublink) => (
-                <li key={sublink.href}>
-                  <SidebarSubLink sublink={sublink} />
-                </li>
-              ))}
-            </ul>
+            {/* 28px: the list's margin, its line and its padding, back to the edge of the nav */}
+            <SidebarSubLinks
+              sublinks={sublinks}
+              bleed="-left-7"
+              className={clsx('ml-5 mt-1', animating && '[&_a]:text-clip')}
+            />
           </div>
         </div>
       )}
@@ -221,13 +246,7 @@ const SidebarItem = ({
               <div className="px-2 py-1 text-2xs font-semibold uppercase tracking-wide text-neutral-500">
                 {link.name}
               </div>
-              <ul className="space-y-0.5">
-                {sublinks.map((sublink) => (
-                  <li key={sublink.href}>
-                    <SidebarSubLink sublink={sublink} />
-                  </li>
-                ))}
-              </ul>
+              <SidebarSubLinks sublinks={sublinks} bleed="-left-4" className="ml-2" />
             </div>
           </div>
         ) : (
@@ -510,7 +529,8 @@ const AccountMenu = ({
           <Popover.Button
             className={clsx(
               'flex h-10 w-full items-center rounded-md px-2 text-left outline-none transition ease data-[focus]:ring-2 data-[focus]:ring-neutral-500',
-              active || open ? ACTIVE_BG : HOVER_BG
+              // Open is a pressed button. On the settings page it is the current page, as in the nav
+              open ? ACTIVE_BG : active ? NAV_ACTIVE_BG : HOVER_BG
             )}
           >
             {/* The name follows, so the initials are decoration */}
@@ -685,7 +705,7 @@ const MobileTab = ({
     <span
       className={clsx(
         'flex h-7 w-12 items-center justify-center rounded-lg text-base transition ease',
-        active && ACTIVE_BG
+        active && NAV_ACTIVE_BG
       )}
     >
       {icon}
@@ -713,7 +733,11 @@ const MobileMoreMenu = ({ team, settingsActive }: { team: string; settingsActive
       return (
         <>
           <Menu.Button
-            className={clsx(MOBILE_TAB_STYLE, 'w-full', highlighted ? ACTIVE_TEXT : INACTIVE_STYLE)}
+            className={clsx(
+              MOBILE_TAB_STYLE,
+              'w-full',
+              highlighted ? NAV_ACTIVE_TEXT : NAV_INACTIVE_TEXT
+            )}
             aria-label="More navigation"
             title="More"
           >
@@ -1070,7 +1094,7 @@ const Sidebar = () => {
           <Link
             key={link.name}
             href={link.href}
-            className={clsx(MOBILE_TAB_STYLE, link.active ? ACTIVE_TEXT : INACTIVE_STYLE)}
+            className={clsx(MOBILE_TAB_STYLE, link.active ? NAV_ACTIVE_TEXT : NAV_INACTIVE_TEXT)}
             aria-label={link.name}
             aria-current={link.active ? 'page' : undefined}
             title={link.name}
