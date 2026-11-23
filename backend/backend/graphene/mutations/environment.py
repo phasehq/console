@@ -21,7 +21,7 @@ from api.utils.resource_deletion import (
     delete_environment_now,
     deletion_scheduled_for,
     environment_name_conflict,
-    pending_deletion,
+    is_pending_deletion,
     restore_environment,
     schedule_environment_deletion,
 )
@@ -658,31 +658,44 @@ class UpdateEnvironmentOrderMutation(graphene.Mutation):
                 "Your Organisation doesn't have access to Custom Environments"
             )
 
-        # Verify all IDs belong to this app
-        environments = Environment.objects.filter(app=app)
-        env_ids = set(str(e.id) for e in environments)
-        order_ids = set(str(id) for id in environment_order)
+        with transaction.atomic():
+            # Read once and locked until the indexes are written, in the same
+            # order by every reorder. A deletion scheduled or undone meanwhile
+            # waits, so no environment is numbered twice or left with the
+            # index it had.
+            rows = list(
+                Environment.all_objects.select_for_update()
+                .filter(app=app)
+                .order_by("id")
+            )
+            environments = [env for env in rows if env.deleted_at is None]
+            pending = [env for env in rows if is_pending_deletion(env)]
 
-        if env_ids != order_ids or len(environment_order) != len(order_ids):
-            raise GraphQLError(
-                "The provided environment list doesn't match the app's environments"
+            # Verify all IDs belong to this app
+            env_ids = set(str(e.id) for e in environments)
+            order_ids = set(str(id) for id in environment_order)
+
+            if env_ids != order_ids or len(environment_order) != len(order_ids):
+                raise GraphQLError(
+                    "The provided environment list doesn't match the app's environments"
+                )
+
+            # An environment pending deletion keeps its place: the given order
+            # fills the places around it. After one with the same index, as the
+            # secrets grid draws it.
+            places = sorted(
+                [(env.index, 0, None) for env in environments]
+                + [(env.index, 1, env.id) for env in pending],
+                key=lambda place: place[:2],
             )
 
-        # An environment pending deletion keeps its place: the given order
-        # fills the places around it. After one with the same index, as the
-        # secrets grid draws it.
-        pending = pending_deletion(Environment.all_objects.filter(app=app))
-        places = sorted(
-            [(env.index, 0, None) for env in environments]
-            + [(env.index, 1, env.id) for env in pending],
-            key=lambda place: place[:2],
-        )
-
-        # Bulk update indices
-        reordered = iter(environment_order)
-        for index, (_, _, pending_id) in enumerate(places):
-            env_id = pending_id or next(reordered)
-            Environment.all_objects.filter(id=env_id, app=app).update(index=index)
+            # Bulk update indices
+            reordered = iter(environment_order)
+            for index, (_, _, pending_id) in enumerate(places):
+                env_id = pending_id or next(reordered)
+                Environment.all_objects.filter(id=env_id, app=app).update(
+                    index=index
+                )
 
         return UpdateEnvironmentOrderMutation(ok=True)
 
