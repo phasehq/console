@@ -322,7 +322,6 @@ export type AgentServiceTemplateType = {
   hostRulesMode: Scalars['String']['output'];
   hosts: Scalars['GenericScalar']['output'];
   injection: Scalars['GenericScalar']['output'];
-  operationClasses: Scalars['GenericScalar']['output'];
   protocol: Scalars['String']['output'];
   provider?: Maybe<Scalars['String']['output']>;
   proxyOnly: Scalars['Boolean']['output'];

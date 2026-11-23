@@ -1992,7 +1992,6 @@ type AgentServiceTemplateType {
   environmentBindings: GenericScalar!
   decoyFormat: GenericScalar!
   credentialProviders: [String]!
-  operationClasses: GenericScalar!
 }
 
 """A provider preset that pre-fills the custom HTTP Connection form."""

@@ -925,9 +925,6 @@ class AgentServiceTemplateType(graphene.ObjectType):
     environment_bindings = GenericScalar(required=True)
     decoy_format = GenericScalar(required=True)
     credential_providers = graphene.List(graphene.String, required=True)
-    # Always empty: a call's class comes from its HTTP method alone. Kept so
-    # the schema stays as it is.
-    operation_classes = GenericScalar(required=True)
 
 
 class AgentSettingsType(graphene.ObjectType):

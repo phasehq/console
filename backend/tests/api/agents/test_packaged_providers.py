@@ -1065,7 +1065,7 @@ def test_the_console_lists_the_services_as_templates(space):
         space,
         "query($o: ID!) { agentServiceTemplates(organisationId: $o) {"
         " serviceType displayName protocol provider hosts hostRulesMode injection"
-        " decoyFormat credentialProviders operationClasses environmentBindings } }",
+        " decoyFormat credentialProviders environmentBindings } }",
         o=str(space.organisation.id),
     )
 
@@ -1078,8 +1078,4 @@ def test_the_console_lists_the_services_as_templates(space):
         assert template["credentialProviders"] == [provider]
         assert template["hosts"] == expected["hosts"]
         assert template["hostRulesMode"] == expected["mode"]
-        # Kept in the schema, and always empty: calls are classed by method.
-        assert template["operationClasses"] == []
         assert template["injection"]["when_absent"] == "attach"
-    assert templates["aws"]["operationClasses"] == []
-    assert templates["postgres"]["operationClasses"] == []
