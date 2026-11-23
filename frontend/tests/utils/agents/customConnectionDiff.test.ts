@@ -153,6 +153,14 @@ describe('the diff a reviewer sees', () => {
     expect(removed.fields.at(-1)).toMatchObject({ change: 'removed', label: 'username' })
   })
 
+  test('operationClasses on a loaded definition is no change', () => {
+    const loaded = {
+      ...current,
+      operationClasses: [{ match: { methods: ['POST'], path: '/graphql' }, class: 'read' }],
+    } as HttpDefinition
+    expect(diffConnections({ definition: loaded }, { definition: current }).changed).toBe(false)
+  })
+
   test('shows plain HTTP only when either side allows it', () => {
     expect(diffConnections({ definition: current }, { definition: current }).settings).toEqual([])
     expect(

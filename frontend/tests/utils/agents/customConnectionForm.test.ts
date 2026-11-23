@@ -360,6 +360,17 @@ describe('reading a definition back into the form', () => {
     ).toBeNull()
   })
 
+  test('a definition read with operationClasses is saved and compared without them', () => {
+    // The Console refuses a definition that carries them, even empty.
+    const loaded = { ...stored, operationClasses: [] } as HttpDefinition
+    const built = buildCustomConnectionDefinition(
+      customConnectionFormFromDefinition('Example', loaded)!
+    ).definition
+    expect(built).toEqual(stored)
+    expect(built).not.toHaveProperty('operationClasses')
+    expect(sameDefinition(loaded, stored)).toBe(true)
+  })
+
   test('the preset is only a hint when comparing definitions', () => {
     expect(sameDefinition(stored, { ...stored, preset: undefined })).toBe(true)
     expect(sameDefinition(stored, { ...stored, allowPlainHttp: false })).toBe(false)
