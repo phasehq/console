@@ -463,7 +463,13 @@ def allow_is_blocked(stored: Any, allow: Mapping[str, Any]) -> bool:
     """
 
     policy = full_policy(stored)
-    rules = policy["rules"]
+    # A rule this Console cannot read, such as a stored rule by AWS action, is
+    # left out, so the allow is judged on the rules it knows.
+    rules = [
+        rule
+        for rule in policy["rules"]
+        if "match" in rule or rule.get("class") in USER_CLASSES
+    ]
     blocks = [rule for rule in rules if rule["effect"] == "block"]
     if _blocks_cover(blocks, allow):
         return True

@@ -652,6 +652,27 @@ def test_an_allow_a_block_rule_covers_is_refused(space):
     assert AgentRequest.objects.filter(workflow=space.workflow).count() == 1
 
 
+def test_an_approval_is_judged_on_the_rules_the_console_can_read(space):
+    _set_policy(space, ASK_DELETES)
+    agent_request = filed(ask(space.client, action=_allow_action(space)))
+    # A rule by AWS action stored before such rules were dropped.
+    by_action = {"operation": "ec2:TerminateInstances", "effect": "ask"}
+    AgentConnection.objects.filter(id=space.connection.id).update(
+        policy={"version": 1, "default": "block", "rules": [by_action]}
+    )
+
+    # Only the default of block is left to judge by, so the allow cannot help.
+    with pytest.raises(GraphQLError, match="never changes a block"):
+        approve(space, agent_request)
+
+    rules = [by_action, *ASK_DELETES["rules"]]
+    AgentConnection.objects.filter(id=space.connection.id).update(
+        policy={"version": 1, "default": "block", "rules": rules}
+    )
+    agent_request.refresh_from_db()
+    assert approve(space, agent_request).runtime_action == "retry"
+
+
 def test_an_allow_is_refused_at_approval_when_the_policy_now_blocks_it(space):
     _set_policy(space, ASK_DELETES)
     agent_request = filed(ask(space.client, action=_allow_action(space)))
