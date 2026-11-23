@@ -24,7 +24,7 @@ from api.utils.agent_access import (
 from api.utils.agent_config.access_policy import (
     ACCESS_POLICY_FEATURE,
     compile_policy,
-    full_policy,
+    has_path_rules,
     method_effects,
     requires_client_feature,
 )
@@ -972,8 +972,9 @@ def _http_access_line(stored_policy):
         methods = [method for method, found in effects.items() if found == effect]
         if methods:
             parts.append(f"{words}: {', '.join(methods)}.")
-    rules = full_policy(stored_policy)["rules"]
-    if any("path" in rule.get("match", {}) for rule in rules):
+    if has_path_rules(stored_policy):
+        # The per-method part holds only where no path rule answers instead.
+        parts.insert(0, "On paths with no rule of their own:")
         parts.append("Some paths have rules of their own.")
     return " ".join(parts)
 

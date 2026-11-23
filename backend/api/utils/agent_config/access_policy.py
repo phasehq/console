@@ -55,6 +55,8 @@ _SECRET_GUARD = {
     "rules": [{"class": CREDENTIAL_MINTING, "effect": "block"}],
 }
 
+# Paths that take in every call, so a rule naming one answers by method alone.
+_EVERY_PATH = frozenset({"/*", "*"})
 # Any other method is an update.
 _METHOD_CLASSES = {
     "GET": "read",
@@ -334,13 +336,28 @@ def classify_http_call(method: str) -> str:
     return _METHOD_CLASSES.get(method, "update")
 
 
+def _path_of(rule):
+    """The paths a rule is limited to, or None when it takes in every path."""
+
+    path = rule.get("match", {}).get("path")
+    return None if path in _EVERY_PATH else path
+
+
+def has_path_rules(stored: Any) -> bool:
+    """Whether some rule of the policy answers only some paths."""
+
+    return any(_path_of(rule) is not None for rule in full_policy(stored)["rules"])
+
+
 def _takes_in_method(rule, method):
     """Whether a rule answers every call by ``method``, whatever its path."""
 
     if "class" in rule:
         return rule["class"] == classify_http_call(method)
-    match = rule.get("match", {})
-    return "path" not in match and method in match.get("methods", ())
+    if "match" not in rule or _path_of(rule) is not None:
+        return False
+    methods = rule["match"].get("methods")
+    return methods is None or method in methods
 
 
 def method_effects(stored: Any) -> dict[str, str]:

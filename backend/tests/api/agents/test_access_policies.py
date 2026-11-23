@@ -211,10 +211,30 @@ def test_the_context_says_what_the_rules_do_with_each_method(space):
             ],
         },
     )
+    # With a path rule, the per-method part is said to hold only elsewhere.
     assert (
-        "Allowed: GET, HEAD, OPTIONS. Ask first: DELETE. Blocked: POST, PUT, PATCH. "
+        "On paths with no rule of their own: Allowed: GET, HEAD, OPTIONS. "
+        "Ask first: DELETE. Blocked: POST, PUT, PATCH. "
         "Some paths have rules of their own." in markdown()
     )
+
+
+@pytest.mark.parametrize("path", ["/*", "*"])
+def test_a_rule_for_every_path_counts_for_every_call_in_the_context(space, path):
+    # Stored as written, as a rule for "*" can only have been.
+    AgentConnection.objects.filter(id=space.connection.id).update(
+        policy={
+            "version": 1,
+            "default": "allow",
+            "rules": [{"match": {"path": path}, "effect": "block"}],
+        }
+    )
+
+    markdown = session_get(space.client, space.session, "context")["markdown"]
+
+    assert "Blocked: GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE." in markdown
+    assert "Allowed:" not in markdown
+    assert "rules of their own" not in markdown
 
 
 def test_one_policy_holds_every_workflow_granted_the_connection(space):

@@ -13,6 +13,7 @@ from api.utils.agent_config.access_policy import (
     compile_policy,
     full_policy,
     live_temporary_allows,
+    has_path_rules,
     managed_policies,
     method_effects,
     requires_client_feature,
@@ -407,6 +408,25 @@ WRITES_ASK = [
 )
 def test_each_methods_effect_comes_from_the_rules_that_take_it_in(policy, expected):
     assert method_effects(validate_policy(policy)) == expected
+
+
+def test_a_rule_for_every_path_answers_by_method_alone():
+    every_path = _policy(
+        rules=[
+            {"match": {"path": "/*"}, "effect": "ask"},
+            {"match": {"methods": ["DELETE"], "path": "/*"}, "effect": "block"},
+        ]
+    )
+    one_path = _policy(rules=[{"match": {"path": "/x/*"}, "effect": "block"}])
+
+    assert method_effects(every_path) == {
+        **dict.fromkeys(METHODS, "ask"),
+        "DELETE": "block",
+    }
+    assert has_path_rules(every_path) is False
+    assert method_effects(one_path) == dict.fromkeys(METHODS, "allow")
+    assert has_path_rules(one_path) is True
+    assert has_path_rules({}) is False
 
 
 def test_a_stored_policy_with_a_removed_rule_kind_is_still_read():
