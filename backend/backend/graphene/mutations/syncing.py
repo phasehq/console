@@ -1726,7 +1726,9 @@ class ToggleSyncActive(graphene.Mutation):
             raise GraphQLError("You don't have permission to update Integrations")
 
         env_sync.is_active = not env_sync.is_active
-        env_sync.save()
+        # Only what changed: the row was read a while ago, and its path may
+        # have been rewritten since by a folder rename.
+        env_sync.save(update_fields=["is_active", "updated_at"])
 
         if env_sync.is_active:
             trigger_sync_tasks(env_sync)
@@ -1810,7 +1812,8 @@ class UpdateSyncAuthentication(graphene.Mutation):
             )
 
         env_sync.authentication_id = credential_id
-        env_sync.save()
+        # As with the switch above: not the path a rename may have moved
+        env_sync.save(update_fields=["authentication", "updated_at"])
 
         return UpdateSyncAuthentication(sync=env_sync)
 
