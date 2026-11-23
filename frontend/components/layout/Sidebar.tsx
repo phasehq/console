@@ -48,7 +48,6 @@ import {
   statusColor,
   useSystemStatus,
 } from '../common/StatusIndicator'
-import { RoleLabel } from '../users/RoleLabel'
 import { OrgMenuItems } from './OrgSwitcher'
 import { SIDEBAR_WIDTH, SidebarResizeHandle } from './SidebarResizeHandle'
 import { ModeToggle } from '../common/ModeToggle'
@@ -460,22 +459,18 @@ const HelpMenu = (props: FooterMenuProps) => {
   )
 }
 
-// Who is signed in, at the top of the account menu
+// Who is signed in, at the top of the account menu. The role is not here: it differs by
+// organisation, so each row of the organisation list names it
 const AccountHeader = () => {
   const { data: session } = useSession()
-  const { activeOrganisation } = useContext(organisationContext)
 
   return (
     <div className="flex items-center gap-2 px-3 py-2.5">
       <Avatar user={session?.user} size="md" />
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* The role wraps onto its own line rather than squeezing a long name */}
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-          <span className="min-w-0 truncate text-xs font-medium leading-5 text-zinc-900 dark:text-zinc-100">
-            {session?.user?.name}
-          </span>
-          {activeOrganisation?.role && <RoleLabel role={activeOrganisation.role} size="xs" />}
-        </div>
+        <span className="truncate text-xs font-medium leading-5 text-zinc-900 dark:text-zinc-100">
+          {session?.user?.name}
+        </span>
         <span className="truncate text-2xs leading-4 text-neutral-500">{session?.user?.email}</span>
       </div>
     </div>
@@ -571,7 +566,7 @@ const AccountMenu = ({
               {({ close }) => (
                 <>
                   <AccountHeader />
-                  {showOrganisations && <OrgMenuItems heading="Organisation" onNavigate={close} />}
+                  {showOrganisations && <OrgMenuItems heading="Organisations" onNavigate={close} />}
                   <div className="space-y-0.5 p-1">
                     <ThemeRow className={MENU_ROW_STYLE} />
                     <FooterMenuLink href="/account" icon={FaUserCircle} onClick={close}>
@@ -761,7 +756,7 @@ const MobileMoreMenu = ({
                   </Menu.Item>
                 ))}
               </div>
-              <OrgMenuItems heading="Organisation" touch />
+              <OrgMenuItems heading="Organisations" touch />
               <div className="space-y-0.5 p-1">
                 <ThemeRow className={MOBILE_MENU_ROW} />
                 <Menu.Item>

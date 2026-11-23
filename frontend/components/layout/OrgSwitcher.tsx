@@ -7,7 +7,7 @@ import { Menu } from '@headlessui/react'
 import { FaCheck, FaPlus } from 'react-icons/fa'
 import { TbSelector } from 'react-icons/tb'
 import { organisationContext } from '@/contexts/organisationContext'
-import { PlanLabel } from '../settings/organisation/PlanLabel'
+import { RoleLabel } from '../users/RoleLabel'
 
 const ROW_STYLE = 'flex w-full items-center rounded-md transition ease'
 const ROW_SIZE = 'h-8 gap-2 px-2 text-xs'
@@ -28,8 +28,9 @@ const useOrganisations = () => {
   }
 }
 
-// The organisation rows. In a Headless UI Menu they are menu items. With `onNavigate` they are plain
-// links, for a popover. `touch` makes them taller, for the phone More menu
+// The organisation rows: every organisation with the user's role in it, and a check on the current one.
+// In a Headless UI Menu they are menu items. With `onNavigate` they are plain links, for a popover.
+// `touch` makes them taller, for the phone More menu
 export const OrgMenuItems = ({
   heading,
   touch = false,
@@ -78,7 +79,7 @@ export const OrgMenuItems = ({
               )}
             >
               <span className="min-w-0 flex-1 truncate">{org.name}</span>
-              <PlanLabel plan={org.plan} size="sm" />
+              {org.role && <RoleLabel role={org.role} size="xs" />}
               <FaCheck
                 className={clsx('size-2.5 shrink-0 text-emerald-500', !current && 'invisible')}
               />
