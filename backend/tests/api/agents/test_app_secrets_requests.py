@@ -347,6 +347,38 @@ def test_default_rules_in_another_order_are_reused(lab):
     assert str(agent_request.connection_id) == str(existing.id)
 
 
+# Rules written differently that give each class the default's effect.
+DEFAULT_EQUIVALENT_POLICIES = {
+    # Read set to Allow by hand beside the default rules.
+    "read_allowed_by_hand": {
+        **DEFAULT_POLICY,
+        "rules": [{"class": "read", "effect": "allow"}, *DEFAULT_POLICY["rules"]],
+    },
+    "asks_by_default": {
+        "version": 1,
+        "default": "ask",
+        "rules": [{"class": "read", "effect": "allow"}],
+    },
+}
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("label", sorted(DEFAULT_EQUIVALENT_POLICIES))
+def test_rules_that_give_each_class_the_default_effect_are_reused(lab, label):
+    policy = DEFAULT_EQUIVALENT_POLICIES[label]
+    existing = app_connection(lab, [lab.dev, lab.staging], policy=policy)
+    agent_request = filed(_app_access(lab))
+
+    assert _review(lab, agent_request)["current"]["connectionId"] == str(existing.id)
+    approve(lab, agent_request, lab.approver_info)
+
+    agent_request.refresh_from_db()
+    assert str(agent_request.connection_id) == str(existing.id)
+    assert AgentConnection.objects.filter(service_type=APP_SERVICE_TYPE).count() == 1
+    existing.refresh_from_db()
+    assert existing.policy == policy
+
+
 NON_DEFAULT_POLICIES = {
     "allows_writes": {"version": 1, "default": "allow", "rules": []},
     "asks_on_read": {

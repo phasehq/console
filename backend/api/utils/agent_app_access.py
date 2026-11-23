@@ -583,19 +583,15 @@ def set_connection_environments(connection, environments):
     )
 
 
-def _rule_key(rule):
-    return sorted((str(name), str(value)) for name, value in rule.items())
-
-
 def has_default_policy(stored_policy):
-    """Whether a Connection's rules are exactly those a new app Connection
-    starts with, in any order."""
+    """Whether a Connection's rules give each class the effect a new app
+    Connection starts with, however they are written."""
 
-    policy = full_policy(stored_policy)
-    default = full_policy(DEFAULT_POLICY)
-    return policy["default"] == default["default"] and sorted(
-        map(_rule_key, policy["rules"])
-    ) == sorted(map(_rule_key, default["rules"]))
+    # A rule that repeats what the default already does changes no access.
+    return all(
+        class_effect(stored_policy, name) == class_effect(DEFAULT_POLICY, name)
+        for name in APP_CLASSES
+    )
 
 
 def reusable_connection(organisation_id, app, environments, *, lock=False):
