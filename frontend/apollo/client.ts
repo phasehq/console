@@ -5,6 +5,7 @@ import { onError } from '@apollo/client/link/error'
 import { setContext } from '@apollo/client/link/context'
 import { UrlUtils } from '@/utils/auth'
 import { isReauthError, reauthRedirectUrl, requestReauthPrompt } from '@/utils/accountErrors'
+import { latestAnswerLink } from './latestAnswerLink'
 import {
   deleteDeviceKey,
   clearActivePasswordUser,
@@ -213,7 +214,7 @@ const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
 
 export const graphQlClient = new ApolloClient({
   connectToDevTools: process.env.NODE_ENV === 'development',
-  link: from([errorLink, csrfRetryLink, csrfLink, httpLink]),
+  link: from([latestAnswerLink, errorLink, csrfRetryLink, csrfLink, httpLink]),
   cache: new InMemoryCache({
     typePolicies: {
       KeyMap: {

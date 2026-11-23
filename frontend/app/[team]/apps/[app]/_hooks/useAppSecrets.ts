@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, useContext, useRef } from 'react'
-import { useApolloClient, useQuery } from '@apollo/client'
+import { useCallback, useEffect, useMemo, useState, useContext, useRef } from 'react'
+import { useQuery } from '@apollo/client'
+import { latestAnswer } from '@/apollo/latestAnswerLink'
 import { unwrapEnvSecretsForUser, decryptEnvSecretKVs } from '@/utils/crypto'
 import { AppSecret, AppFolder } from '../types'
 import { GetAppSecrets } from '@/graphql/queries/secrets/getAppSecrets.gql'
@@ -163,12 +164,16 @@ export const useAppSecrets = (
     }
   }, [cache, cacheKey])
 
+  // The polls, refetches and reads after a deploy are one kind of read: none of them may land on
+  // top of an answer to one sent after it
+  const context = useMemo(() => latestAnswer(`GetAppSecrets:${appId}`), [appId])
   const { data, error, refetch } = useQuery(GetAppSecrets, {
     // No path: the resolvers then return every folder's secrets and folders
     variables: { appId, path: null },
     fetchPolicy: 'cache-and-network',
     skip: !allowFetch,
     pollInterval,
+    context,
   })
 
   useEffect(() => {
@@ -265,21 +270,11 @@ export const useAppSecrets = (
     setFetching(false)
   }, [error, data])
 
-  const client = useApolloClient()
   /**
-   * Reads the saved secrets with a request of its own. `refetch` can be answered by one already
+   * Reads the saved secrets with a request of its own. No read of this query shares one already
    * on its way, which may have left before the write it is asked to show.
    */
-  const readSaved = useCallback(
-    () =>
-      client.query({
-        query: GetAppSecrets,
-        variables: { appId, path: null },
-        fetchPolicy: 'network-only',
-        context: { queryDeduplication: false },
-      }),
-    [client, appId]
-  )
+  const readSaved = useCallback(() => refetch(), [refetch])
 
   return {
     environments: processed?.environments ?? NO_ENVIRONMENTS,
