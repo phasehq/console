@@ -909,13 +909,6 @@ def test_events_for_stopped_calls_and_scrubbed_responses_are_accepted(space):
 @pytest.mark.parametrize(
     "detail",
     [
-        {"rule": {"class": "delete"}},
-        {"rule": {"class": "delete", "effect": "block", "note": "x"}},
-        {"rule": {"class": "everything", "effect": "block"}},
-        {"rule": {"class": "admin", "effect": "block"}},
-        {"rule": {"operation": "ec2:TerminateInstances", "effect": "block"}},
-        {"rule": {"match": {"path": "relative"}, "effect": "block"}},
-        {"rule": ["delete"]},
         {"matched": {"class": "delete", "effect": "block"}},
         {"path": "/" + "x" * 4096},
         {"connectionName": "x" * 513},
@@ -926,6 +919,54 @@ def test_event_detail_stays_bounded(space, detail):
 
     assert response.status_code == 400, response.content
     assert not AgentEvent.objects.filter(event_id="bounded").exists()
+
+
+@pytest.mark.parametrize(
+    "rule,kept",
+    [
+        # A rule kind or a class this Console no longer knows, as a CLI one
+        # version behind or ahead may report it.
+        ({"operation": "ec2:TerminateInstances", "effect": "ask"}, {"effect": "ask"}),
+        ({"class": "admin", "effect": "block"}, {"effect": "block"}),
+        (
+            {"class": "delete", "effect": "block", "note": "x"},
+            {"class": "delete", "effect": "block"},
+        ),
+        ({"match": {"methods": ["GET"], "query": "x"}, "effect": "allow"}, {"effect": "allow"}),
+        ({"match": {"path": "relative"}, "effect": "block"}, {"effect": "block"}),
+        ({"class": "delete"}, {"class": "delete"}),
+        ({"kind": "later", "effect": "later"}, None),
+        (["delete"], None),
+    ],
+)
+def test_a_rule_the_console_cannot_read_is_cut_and_the_batch_kept(space, rule, kept):
+    """The proxy resends a refused batch for good, so an event is stored with
+    what the Console knows of its rule, and the rest of the batch with it."""
+
+    detail = {
+        "connectionId": str(space.connection.id),
+        "class": "delete",
+        "method": "DELETE",
+    }
+
+    response = _ship(
+        space,
+        _event("odd-rule", grantId=str(space.grant.id), detail={**detail, "rule": rule}),
+        _event("plain", grantId=str(space.grant.id), detail={**detail, "rule": "default"}),
+    )
+
+    assert response.status_code == 202, response.content
+    assert response.json()["accepted"] == 2
+    stored = AgentEvent.objects.get(event_id="odd-rule").detail
+    assert stored.get("rule") == kept
+    assert ("rule" in stored) is (kept is not None)
+    # The rest of the event's detail is kept as it was sent.
+    assert {key: stored[key] for key in ("connection_id", "class", "method")} == {
+        "connection_id": str(space.connection.id),
+        "class": "delete",
+        "method": "DELETE",
+    }
+    assert AgentEvent.objects.get(event_id="plain").detail["rule"] == "default"
 
 
 # Ending a temporary allow early
@@ -1181,12 +1222,15 @@ def test_the_proxy_names_a_guarded_aws_action_but_no_rule_by_action(aws):
     stored = AgentEvent.objects.get(event_id="guarded-action")
     assert stored.detail["operation"] == "sts:AssumeRole"
     assert stored.detail["rule"] == "secret_guard"
-    refusal = _ship(
+    # A rule by action, from a CLI that still reports one, is stored without it.
+    by_action = _ship(
         aws,
         _event(
             "rule-by-action",
             detail={"rule": {"operation": "ec2:TerminateInstances", "effect": "ask"}},
         ),
     )
-    assert refusal.status_code == 400, refusal.content
-    assert not AgentEvent.objects.filter(event_id="rule-by-action").exists()
+    assert by_action.status_code == 202, by_action.content
+    assert AgentEvent.objects.get(event_id="rule-by-action").detail == {
+        "rule": {"effect": "ask"}
+    }

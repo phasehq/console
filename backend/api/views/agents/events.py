@@ -234,27 +234,27 @@ def _integer(
 
 
 def _policy_rule(value):
-    """The rule that stopped a call, as the proxy reports it: one of a
-    policy's own rules or the secret guard's. Returned as it is stored."""
+    """The rule that stopped a call, as the proxy reports it, cut to the parts
+    this Console knows: an effect and one class or match. None when it has no
+    such part."""
 
-    targets = {"class", "match"}
-    if not isinstance(value, dict) or set(value) - targets - {"effect"}:
+    if not isinstance(value, dict):
         return None
-    if value.get("effect") not in EFFECTS:
-        return None
-    rule = {"effect": value["effect"]}
-    if len(targets & set(value)) != 1:
-        return None
-    if "class" in value:
-        if value["class"] not in (*USER_CLASSES, CREDENTIAL_MINTING):
-            return None
-        rule["class"] = value["class"]
-    else:
+    rule = {}
+    if value.get("effect") in EFFECTS:
+        rule["effect"] = value["effect"]
+    targets = {}
+    if value.get("class") in (*USER_CLASSES, CREDENTIAL_MINTING):
+        targets["class"] = value["class"]
+    if "match" in value:
         try:
-            rule["match"] = validate_match(value["match"], "rule.match")
+            targets["match"] = validate_match(value["match"], "rule.match")
         except PolicyError:
-            return None
-    return rule
+            pass
+    # A rule has one target; two cannot be shown as one rule.
+    if len(targets) == 1:
+        rule.update(targets)
+    return rule or None
 
 
 def _path(value):
@@ -278,8 +278,8 @@ def _known_detail(key, item):
 def _detail(event, *, index):
     """A flat object of short scalar values for an event's metadata.
 
-    ``rule`` is the only field that may be an object. Only the members the CLI
-    sends are kept.
+    ``rule`` is the only field that may be an object, and only the parts of it
+    this Console knows are kept. Only the members the CLI sends are kept.
     """
 
     value = event.get("detail")
@@ -300,16 +300,10 @@ def _detail(event, *, index):
                 index=index,
                 field="detail",
             )
-        if key == "rule" and isinstance(item, dict):
-            rule = _policy_rule(item)
-            if rule is None:
-                _invalid(
-                    "detail.rule must be default, secret_guard or an access "
-                    "policy rule.",
-                    index=index,
-                    field="detail",
-                )
-            value = {**value, "rule": rule}
+        if key == "rule" and not isinstance(item, str):
+            # The proxy resends a refused batch for good, so a rule from another
+            # CLI version is cut to what this Console reads, never refused.
+            value = {**value, "rule": _policy_rule(item)}
         elif isinstance(item, str):
             limit = _MAX_PATH_LENGTH if key == "path" else _MAX_DETAIL_VALUE_LENGTH
             if len(item) > limit:
