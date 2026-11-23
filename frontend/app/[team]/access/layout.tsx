@@ -1,10 +1,11 @@
 'use client'
 
-import { Fragment, useContext, useEffect, useMemo, useState, use } from 'react'
+import { Fragment, useContext, useEffect, useState, use } from 'react'
 import { Tab } from '@headlessui/react'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { ACCESS_PAGES } from '@/utils/navigation'
 
 export default function AccessLayout(props: {
   params: Promise<{ team: string }>
@@ -18,47 +19,7 @@ export default function AccessLayout(props: {
 
   const [tabIndex, setTabIndex] = useState(0)
 
-  const tabs = useMemo(
-    () => [
-      {
-        name: 'Members',
-        link: 'members',
-      },
-      {
-        name: 'Service Accounts',
-        link: 'service-accounts',
-      },
-      {
-        name: 'Teams',
-        link: 'teams',
-      },
-      {
-        name: 'Roles',
-        link: 'roles',
-      },
-      {
-        name: 'Single Sign-On',
-        link: 'sso',
-      },
-      {
-        name: 'SCIM',
-        link: 'scim',
-      },
-      {
-        name: 'External Identities',
-        link: 'identities',
-      },
-      {
-        name: 'Authentication',
-        link: 'authentication',
-      },
-      {
-        name: 'Network',
-        link: 'network',
-      },
-    ],
-    []
-  )
+  const tabs = ACCESS_PAGES
 
   useEffect(() => {
     const activeTabIndex = () => {
@@ -71,14 +32,14 @@ export default function AccessLayout(props: {
   }, [path, tabs])
 
   return (
-    <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]">
+    <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto h-full">
       <div className="flex items-center gap-2 pb-3 sm:pb-4 lg:pb-6 px-3 sm:px-4 lg:px-6">
         <h1 className="text-lg sm:text-xl font-bold">Access</h1>
       </div>
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
         {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
-        <div className="w-full overflow-x-auto">
+        <div className="w-full overflow-x-auto scrollbar-hide">
           <Tab.List className="flex gap-2 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
             {tabs.map((tab) => (
               <Tab as={Fragment} key={tab.name}>

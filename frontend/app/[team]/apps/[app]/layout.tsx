@@ -70,7 +70,10 @@ export default function AppLayout(props: {
   }, [app, path, tabs])
 
   return (
-    <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]">
+    <div className="w-full text-black dark:text-white flex flex-col overflow-y-auto h-full">
+      {/* The top spacing is an element, not padding: this box scrolls the page, and a sticky header
+          inside it would stick below the padding with rows showing above it */}
+      <div className="h-3 shrink-0 sm:h-4 lg:h-6" />
       {loading && (
         <div className="px-3 sm:px-4 lg:px-6 dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
       )}
@@ -94,7 +97,7 @@ export default function AppLayout(props: {
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
         {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
-        <div className="w-full shrink-0 overflow-x-auto">
+        <div className="w-full shrink-0 overflow-x-auto scrollbar-hide">
           <Tab.List className="flex gap-0 sm:gap-2 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
             {tabs.map((tab) => (
               <Tab as={Fragment} key={tab.name}>

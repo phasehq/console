@@ -127,7 +127,9 @@ export default function Members(props: { params: Promise<{ team: string }> }) {
             membersLoading && !membersData ? (
               <MemberListSkeleton count={10} />
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto overflow-y-hidden">
+              {/* Sideways scroll only. overflow-x-auto alone lets the box scroll vertically as well, and
+                  in Firefox a long list had a few pixels of its own to scroll before the page moved */}
               <table className="table-auto min-w-full divide-y divide-zinc-500/40 ">
                 <thead>
                   <tr>

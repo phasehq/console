@@ -25,7 +25,7 @@ function CardPattern({ mouseX, mouseY, squares }: CardPatternProps) {
 
   return (
     <div className="pointer-events-none">
-      <div className="absolute inset-0 rounded-2xl transition duration-300 [mask-image:linear-gradient(white,transparent)] group-hover:opacity-50">
+      <div className="absolute inset-0 overflow-hidden rounded-2xl transition duration-300 [mask-image:linear-gradient(white,transparent)] group-hover:opacity-50">
         <GridPattern
           width={72}
           height={56}
@@ -40,7 +40,7 @@ function CardPattern({ mouseX, mouseY, squares }: CardPatternProps) {
         style={style}
       />
       <motion.div
-        className="absolute inset-0 rounded-2xl opacity-0 mix-blend-overlay transition duration-300 group-hover:opacity-100"
+        className="absolute inset-0 overflow-hidden rounded-2xl opacity-0 mix-blend-overlay transition duration-300 group-hover:opacity-100"
         style={style}
       >
         <GridPattern

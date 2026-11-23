@@ -1296,7 +1296,7 @@ export default function EnvironmentPath(props0: {
 
   return (
     <SecretReferenceContext.Provider value={referenceContext}>
-      <div className="h-full max-h-screen overflow-y-auto w-full text-black dark:text-white">
+      <div className="w-full text-black dark:text-white">
         {keyring !== null && !loading && (
           <div className="flex flex-col py-4 px-3 sm:px-4 lg:px-6 bg-zinc-200 dark:bg-zinc-900">
             <div className="flex flex-wrap items-center gap-3 sm:gap-4 lg:gap-6 justify-between w-full">
