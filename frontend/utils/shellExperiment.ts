@@ -15,8 +15,9 @@ export type ShellExperiment = {
   hideTabs: boolean
   // Also drop those sections' own page heading, which repeats the sidebar group
   hideSectionHeading: boolean
-  // Pretend to be cloud-hosted with a healthy status, so the status line can be seen locally
-  mockStatus: boolean
+  // Pretend to be cloud-hosted, so the status in the Help menu can be seen locally: true for a
+  // healthy status, or an incident level
+  mockStatus: boolean | 'minor' | 'major' | 'critical'
 }
 
 const DEFAULTS: ShellExperiment = {

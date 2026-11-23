@@ -42,7 +42,12 @@ import { Menu, Popover, Transition } from '@headlessui/react'
 import { LogoWordMark } from '../common/LogoWordMark'
 import { Avatar } from '../common/Avatar'
 import { openCommandPalette, useModifierKey } from '../common/CommandPalette'
-import { STATUS_PAGE_BASE_URL, statusColor, useSystemStatus } from '../common/StatusIndicator'
+import {
+  Status,
+  STATUS_PAGE_BASE_URL,
+  statusColor,
+  useSystemStatus,
+} from '../common/StatusIndicator'
 import { RoleLabel } from '../users/RoleLabel'
 import { OrgMenuItems } from './OrgSwitcher'
 import { SIDEBAR_WIDTH, SidebarResizeHandle } from './SidebarResizeHandle'
@@ -374,19 +379,86 @@ const SidebarFooterMenu = ({
 
 type FooterMenuProps = { collapsed: boolean; animating: boolean }
 
-const HelpMenu = (props: FooterMenuProps) => (
-  <SidebarFooterMenu name="Help" icon={<FaQuestionCircle />} align="right" {...props}>
-    {(close) => (
-      <div className="space-y-0.5 p-1">
-        {HELP_LINKS.map(({ name, href, icon }) => (
-          <FooterMenuLink key={name} href={href} icon={icon} external onClick={close}>
-            {name}
-          </FooterMenuLink>
-        ))}
-      </div>
-    )}
-  </SidebarFooterMenu>
-)
+// TEMPORARY: statuses to look at while developing locally, where there is none (utils/shellExperiment.ts)
+const MOCK_STATUS = {
+  none: 'All Systems Operational',
+  minor: 'Partially Degraded Service',
+  major: 'Partial System Outage',
+  critical: 'Major Service Outage',
+} as const
+
+// The hosted service's status. Self-hosted instances have none
+const useServiceStatus = () => {
+  const { mockStatus } = useShellExperiment()
+  const live = useSystemStatus()
+
+  if (!mockStatus) return live
+
+  const indicator = mockStatus === true ? 'none' : mockStatus
+  const status: Status = { indicator, description: MOCK_STATUS[indicator] }
+  return { status, isLoading: false, enabled: true }
+}
+
+const HelpMenu = (props: FooterMenuProps) => {
+  const { status, isLoading, enabled } = useServiceStatus()
+  // An incident marks the button, so it is seen without opening the menu
+  const incident = enabled && !!status && ['minor', 'major', 'critical'].includes(status.indicator)
+
+  return (
+    <SidebarFooterMenu
+      name="Help"
+      icon={
+        <span className="relative flex">
+          <FaQuestionCircle />
+          {incident && (
+            <span
+              className={clsx('absolute -right-1 -top-1 size-2 rounded-full', statusColor(status))}
+            >
+              <span className="sr-only">Service incident:</span>
+            </span>
+          )}
+        </span>
+      }
+      align="right"
+      {...props}
+    >
+      {(close) => (
+        <>
+          <div className="space-y-0.5 p-1">
+            {HELP_LINKS.map(({ name, href, icon }) => (
+              <FooterMenuLink key={name} href={href} icon={icon} external onClick={close}>
+                {name}
+              </FooterMenuLink>
+            ))}
+          </div>
+          {enabled && (
+            <div className="p-1">
+              <Link
+                href={STATUS_PAGE_BASE_URL}
+                target="_blank"
+                onClick={close}
+                aria-label={`System status: ${status?.description || 'Loading'}`}
+                className={clsx(MENU_ROW_STYLE, HOVER_BG, INACTIVE_STYLE)}
+              >
+                <span className="flex size-3.5 shrink-0 items-center justify-center">
+                  <span
+                    className={clsx(
+                      'size-2 rounded-full',
+                      statusColor(status),
+                      isLoading && 'animate-pulse'
+                    )}
+                  />
+                </span>
+                <span className="min-w-0 flex-1 truncate">{status?.description || 'Loading'}</span>
+                <FaExternalLinkAlt className="size-2 shrink-0 text-neutral-500" />
+              </Link>
+            </div>
+          )}
+        </>
+      )}
+    </SidebarFooterMenu>
+  )
+}
 
 // Who is signed in, at the top of the account menu
 const AccountHeader = () => {
@@ -534,58 +606,6 @@ const AccountMenu = ({
         </>
       )}
     </Popover>
-  )
-}
-
-// The hosted service's status, linking to the status page. Self-hosted instances have none
-const SystemStatus = ({ collapsed, animating }: FooterMenuProps) => {
-  const experiment = useShellExperiment()
-  const live = useSystemStatus()
-  // TEMPORARY: a healthy status to look at while developing locally
-  const { status, isLoading, enabled } = experiment.mockStatus
-    ? {
-        status: { indicator: 'none' as const, description: 'All Systems Operational' },
-        isLoading: false,
-        enabled: true,
-      }
-    : live
-
-  if (!enabled) return null
-
-  const description = status?.description || 'Loading'
-
-  return (
-    <div className="group/item relative mt-1">
-      <Link
-        href={STATUS_PAGE_BASE_URL}
-        target="_blank"
-        aria-label={`System status: ${description}`}
-        className={clsx(
-          'flex h-6 w-full items-center rounded-md px-4 text-2xs outline-none transition ease focus-visible:ring-2 focus-visible:ring-neutral-500',
-          'text-neutral-500 hover:text-zinc-900 dark:hover:text-zinc-100'
-        )}
-      >
-        <span
-          className={clsx(
-            'size-2 shrink-0 rounded-full',
-            statusColor(status),
-            isLoading && 'animate-pulse'
-          )}
-        />
-        <span
-          className={clsx(
-            'min-w-0 flex-1 overflow-hidden',
-            animating && SLIDE,
-            collapsed && 'opacity-0'
-          )}
-        >
-          <span className={clsx('block truncate pl-2', animating && 'text-clip')}>
-            {description}
-          </span>
-        </span>
-      </Link>
-      {collapsed && <div className={TOOLTIP_STYLE}>{description}</div>}
-    </div>
   )
 }
 
@@ -1065,7 +1085,6 @@ const Sidebar = () => {
             collapsed={collapsed}
             animating={animating}
           />
-          <SystemStatus collapsed={collapsed} animating={animating} />
         </div>
 
         {!collapsed && <SidebarResizeHandle />}
