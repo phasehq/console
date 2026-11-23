@@ -6,6 +6,7 @@ import {
   SecretType,
 } from '@/apollo/graphql'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
+import { RESERVED_APP_ROUTE_SEGMENTS, appSecretsUrl } from '@/utils/appLinks'
 
 export type SortOption =
   | 'key'
@@ -64,9 +65,12 @@ export const toggleBooleanKeepingCase = (value: string): string => {
   }
 }
 
-export const getSecretPermalink = (secret: SecretType, orgName: string) => {
-  return `/${orgName}/apps/${secret.environment.app.id}/environments/${secret.environment.id}${secret.path}?secret=${secret.id}`
-}
+export const getSecretPermalink = (secret: SecretType, orgName: string) =>
+  appSecretsUrl(orgName, secret.environment.app.id, {
+    envId: secret.environment.id,
+    path: secret.path,
+    secretId: secret.id,
+  })
 
 const SORT_STORAGE_KEY = 'phase-secrets-sort'
 
@@ -84,29 +88,43 @@ export const saveSort = (sort: SortOption) => {
   localStorage.setItem(SORT_STORAGE_KEY, sort)
 }
 
+// Decorate-sort-undecorate: the sort key for each item is computed once
+// (these run inside render memos on every edit, and the key extraction —
+// especially Date parsing and env scans — is too expensive per comparison).
+// The original index breaks ties, making the sort stable.
+const sortByKey = <T,>(items: T[], keyOf: (item: T) => string | number, desc: boolean): T[] => {
+  const decorated = items.map((item, index) => ({ item, index, k: keyOf(item) }))
+  const dir = desc ? -1 : 1
+  decorated.sort((a, b) => {
+    if (a.k === b.k) return a.index - b.index
+    const cmp =
+      typeof a.k === 'string'
+        ? a.k.localeCompare(b.k as string)
+        : (a.k as number) - (b.k as number)
+    return cmp === 0 ? a.index - b.index : dir * cmp
+  })
+  return decorated.map((d) => d.item)
+}
+
 export const sortSecrets = (secrets: SecretType[], sort: SortOption): SecretType[] => {
-  return secrets.slice().sort((a, b) => {
-    switch (sort) {
+  const desc = sort.startsWith('-')
+  const field = desc ? sort.slice(1) : sort
+  const keyOf = (s: SecretType): string | number => {
+    switch (field) {
       case 'key':
-        return a.key.localeCompare(b.key)
-      case '-key':
-        return b.key.localeCompare(a.key)
+        return s.key
       case 'value':
-        return a.key.localeCompare(b.value)
-      case '-value':
-        return b.key.localeCompare(a.value)
+        return s.value
       case 'created':
-        return new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime()
-      case '-created':
-        return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
+        // Missing on new (undeployed) secrets — keep them on top for -created
+        return s.createdAt ? new Date(s.createdAt).getTime() : Infinity
       case 'updated':
-        return new Date(a.updatedAt!).getTime() - new Date(b.updatedAt!).getTime()
-      case '-updated':
-        return new Date(b.updatedAt!).getTime() - new Date(a.updatedAt!).getTime()
+        return s.updatedAt ? new Date(s.updatedAt).getTime() : Infinity
       default:
         return 0
     }
-  })
+  }
+  return sortByKey(secrets, keyOf, desc)
 }
 
 /**
@@ -114,62 +132,32 @@ export const sortSecrets = (secrets: SecretType[], sort: SortOption): SecretType
  * For date-based sorts, uses the earliest createdAt or latest updatedAt across envs.
  */
 export const sortAppSecrets = (secrets: AppSecret[], sort: SortOption): AppSecret[] => {
-  return secrets.slice().sort((a, b) => {
-    switch (sort) {
+  const desc = sort.startsWith('-')
+  const field = desc ? sort.slice(1) : sort
+  const keyOf = (s: AppSecret): string | number => {
+    switch (field) {
       case 'key':
-        return a.key.localeCompare(b.key)
-      case '-key':
-        return b.key.localeCompare(a.key)
-      case 'value': {
-        const aVal = a.envs.find((e) => e.secret)?.secret?.value ?? ''
-        const bVal = b.envs.find((e) => e.secret)?.secret?.value ?? ''
-        return aVal.localeCompare(bVal)
-      }
-      case '-value': {
-        const aVal = a.envs.find((e) => e.secret)?.secret?.value ?? ''
-        const bVal = b.envs.find((e) => e.secret)?.secret?.value ?? ''
-        return bVal.localeCompare(aVal)
-      }
+        return s.key
+      case 'value':
+        return s.envs.find((e) => e.secret)?.secret?.value ?? ''
       case 'created': {
-        const aTime = Math.min(
-          ...a.envs.filter((e) => e.secret?.createdAt).map((e) => new Date(e.secret!.createdAt!).getTime())
-        ) || 0
-        const bTime = Math.min(
-          ...b.envs.filter((e) => e.secret?.createdAt).map((e) => new Date(e.secret!.createdAt!).getTime())
-        ) || 0
-        return aTime - bTime
-      }
-      case '-created': {
-        const aTime = Math.min(
-          ...a.envs.filter((e) => e.secret?.createdAt).map((e) => new Date(e.secret!.createdAt!).getTime())
-        ) || 0
-        const bTime = Math.min(
-          ...b.envs.filter((e) => e.secret?.createdAt).map((e) => new Date(e.secret!.createdAt!).getTime())
-        ) || 0
-        return bTime - aTime
+        const times = s.envs
+          .filter((e) => e.secret?.createdAt)
+          .map((e) => new Date(e.secret!.createdAt!).getTime())
+        // Missing on new (undeployed) secrets — keep them on top for -created
+        return times.length > 0 ? Math.min(...times) : Infinity
       }
       case 'updated': {
-        const aTime = Math.max(
-          ...a.envs.filter((e) => e.secret?.updatedAt).map((e) => new Date(e.secret!.updatedAt!).getTime())
-        ) || 0
-        const bTime = Math.max(
-          ...b.envs.filter((e) => e.secret?.updatedAt).map((e) => new Date(e.secret!.updatedAt!).getTime())
-        ) || 0
-        return aTime - bTime
-      }
-      case '-updated': {
-        const aTime = Math.max(
-          ...a.envs.filter((e) => e.secret?.updatedAt).map((e) => new Date(e.secret!.updatedAt!).getTime())
-        ) || 0
-        const bTime = Math.max(
-          ...b.envs.filter((e) => e.secret?.updatedAt).map((e) => new Date(e.secret!.updatedAt!).getTime())
-        ) || 0
-        return bTime - aTime
+        const times = s.envs
+          .filter((e) => e.secret?.updatedAt)
+          .map((e) => new Date(e.secret!.updatedAt!).getTime())
+        return times.length > 0 ? Math.max(...times) : Infinity
       }
       default:
         return 0
     }
-  })
+  }
+  return sortByKey(secrets, keyOf, desc)
 }
 
 /* ------------------------------------------------------------------ *
@@ -618,7 +606,25 @@ export const exportToEnvFile = (
   URL.revokeObjectURL(url)
 }
 
-export const envFilePlaceholder = `# Paste your .env here
+const MAX_ENV_FILE_SIZE = 100 * 1024
+
+/** The text of a chosen or dropped .env file; rejects with a message to show the user */
+export const readEnvFile = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    if (!/\.env(\..+)?$/.test(file.name))
+      return reject(new Error('Invalid file type. Please upload a valid .env file.'))
+    if (file.size > MAX_ENV_FILE_SIZE) return reject(new Error('File size exceeds 100KB limit.'))
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : ''
+      text.trim() ? resolve(text) : reject(new Error('That file is empty.'))
+    }
+    reader.onerror = () => reject(new Error('Failed to read the file. Please try again.'))
+    reader.readAsText(file)
+  })
+
+export const envFilePlaceholder = `# Paste your .env here, or drop the file onto this box
 
 # Comments before a key-value pair will be parsed
 FOO=BAR
@@ -662,6 +668,12 @@ export const normalizeKey = (key: string) => {
     .replace(/[\s-]/g, '_')
     .replace(/[^A-Z0-9_]/g, '')
 }
+
+export { RESERVED_APP_ROUTE_SEGMENTS }
+
+/** New root folders can't take the name of one of the app's pages; ones that exist are reached behind `~` */
+export const isReservedFolderName = (name: string, path: string) =>
+  path === '/' && RESERVED_APP_ROUTE_SEGMENTS.includes(name.toLowerCase())
 
 /**
  * Regular expression to match valid folder names (alphanumeric, underscores, and hyphens).

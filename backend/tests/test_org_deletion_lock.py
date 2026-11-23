@@ -342,7 +342,9 @@ class TestSyncsPauseWhileLocked:
         env_sync, sync_function = MagicMock(), MagicMock(return_value=(True, {}))
         with patch.object(
             syncing.module, "organisation_is_locked", return_value=False
-        ), patch.object(syncing.module, "get_environment_secrets", return_value=[]):
+        ), patch.object(syncing.module, "transaction"), patch.object(
+            syncing.module, "get_environment_secrets", return_value=[]
+        ):
             syncing.module.handle_sync_event(env_sync, sync_function)
 
         sync_function.assert_called_once()

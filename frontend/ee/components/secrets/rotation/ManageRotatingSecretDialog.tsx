@@ -14,7 +14,6 @@ import { Checkbox } from '@/components/common/Checkbox'
 import CopyButton from '@/components/common/CopyButton'
 import GenericDialog from '@/components/common/GenericDialog'
 import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotatingSecrets.gql'
-import { GetSecrets } from '@/graphql/queries/secrets/getSecrets.gql'
 import { DeleteRotatingSecretOP } from '@/graphql/mutations/environments/secrets/rotation/deleteRotatingSecret.gql'
 import { PauseRotatingSecretOP } from '@/graphql/mutations/environments/secrets/rotation/pauseRotatingSecret.gql'
 import { ResumeRotatingSecretOP } from '@/graphql/mutations/environments/secrets/rotation/resumeRotatingSecret.gql'
@@ -31,7 +30,6 @@ import {
   useContext,
   useEffect,
   useImperativeHandle,
-  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -390,26 +388,8 @@ export const ManageRotatingSecretDialog = forwardRef<
   const rotatingSecret: RotatingSecretType =
     (liveData?.rotatingSecrets?.[0] as RotatingSecretType | undefined) ?? initialRotatingSecret
 
-  const refetchQueries = useMemo(
-    () => [
-      {
-        query: GetRotatingSecrets,
-        variables: {
-          orgId: organisation?.id,
-          envId: rotatingSecret.environment?.id,
-        },
-      },
-      {
-        query: GetSecrets,
-        variables: {
-          appId: rotatingSecret.environment?.app?.id,
-          envId: rotatingSecret.environment?.id,
-          path: rotatingSecret.path ?? '/',
-        },
-      },
-    ],
-    [organisation, rotatingSecret]
-  )
+  // By name: whichever of the grid's rows and group headers, and this dialog's own copy, are mounted
+  const refetchQueries = ['GetAppSecrets', 'GetRotatingSecrets']
 
   const [rotateNow, { loading: rotating }] = useMutation(RotateRotatingSecretOP, { refetchQueries })
   const [pause, { loading: pausing }] = useMutation(PauseRotatingSecretOP, { refetchQueries })

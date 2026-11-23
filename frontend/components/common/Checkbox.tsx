@@ -11,6 +11,8 @@ export const Checkbox = (props: {
   checked: boolean
   onChange: (checked: boolean) => void
   label?: string
+  /** Names the checkbox for assistive tech when it has no visible label */
+  'aria-label'?: string
   disabled?: boolean
   size?: 'sm' | 'md' | 'lg'
 }) => {
@@ -22,6 +24,7 @@ export const Checkbox = (props: {
       type="button"
       role="checkbox"
       aria-checked={checked}
+      aria-label={props['aria-label']}
       disabled={disabled}
       onClick={(e) => {
         e.stopPropagation()

@@ -11,6 +11,7 @@ export type ButtonVariant =
   | 'filled'
   | 'outline'
   | 'ghost'
+  | 'menu'
   | 'text'
 
 export type ButtonSize = 'md' | 'lg'
@@ -40,6 +41,8 @@ const variantStyles: Record<ButtonVariant, string> = {
     'rounded-full py-1 px-3 text-zinc-700 ring-1 ring-inset ring-zinc-900/10 hover:bg-zinc-900/2.5 hover:text-zinc-900 dark:text-zinc-400 dark:ring-white/10 dark:hover:bg-white/5 dark:hover:text-white',
   ghost:
     'rounded-full py-1 px-3 text-zinc-700 hover:bg-zinc-900/2.5 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white',
+  // Flat until pointed at, then a step lighter than its surface, as a menu's rows are
+  menu: 'rounded-full py-1 px-3 text-neutral-600 hover:bg-white/60 hover:text-zinc-900 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-zinc-100',
   text: 'text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-500',
 }
 
@@ -73,6 +76,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       case 'secondary':
       case 'outline':
       case 'ghost':
+      case 'menu':
         return 'neutral'
       default:
         return 'emerald'
