@@ -368,8 +368,10 @@ describe('Agent Connections', () => {
     const blocks = (name: string) => details(name).querySelector('[aria-label="Access rules"]')
     const managed = (name: string) => details(name).querySelector('[aria-label="Managed by Phase"]')
 
-    test('the collapsed row says how much is restricted, and only when something is', () => {
-      expect(cells('guarded')[1].textContent).toBe('guarded1 blocked, 1 ask')
+    test('the collapsed row says what is restricted, and only when something is', () => {
+      expect(cells('guarded')[1].textContent).toBe(
+        'guardedReads, create and update allowed, delete blocked · 1 HTTP rule'
+      )
       expect(cells('built-in')[1].textContent).toBe('built-in')
       // PostgreSQL takes no rules.
       expect(cells('analytics')[1].textContent).toBe('analytics')
@@ -384,7 +386,7 @@ describe('Agent Connections', () => {
       expect(managed('guarded')!.textContent).toContain('Secret guard')
       expect(managed('guarded')!.textContent).toContain('cannot be turned off')
       const rules = details('guarded').querySelector('[aria-label="Access rules in force"]')!
-      expect(rules.textContent).toContain('DeleteBlock')
+      expect(rules.textContent).toContain('Delete DELETEBlock')
       expect(rules.textContent).toContain('POST /repos/*/*/issuesAsk')
       expect(button(blocks('guarded')!, 'Edit')).toBeDefined()
     })

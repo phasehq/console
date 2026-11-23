@@ -32,11 +32,23 @@ export const EFFECT_LABEL: Record<PolicyEffect, string> = {
   block: 'Block',
 }
 
+/** Each class and the HTTP methods it covers. */
 export const CLASS_LABEL: Record<OperationClass, { name: string; hint: string }> = {
-  read: { name: 'Read', hint: 'Fetch or list, changes nothing' },
-  create: { name: 'Create', hint: 'Add something new' },
-  update: { name: 'Update', hint: 'Change something that exists' },
-  delete: { name: 'Delete', hint: 'Remove something' },
+  read: { name: 'Read', hint: 'GET, HEAD, OPTIONS' },
+  create: { name: 'Create', hint: 'POST' },
+  update: { name: 'Update', hint: 'PUT, PATCH and other methods' },
+  delete: { name: 'Delete', hint: 'DELETE' },
+}
+
+// A call's class comes from its method alone; a method not named here is an update.
+const METHOD_CLASS: Record<string, OperationClass> = {
+  GET: 'read',
+  HEAD: 'read',
+  OPTIONS: 'read',
+  POST: 'create',
+  PUT: 'update',
+  PATCH: 'update',
+  DELETE: 'delete',
 }
 
 export type PolicyMatch = { methods?: string[]; path?: string }
@@ -155,6 +167,7 @@ export const describeTarget = (target: { class?: OperationClass; match?: PolicyM
 
 // --- The editor's draft --------------------------------------------------
 
+/** A rule by method and path. */
 export type AdvancedRuleDraft = {
   id: string
   methods: string[]
@@ -162,9 +175,12 @@ export type AdvancedRuleDraft = {
   effect: PolicyEffect
 }
 
+/** A row's choice: an effect of its own, or `default` to follow the Default switch. */
+export type RowChoice = PolicyEffect | 'default'
+
 export type PolicyDraft = {
   default: PolicyEffect
-  classes: Record<OperationClass, PolicyEffect>
+  classes: Record<OperationClass, RowChoice>
   advanced: AdvancedRuleDraft[]
 }
 
@@ -178,48 +194,11 @@ const STRENGTH: Record<PolicyEffect, number> = { allow: 0, ask: 1, block: 2 }
 const strongest = (left: PolicyEffect, right: PolicyEffect) =>
   STRENGTH[right] > STRENGTH[left] ? right : left
 
-/**
- * A policy as the editor shows it. Several rules for one class mean the strongest, as the proxy reads them.
- * Rules the editor cannot express, such as `credential_minting`, are left out.
- */
-export const draftFromPolicy = (value: unknown): PolicyDraft => {
-  const policy = readPolicy(value)
-  const classes = Object.fromEntries(
-    OPERATION_CLASSES.map((name) => [name, policy.default])
-  ) as Record<OperationClass, PolicyEffect>
-  const seen = new Set<OperationClass>()
-  const advanced: AdvancedRuleDraft[] = []
-  for (const rule of policy.rules) {
-    if ('class' in rule) {
-      classes[rule.class] = seen.has(rule.class)
-        ? strongest(classes[rule.class], rule.effect)
-        : rule.effect
-      seen.add(rule.class)
-    } else {
-      advanced.push({
-        id: newAdvancedRule().id,
-        methods: [...(rule.match.methods ?? [])],
-        path: rule.match.path ?? '',
-        effect: rule.effect,
-      })
-    }
-  }
-  return { default: policy.default, classes, advanced }
+/** The effect a row takes: its own, or the Default's. */
+export const rowEffect = (draft: PolicyDraft, name: OperationClass): PolicyEffect => {
+  const choice = draft.classes[name]
+  return choice === 'default' ? draft.default : choice
 }
-
-/**
- * "Everything else" changed: rows that were following it keep following it.
- */
-export const withDefault = (draft: PolicyDraft, effect: PolicyEffect): PolicyDraft => ({
-  ...draft,
-  default: effect,
-  classes: Object.fromEntries(
-    OPERATION_CLASSES.map((name) => [
-      name,
-      draft.classes[name] === draft.default ? effect : draft.classes[name],
-    ])
-  ) as Record<OperationClass, PolicyEffect>,
-})
 
 /** The advanced rule as the backend stores it, or null while it is incomplete. */
 const advancedRule = (rule: AdvancedRuleDraft): PolicyRule | null => {
@@ -232,27 +211,59 @@ const advancedRule = (rule: AdvancedRuleDraft): PolicyRule | null => {
 }
 
 /**
- * The class rows that need a rule. A row equal to "Everything else" still needs one
- * when a path rule is weaker: the proxy applies the strongest matching rule, so
- * without it that weaker rule would decide the class's calls.
+ * Whether rows on Default need rules of their own: the proxy applies the strongest
+ * matching rule, so an HTTP rule weaker than Default would otherwise decide their calls.
  */
+const defaultNeedsRules = (draft: PolicyDraft): boolean =>
+  draft.advanced.some(
+    (rule) => advancedRule(rule) !== null && STRENGTH[rule.effect] < STRENGTH[draft.default]
+  )
+
+/** The rows that are saved as class rules: each one set, and every one when Default needs it. */
 const classRuleNames = (draft: PolicyDraft): OperationClass[] => {
-  const weakest = draft.advanced.reduce<number | null>(
-    (lowest, rule) =>
-      lowest === null ? STRENGTH[rule.effect] : Math.min(lowest, STRENGTH[rule.effect]),
-    null
-  )
-  return OPERATION_CLASSES.filter(
-    (name) =>
-      draft.classes[name] !== draft.default ||
-      (weakest !== null && weakest < STRENGTH[draft.classes[name]])
-  )
+  const all = defaultNeedsRules(draft)
+  return OPERATION_CLASSES.filter((name) => all || draft.classes[name] !== 'default')
+}
+
+/**
+ * A policy as the editor shows it. A class rule sets its row; several for one class mean the
+ * strongest, as the proxy reads them. Rules the editor cannot express, such as
+ * `credential_minting`, are left out.
+ */
+export const draftFromPolicy = (value: unknown): PolicyDraft => {
+  const policy = readPolicy(value)
+  const classes = Object.fromEntries(OPERATION_CLASSES.map((name) => [name, 'default'])) as Record<
+    OperationClass,
+    RowChoice
+  >
+  const advanced: AdvancedRuleDraft[] = []
+  for (const rule of policy.rules) {
+    if ('class' in rule) {
+      const choice = classes[rule.class]
+      classes[rule.class] = choice === 'default' ? rule.effect : strongest(choice, rule.effect)
+    } else {
+      advanced.push({
+        id: newAdvancedRule().id,
+        methods: [...(rule.match.methods ?? [])],
+        path: rule.match.path ?? '',
+        effect: rule.effect,
+      })
+    }
+  }
+  const draft: PolicyDraft = { default: policy.default, classes, advanced }
+  // Rows on Default were saved as rules equal to Default for a weaker HTTP rule: read them back so.
+  if (defaultNeedsRules(draft))
+    for (const name of OPERATION_CLASSES)
+      if (classes[name] === policy.default) classes[name] = 'default'
+  return draft
 }
 
 /** The policy a draft stands for, or null when it is the default: allow, no rules. */
 export const policyFromDraft = (draft: PolicyDraft): AccessPolicy | null => {
-  const rules: PolicyRule[] = []
-  for (const name of classRuleNames(draft)) rules.push({ class: name, effect: draft.classes[name] })
+  const rules: PolicyRule[] = classRuleNames(draft).map((name) => ({
+    class: name,
+    effect: rowEffect(draft, name),
+  }))
   for (const rule of draft.advanced) {
     const built = advancedRule(rule)
     if (built) rules.push(built)
@@ -289,47 +300,26 @@ export const samePolicy = (left: PolicyDraft, right: PolicyDraft): boolean =>
 /** What the mutation sends: the policy, or null to clear it. */
 export const policyPayload = (draft: PolicyDraft): AccessPolicy | null => policyFromDraft(draft)
 
+/** The rows an HTTP rule's methods fall under: all four when it names none. */
+export const ruleRows = (rule: Pick<AdvancedRuleDraft, 'methods'>): OperationClass[] =>
+  rule.methods.length === 0
+    ? [...OPERATION_CLASSES]
+    : OPERATION_CLASSES.filter((name) =>
+        rule.methods.some((method) => (METHOD_CLASS[method] ?? 'update') === name)
+      )
+
 /**
- * A short phrase for a Connection's row when the policy restricts anything, such as
- * "2 blocked, 1 ask"; '' for a policy that allows everything.
+ * Whether an HTTP rule can change any answer. A matching call gets the stricter of the
+ * rule and its row, so a rule no stricter than each row it falls under changes nothing.
  */
-export const policySummary = (value: unknown): string => {
-  const policy = readPolicy(value)
-  // A class rule equal to the default is counted by "the rest".
-  const rules = policy.rules.filter((rule) => !('class' in rule) || rule.effect !== policy.default)
-  const blocked = rules.filter((rule) => rule.effect === 'block').length
-  const asked = rules.filter((rule) => rule.effect === 'ask').length
-  const parts: string[] = []
-  if (blocked > 0) parts.push(`${blocked} blocked`)
-  if (asked > 0) parts.push(`${asked} ask`)
-  if (policy.default === 'block') parts.push('the rest blocked')
-  else if (policy.default === 'ask') parts.push('the rest ask')
-  return parts.join(', ')
-}
+export const ruleTakesEffect = (draft: PolicyDraft, rule: AdvancedRuleDraft): boolean =>
+  ruleRows(rule).some((name) => STRENGTH[rule.effect] > STRENGTH[rowEffect(draft, name)])
 
-export type PolicyOverview = {
-  /** What each class of call is set to, in the editor's order. */
-  classes: Array<{ name: string; effect: PolicyEffect }>
-  default: PolicyEffect
-  /** Rules by method and path. */
-  rules: Array<{ label: string; effect: PolicyEffect }>
-}
-
-/** A policy laid out for reading, the way the editor shows it. */
-export const policyOverview = (value: unknown): PolicyOverview => {
+/** Whether a policy stops or holds back any call: a row or an HTTP rule that is not Allow. */
+export const policyRestricts = (value: unknown): boolean => {
   const draft = draftFromPolicy(value)
-  return {
-    classes: OPERATION_CLASSES.map((name) => ({
-      name: CLASS_LABEL[name].name,
-      effect: draft.classes[name],
-    })),
-    default: draft.default,
-    rules: draft.advanced.map((rule) => ({
-      label: describeMatch({
-        methods: rule.methods.length > 0 ? rule.methods : undefined,
-        path: rule.path || undefined,
-      }),
-      effect: rule.effect,
-    })),
-  }
+  return (
+    OPERATION_CLASSES.some((name) => rowEffect(draft, name) !== 'allow') ||
+    draft.advanced.some((rule) => rule.effect !== 'allow')
+  )
 }

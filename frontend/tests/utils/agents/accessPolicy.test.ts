@@ -1,35 +1,53 @@
 import {
+  EFFECTS,
+  HTTP_METHODS,
   OPERATION_CLASSES,
   describeTarget,
   draftFromPolicy,
   newAdvancedRule,
-  policyOverview,
   readManagedPolicies,
   policyFromDraft,
   policyPayload,
   policyProblem,
-  policySummary,
+  policyRestricts,
   readPolicy,
   readTemporaryAllows,
+  rowEffect,
+  ruleRows,
+  ruleTakesEffect,
   samePolicy,
-  withDefault,
+  type AccessPolicy,
+  type AdvancedRuleDraft,
+  type OperationClass,
   type PolicyDraft,
+  type PolicyEffect,
+  type RowChoice,
 } from '@/utils/agents/accessPolicy'
 
 const everything = (draft: PolicyDraft) => JSON.stringify(policyFromDraft(draft))
 
+const withRow = (draft: PolicyDraft, name: OperationClass, choice: RowChoice): PolicyDraft => ({
+  ...draft,
+  classes: { ...draft.classes, [name]: choice },
+})
+
 describe('access policy drafts', () => {
+  test('four rows, no Admin', () => {
+    expect(OPERATION_CLASSES).toEqual(['read', 'create', 'update', 'delete'])
+  })
+
   test('no policy, an empty one and the default are all the plain default', () => {
     for (const stored of [null, undefined, {}, { version: 1, default: 'allow', rules: [] }]) {
       const draft = draftFromPolicy(stored)
       expect(draft.default).toBe('allow')
-      expect(OPERATION_CLASSES.every((name) => draft.classes[name] === 'allow')).toBe(true)
+      expect(OPERATION_CLASSES.every((name) => draft.classes[name] === 'default')).toBe(true)
+      expect(OPERATION_CLASSES.every((name) => rowEffect(draft, name) === 'allow')).toBe(true)
       expect(draft.advanced).toEqual([])
       expect(policyPayload(draft)).toBeNull()
     }
   })
 
-  test('class rules fill their rows and are written back in a fixed order', () => {
+  test('a class rule sets its row, and set rows are written back in a fixed order', () => {
     const draft = draftFromPolicy({
       version: 1,
       default: 'allow',
@@ -38,9 +56,12 @@ describe('access policy drafts', () => {
         { class: 'create', effect: 'ask' },
       ],
     })
-    expect(draft.classes.delete).toBe('block')
-    expect(draft.classes.create).toBe('ask')
-    expect(draft.classes.read).toBe('allow')
+    expect(draft.classes).toEqual({
+      read: 'default',
+      create: 'ask',
+      update: 'default',
+      delete: 'block',
+    })
     expect(policyPayload(draft)).toEqual({
       version: 1,
       default: 'allow',
@@ -51,28 +72,20 @@ describe('access policy drafts', () => {
     })
   })
 
-  test('setting every row back to the default clears the policy', () => {
+  test('the Default switch moves every row on Default and no row that is set', () => {
     const draft = draftFromPolicy({
       version: 1,
       default: 'allow',
       rules: [{ class: 'delete', effect: 'block' }],
     })
-    const cleared = { ...draft, classes: { ...draft.classes, delete: 'allow' as const } }
-    expect(policyPayload(cleared)).toBeNull()
-    expect(samePolicy(cleared, draftFromPolicy(null))).toBe(true)
-  })
-
-  test('rows that follow "Everything else" follow it when it changes', () => {
-    const base = draftFromPolicy({
-      version: 1,
-      default: 'allow',
-      rules: [{ class: 'delete', effect: 'block' }],
-    })
-    const next = withDefault(base, 'ask')
-    expect(next.default).toBe('ask')
-    expect(next.classes.read).toBe('ask')
-    expect(next.classes.delete).toBe('block')
-    // Only the one row that differs from the new default needs a rule.
+    const next = { ...draft, default: 'ask' as const }
+    expect(OPERATION_CLASSES.map((name) => rowEffect(next, name))).toEqual([
+      'ask',
+      'ask',
+      'ask',
+      'block',
+    ])
+    // Only the row that is set needs a rule.
     expect(policyPayload(next)).toEqual({
       version: 1,
       default: 'ask',
@@ -80,14 +93,42 @@ describe('access policy drafts', () => {
     })
   })
 
-  test('an allow row under a restrictive default is kept as a rule', () => {
-    const draft = withDefault(draftFromPolicy(null), 'block')
-    const allowed = { ...draft, classes: { ...draft.classes, read: 'allow' as const } }
-    expect(policyPayload(allowed)).toEqual({
+  test('a row set to the effect Default has keeps it when Default moves, after a save too', () => {
+    const draft = withRow(draftFromPolicy(null), 'read', 'allow')
+    const saved = policyPayload(draft)
+    expect(saved).toEqual({
       version: 1,
-      default: 'block',
+      default: 'allow',
       rules: [{ class: 'read', effect: 'allow' }],
     })
+    const reopened = draftFromPolicy(saved)
+    expect(reopened.classes.read).toBe('allow')
+    const blocked = { ...reopened, default: 'block' as const }
+    expect(rowEffect(blocked, 'read')).toBe('allow')
+    expect(rowEffect(blocked, 'create')).toBe('block')
+  })
+
+  test('choosing Default for a row makes it follow again', () => {
+    const draft = draftFromPolicy({
+      version: 1,
+      default: 'ask',
+      rules: [{ class: 'delete', effect: 'block' }],
+    })
+    const following = withRow(draft, 'delete', 'default')
+    expect(rowEffect(following, 'delete')).toBe('ask')
+    expect(policyPayload(following)).toEqual({ version: 1, default: 'ask', rules: [] })
+    expect(rowEffect({ ...following, default: 'block' }, 'delete')).toBe('block')
+  })
+
+  test('every row back on Default with Default at Allow clears the policy', () => {
+    const draft = draftFromPolicy({
+      version: 1,
+      default: 'allow',
+      rules: [{ class: 'delete', effect: 'block' }],
+    })
+    const cleared = withRow(draft, 'delete', 'default')
+    expect(policyPayload(cleared)).toBeNull()
+    expect(samePolicy(cleared, draftFromPolicy(null))).toBe(true)
   })
 
   test('never reads or writes credential_minting, which belongs to the secret guard', () => {
@@ -173,23 +214,6 @@ describe('access policy drafts', () => {
     expect(policyProblem(draft)).toBe('')
   })
 
-  test('summarises only what restricts', () => {
-    expect(policySummary(null)).toBe('')
-    expect(policySummary({ version: 1, default: 'allow', rules: [] })).toBe('')
-    expect(
-      policySummary({
-        version: 1,
-        default: 'allow',
-        rules: [
-          { class: 'delete', effect: 'block' },
-          { class: 'update', effect: 'block' },
-          { match: { path: '/x' }, effect: 'ask' },
-        ],
-      })
-    ).toBe('2 blocked, 1 ask')
-    expect(policySummary({ version: 1, default: 'block', rules: [] })).toBe('the rest blocked')
-  })
-
   test('reads temporary allows, dropping expired and malformed ones', () => {
     const now = Date.parse('2026-11-14T10:00:00Z')
     const allows = readTemporaryAllows(
@@ -209,7 +233,7 @@ describe('access policy drafts', () => {
     expect(allows.map((allow) => allow.id)).toEqual(['soon', 'late'])
   })
 
-  test('a class row equal to the default keeps its rule when a path rule is weaker', () => {
+  test('rows on Default get rules of their own when an HTTP rule is weaker, and read back on Default', () => {
     const draft = draftFromPolicy({
       version: 1,
       default: 'block',
@@ -218,16 +242,27 @@ describe('access policy drafts', () => {
         { match: { path: '/jobs/*' }, effect: 'allow' },
       ],
     })
-    const saved = policyFromDraft({ ...draft, classes: { ...draft.classes, read: 'allow' } })
+    // A rule equal to Default beside a weaker HTTP rule is how a row on Default is saved.
+    expect(draft.classes.delete).toBe('default')
+    const saved = policyFromDraft(withRow(draft, 'read', 'allow'))
     // The proxy applies the strongest matching rule: without these, DELETE /jobs/* is allowed.
-    expect(saved?.rules).toContainEqual({ class: 'delete', effect: 'block' })
-    expect(saved?.rules).toContainEqual({ class: 'update', effect: 'block' })
-    expect(saved?.rules).toContainEqual({ class: 'read', effect: 'allow' })
-    expect(saved?.rules).toContainEqual({ match: { path: '/jobs/*' }, effect: 'allow' })
-    expect(policySummary(saved)).toBe('the rest blocked')
+    expect(saved?.rules).toEqual([
+      { class: 'read', effect: 'allow' },
+      { class: 'create', effect: 'block' },
+      { class: 'update', effect: 'block' },
+      { class: 'delete', effect: 'block' },
+      { match: { path: '/jobs/*' }, effect: 'allow' },
+    ])
+    // Those rules equal Default, which is how rows on Default were saved.
+    expect(draftFromPolicy(saved).classes).toEqual({
+      read: 'allow',
+      create: 'default',
+      update: 'default',
+      delete: 'default',
+    })
   })
 
-  test('switching the default keeps a row that shows Block when a path rule allows', () => {
+  test('moving Default above an Allow HTTP rule writes rules for the rows on Default', () => {
     const draft = draftFromPolicy({
       version: 1,
       default: 'allow',
@@ -236,12 +271,17 @@ describe('access policy drafts', () => {
         { match: { path: '/jobs/*' }, effect: 'allow' },
       ],
     })
-    const next = withDefault(draft, 'block')
-    expect(next.classes.delete).toBe('block')
-    expect(policyFromDraft(next)?.rules).toContainEqual({ class: 'delete', effect: 'block' })
+    const next = { ...draft, default: 'ask' as const }
+    expect(policyFromDraft(next)?.rules).toEqual([
+      { class: 'read', effect: 'ask' },
+      { class: 'create', effect: 'ask' },
+      { class: 'update', effect: 'ask' },
+      { class: 'delete', effect: 'block' },
+      { match: { path: '/jobs/*' }, effect: 'allow' },
+    ])
   })
 
-  test('a stronger path rule needs no class rules for rows equal to the default', () => {
+  test('a stronger HTTP rule needs no class rules for rows on Default', () => {
     const draft = draftFromPolicy({
       version: 1,
       default: 'ask',
@@ -282,23 +322,67 @@ describe('reading a policy for display', () => {
     expect(describeTarget({ match: { methods: ['POST'], path: '/v1/x' } })).toBe('POST /v1/x')
   })
 
-  test('an overview lays the rules out for reading', () => {
-    const overview = policyOverview({
+  test('the rows an HTTP rule falls under come from its methods alone', () => {
+    const rows = (methods: string[]) => ruleRows({ methods })
+    expect(rows(['GET', 'HEAD', 'OPTIONS'])).toEqual(['read'])
+    expect(rows(['POST'])).toEqual(['create'])
+    expect(rows(['PUT', 'PATCH', 'CONNECT', 'TRACE'])).toEqual(['update'])
+    expect(rows(['DELETE', 'GET'])).toEqual(['read', 'delete'])
+    // No method: every call on the path.
+    expect(rows([])).toEqual(['read', 'create', 'update', 'delete'])
+  })
+
+  test('an HTTP rule takes effect only where it is stricter than a row it falls under', () => {
+    const draft = draftFromPolicy({
       version: 1,
       default: 'ask',
-      rules: [
-        { class: 'read', effect: 'allow' },
-        { match: { methods: ['POST'], path: '/v1/x/*' }, effect: 'block' },
-      ],
+      rules: [{ class: 'delete', effect: 'block' }],
     })
-    expect(overview.default).toBe('ask')
-    expect(overview.classes.map((item) => `${item.name} ${item.effect}`)).toEqual([
-      'Read allow',
-      'Create ask',
-      'Update ask',
-      'Delete ask',
-    ])
-    expect(overview.rules).toEqual([{ label: 'POST /v1/x/*', effect: 'block' }])
+    const rule = (methods: string[], effect: PolicyEffect): AdvancedRuleDraft => ({
+      ...newAdvancedRule(),
+      methods,
+      path: '/repos/*',
+      effect,
+    })
+    expect(ruleTakesEffect(draft, rule(['DELETE'], 'block'))).toBe(false)
+    expect(ruleTakesEffect(draft, rule(['DELETE'], 'ask'))).toBe(false)
+    expect(ruleTakesEffect(draft, rule(['GET'], 'block'))).toBe(true)
+    expect(ruleTakesEffect(draft, rule(['GET'], 'ask'))).toBe(false)
+    expect(ruleTakesEffect(draft, rule(['GET', 'DELETE'], 'block'))).toBe(true)
+    expect(ruleTakesEffect(draft, rule([], 'block'))).toBe(true)
+    // Allow never loosens a row.
+    for (const methods of [[], ['GET'], ['DELETE']])
+      expect(ruleTakesEffect({ ...draft, default: 'allow' }, rule(methods, 'allow'))).toBe(false)
+  })
+
+  test('a policy restricts when a row or an HTTP rule is not Allow', () => {
+    expect(policyRestricts(null)).toBe(false)
+    expect(
+      policyRestricts({ version: 1, default: 'allow', rules: [{ class: 'read', effect: 'allow' }] })
+    ).toBe(false)
+    expect(policyRestricts({ version: 1, default: 'ask', rules: [] })).toBe(true)
+    expect(
+      policyRestricts({
+        version: 1,
+        default: 'allow',
+        rules: [{ class: 'delete', effect: 'block' }],
+      })
+    ).toBe(true)
+    expect(
+      policyRestricts({
+        version: 1,
+        default: 'allow',
+        rules: [{ match: { methods: ['DELETE'] }, effect: 'block' }],
+      })
+    ).toBe(true)
+    // Every call is one of the four rows, so a Default no row follows stops nothing.
+    expect(
+      policyRestricts({
+        version: 1,
+        default: 'block',
+        rules: OPERATION_CLASSES.map((name) => ({ class: name, effect: 'allow' })),
+      })
+    ).toBe(false)
   })
 
   test('managed policies are read as listed, ignoring what is not shaped like one', () => {
@@ -321,5 +405,150 @@ describe('reading a policy for display', () => {
     ])
     expect(readManagedPolicies([])).toEqual([])
     expect(readManagedPolicies(undefined)).toEqual([])
+  })
+})
+
+describe('what is saved is what the editor shows', () => {
+  const STRICTNESS: Record<PolicyEffect, number> = { allow: 0, ask: 1, block: 2 }
+  const stricter = (left: PolicyEffect, right: PolicyEffect) =>
+    STRICTNESS[right] > STRICTNESS[left] ? right : left
+  const ROW: Record<string, OperationClass> = {
+    GET: 'read',
+    HEAD: 'read',
+    OPTIONS: 'read',
+    POST: 'create',
+    PUT: 'update',
+    PATCH: 'update',
+    DELETE: 'delete',
+    CONNECT: 'update',
+    TRACE: 'update',
+  }
+  const matches = (rule: { methods?: string[]; path?: string }, method: string, path: string) =>
+    (!rule.methods || rule.methods.includes(method)) &&
+    (!rule.path || new RegExp(`^${rule.path.split('*').join('.*')}$`).test(path))
+
+  // As the proxy answers a call: the strictest rule that matches, else the policy's default.
+  const answer = (policy: AccessPolicy | null, method: string, path: string): PolicyEffect => {
+    if (!policy) return 'allow'
+    const effects = policy.rules
+      .filter((rule) =>
+        'class' in rule ? rule.class === ROW[method] : matches(rule.match, method, path)
+      )
+      .map((rule) => rule.effect)
+    return effects.length ? effects.reduce(stricter) : policy.default
+  }
+
+  // As the editor shows it: the call's row, made stricter by any HTTP rule that matches.
+  const shown = (draft: PolicyDraft, method: string, path: string): PolicyEffect =>
+    draft.advanced
+      .filter((rule) =>
+        matches(
+          { methods: rule.methods.length ? rule.methods : undefined, path: rule.path },
+          method,
+          path
+        )
+      )
+      .map((rule) => rule.effect)
+      .reduce(stricter, rowEffect(draft, ROW[method]))
+
+  const http = (methods: string[], path: string, effect: PolicyEffect): AdvancedRuleDraft => ({
+    ...newAdvancedRule(),
+    methods,
+    path,
+    effect,
+  })
+  const RULE_SETS: AdvancedRuleDraft[][] = [
+    [],
+    [http(['GET'], '/jobs/*', 'allow')],
+    [http(['DELETE'], '/jobs/*', 'ask')],
+    [http([], '/jobs/*', 'block')],
+    [http([], '/jobs/*', 'allow'), http(['POST', 'DELETE'], '/jobs/x', 'block')],
+    [http(['PATCH'], '/jobs/*', 'ask'), http(['GET', 'HEAD'], '/jobs/x', 'allow')],
+  ]
+  const CHOICES: RowChoice[] = ['default', ...EFFECTS]
+  const drafts = function* (): Generator<PolicyDraft> {
+    for (const fallback of EFFECTS)
+      for (const advanced of RULE_SETS)
+        for (let index = 0; index < CHOICES.length ** OPERATION_CLASSES.length; index += 1) {
+          const classes = Object.fromEntries(
+            OPERATION_CLASSES.map((name, position) => [
+              name,
+              CHOICES[Math.floor(index / CHOICES.length ** position) % CHOICES.length],
+            ])
+          ) as Record<OperationClass, RowChoice>
+          yield { default: fallback, classes, advanced }
+        }
+  }
+
+  const label = (draft: PolicyDraft) =>
+    JSON.stringify(draft, [
+      'default',
+      'classes',
+      ...OPERATION_CLASSES,
+      'advanced',
+      'methods',
+      'path',
+      'effect',
+    ])
+
+  test('every call gets the answer the editor shows, for every Default, row and HTTP rule', () => {
+    const wrong: string[] = []
+    let checked = 0
+    for (const draft of drafts()) {
+      const saved = policyFromDraft(draft)
+      for (const method of HTTP_METHODS)
+        for (const path of ['/jobs/x', '/jobs/y', '/other']) {
+          checked += 1
+          if (answer(saved, method, path) !== shown(draft, method, path))
+            wrong.push(`${method} ${path} on ${label(draft)}`)
+        }
+    }
+    expect(wrong).toEqual([])
+    expect(checked).toBe(3 * RULE_SETS.length * 256 * HTTP_METHODS.length * 3)
+  })
+
+  test('reopening a saved policy shows the same rows and saves the same policy', () => {
+    const wrong: string[] = []
+    for (const draft of drafts()) {
+      const reopened = draftFromPolicy(policyFromDraft(draft))
+      // Rows on Default are saved as rules equal to Default when an HTTP rule is weaker,
+      // so then a row set to that same effect reads back on Default.
+      const weaker = draft.advanced.some(
+        (rule) => STRICTNESS[rule.effect] < STRICTNESS[draft.default]
+      )
+      const rows = OPERATION_CLASSES.every(
+        (name) =>
+          rowEffect(reopened, name) === rowEffect(draft, name) &&
+          (reopened.classes[name] === draft.classes[name] ||
+            (weaker &&
+              draft.classes[name] === draft.default &&
+              reopened.classes[name] === 'default'))
+      )
+      if (reopened.default !== draft.default || !rows || !samePolicy(reopened, draft))
+        wrong.push(label(draft))
+    }
+    expect(wrong).toEqual([])
+  })
+
+  test('a rule said to have no effect changes no answer, and with one rule the reverse holds', () => {
+    const wrong: string[] = []
+    for (const draft of drafts()) {
+      const saved = policyFromDraft(draft)
+      for (const rule of draft.advanced) {
+        const without = policyFromDraft({
+          ...draft,
+          advanced: draft.advanced.filter((other) => other !== rule),
+        })
+        const changes = HTTP_METHODS.some((method) =>
+          ['/jobs/x', '/jobs/y'].some(
+            (path) => answer(saved, method, path) !== answer(without, method, path)
+          )
+        )
+        const takesEffect = ruleTakesEffect(draft, rule)
+        if ((!takesEffect && changes) || (draft.advanced.length === 1 && takesEffect !== changes))
+          wrong.push(`${rule.methods.join(',')} ${rule.path} ${rule.effect} on ${label(draft)}`)
+      }
+    }
+    expect(wrong).toEqual([])
   })
 })

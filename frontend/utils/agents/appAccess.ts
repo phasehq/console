@@ -3,7 +3,7 @@
  * backend is the authority; this file reads what it sends and words it.
  */
 
-import { draftFromPolicy, type PolicyEffect } from '@/utils/agents/accessPolicy'
+import { draftFromPolicy, rowEffect, type PolicyEffect } from '@/utils/agents/accessPolicy'
 
 export const APP_SERVICE_TYPE = 'phase_app'
 
@@ -163,12 +163,17 @@ const EFFECT_WORD: Record<PolicyEffect, string> = {
   block: 'blocked',
 }
 
-/** The rules of an app Connection in a few words: "Reads allowed, writes ask". */
-export const appPolicySummary = (policy: unknown): string => {
-  const { classes } = draftFromPolicy(policy)
+/**
+ * A Connection's rules in a few words, the same for every kind of Connection: "Reads
+ * allowed, writes ask", then how many HTTP rules it has.
+ */
+export const policySummary = (policy: unknown): string => {
+  const draft = draftFromPolicy(policy)
   const byEffect = new Map<PolicyEffect, AppClass[]>()
-  for (const name of APP_CLASSES)
-    byEffect.set(classes[name], [...(byEffect.get(classes[name]) ?? []), name])
+  for (const name of APP_CLASSES) {
+    const effect = rowEffect(draft, name)
+    byEffect.set(effect, [...(byEffect.get(effect) ?? []), name])
+  }
   const parts = (['allow', 'ask', 'block'] as const).flatMap((effect) => {
     const names = byEffect.get(effect)
     if (!names) return []
@@ -177,7 +182,8 @@ export const appPolicySummary = (policy: unknown): string => {
     )
     return [`${listWords(words)} ${EFFECT_WORD[effect]}`]
   })
-  return capitalise(parts.join(', '))
+  const rules = draft.advanced.length
+  return `${capitalise(parts.join(', '))}${rules ? ` · ${rules} HTTP rule${rules === 1 ? '' : 's'}` : ''}`
 }
 
 /** The name a new app Connection starts with. */

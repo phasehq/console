@@ -668,7 +668,7 @@ describe('AgentEventLog access rules', () => {
     ])
 
     expect(container.textContent).toContain('Credential minting · Secret guard')
-    expect(container.textContent).toContain('Update · Everything else')
+    expect(container.textContent).toContain('Update · Default')
     expect(container.textContent).toContain('POST /v1/x/*: Block')
   })
 

@@ -158,7 +158,8 @@ describe('blocked host actions', () => {
     expect(agentConnectionTakesHostOverride('aws', new Map())).toBe(false)
   })
 
-  test('describes the rule that decided a call by class or by method and path', () => {
+  test('describes the rule that decided a call: Default, a class, or a method and path', () => {
+    expect(describePolicyRule('default')).toBe('Default')
     expect(describePolicyRule({ class: 'delete', effect: 'block' })).toBe('Delete calls: Block')
     expect(
       describePolicyRule({ match: { methods: ['POST'], path: '/v1/x/*' }, effect: 'ask' })

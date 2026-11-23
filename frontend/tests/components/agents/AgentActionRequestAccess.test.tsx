@@ -186,6 +186,9 @@ describe('reviewing requests for access, renewals and context', () => {
       expect(text).toContain('Allow DELETE /repos/acme/x')
       expect(text).toContain('This is temporary')
       expect(text).toContain('asked for 1 hour')
+      expect(text).toContain(
+        "The Connection's rules now: reads, create and update allowed, delete ask."
+      )
     })
 
     test('starts at the requested duration and never offers until revoked', async () => {

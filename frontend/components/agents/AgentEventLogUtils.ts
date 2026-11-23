@@ -146,7 +146,7 @@ const titleCase = (value: string) =>
 
 /** The rule in force, as the proxy recorded it, in words. Plain text only. */
 export const describePolicyRule = (rule: unknown): string => {
-  if (rule === 'default') return 'Everything else'
+  if (rule === 'default') return 'Default'
   if (rule === 'secret_guard') return 'Secret guard'
   if (typeof rule === 'string') return rule
   if (!isRecordValue(rule)) return ''

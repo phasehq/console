@@ -201,12 +201,14 @@ describe('app Connections on the Connections page', () => {
     expect(details.textContent).toContain('Development, Staging')
     const rules = details.querySelector('[aria-label="Access rules in force"]')!
     expect(Array.from(rules.querySelectorAll('li')).map((item) => item.textContent)).toEqual([
-      'ReadAllow',
-      'CreateAsk',
-      'UpdateAsk',
-      'DeleteAsk',
+      'DefaultAllow',
+      'Read List secrets and read their valuesDefault · Allow',
+      'Create Add new secretsAsk',
+      'Update Change secrets that existAsk',
+      'Delete Remove secretsAsk',
     ])
     expect(details.textContent).not.toContain('Everything else')
+    expect(details.textContent).not.toContain('HTTP rule')
     expect(details.textContent).not.toContain('Managed by Phase')
     expect(details.textContent).not.toContain('Integration credentials')
   })
@@ -505,7 +507,7 @@ describe('editing an app Connection', () => {
 })
 
 describe('the rules editor for an app Connection', () => {
-  test('offers only read, create, update and delete, with no other rules', async () => {
+  test('the same Default switch and four rows, in the words of secrets, with no HTTP rules', async () => {
     const onChange = jest.fn()
     await act(async () =>
       root.render(
@@ -516,16 +518,35 @@ describe('the rules editor for an app Connection', () => {
       group.getAttribute('aria-label')
     )
 
-    expect(groups).toEqual(['Read calls', 'Create calls', 'Update calls', 'Delete calls'])
-    expect(container.textContent).toContain('List secrets and read their values')
+    expect(groups).toEqual([
+      'Default',
+      'Read calls',
+      'Create calls',
+      'Update calls',
+      'Delete calls',
+    ])
+    for (const words of [
+      'List secrets and read their values',
+      'Add new secrets',
+      'Change secrets that exist',
+      'Remove secrets',
+    ])
+      expect(container.textContent).toContain(words)
+    expect(container.textContent).not.toContain('GET, HEAD, OPTIONS')
     expect(container.textContent).not.toContain('Everything else')
-    expect(container.textContent).not.toContain('Advanced')
+    expect(container.textContent).not.toContain('HTTP rule')
     expect(container.textContent).not.toContain('Admin')
 
-    const allowDeletes = container.querySelector<HTMLButtonElement>(
-      '[aria-label="Delete calls"] [role="radio"]'
-    )!
-    expect(allowDeletes.textContent).toBe('Allow')
+    const checked = (label: string) =>
+      container.querySelector(`[aria-label="${label}"] [aria-checked="true"]`)!.textContent
+    // Reads allowed, writes ask: reads follow Default, the writes are set.
+    expect(checked('Default')).toBe('Allow')
+    expect(checked('Read calls')).toBe('Default · Allow')
+    expect(checked('Delete calls')).toBe('Ask')
+
+    const allowDeletes = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[aria-label="Delete calls"] [role="radio"]')
+    ).find((button) => button.textContent === 'Allow')!
     await act(async () => allowDeletes.click())
     expect(onChange.mock.calls[0][0].classes.delete).toBe('allow')
   })

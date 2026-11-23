@@ -61,7 +61,7 @@ import {
   EditCustomConnectionDialog,
 } from '@/components/agents/CustomConnectionDialogs'
 import { EditAppConnectionDialog } from '@/components/agents/AppConnectionDialogs'
-import { appPolicySummary, isAppConnection } from '@/utils/agents/appAccess'
+import { isAppConnection, policySummary } from '@/utils/agents/appAccess'
 import {
   describeHttpHost,
   httpPresetLabel,
@@ -342,7 +342,7 @@ export default function AgentConnectionsPage() {
                             {appSecrets
                               ? !appGone && (
                                   <span className="whitespace-nowrap text-2xs font-medium text-neutral-500">
-                                    {appPolicySummary(connection.policy)}
+                                    {policySummary(connection.policy)}
                                   </span>
                                 )
                               : connection.takesPolicy && (

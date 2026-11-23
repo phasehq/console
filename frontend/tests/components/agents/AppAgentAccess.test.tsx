@@ -6,7 +6,7 @@ import { AgentActor } from '@/components/agents/AgentActor'
 import { GetAppAgentAccess } from '@/graphql/queries/apps/getAppAgentAccess.gql'
 import { AGENT_HARNESS_META } from '@/components/agents/AgentBrandIcons'
 import {
-  appPolicySummary,
+  policySummary,
   describeAppAccess,
   formatAccessTime,
   readAppAccess,
@@ -247,20 +247,24 @@ describe('app access in words', () => {
 
   test('the rules of an app Connection in a few words', () => {
     expect(
-      appPolicySummary({
+      policySummary({
         version: 1,
         default: 'allow',
         rules: ['create', 'update', 'delete'].map((name) => ({ class: name, effect: 'ask' })),
       })
     ).toBe('Reads allowed, writes ask')
     expect(
-      appPolicySummary({
+      policySummary({
         version: 1,
         default: 'allow',
         rules: [{ class: 'delete', effect: 'block' }],
       })
     ).toBe('Reads, create and update allowed, delete blocked')
-    expect(appPolicySummary(null)).toBe('Reads and writes allowed')
+    expect(policySummary(null)).toBe('Reads and writes allowed')
+    // Rows on Default take its effect.
+    expect(
+      policySummary({ version: 1, default: 'ask', rules: [{ class: 'read', effect: 'allow' }] })
+    ).toBe('Reads allowed, writes ask')
   })
 })
 

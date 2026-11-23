@@ -3,15 +3,7 @@
 import { FormEvent, useId, useRef, useState } from 'react'
 import { useMutation } from '@apollo/client'
 import clsx from 'clsx'
-import {
-  FaCheck,
-  FaChevronDown,
-  FaChevronRight,
-  FaEdit,
-  FaLock,
-  FaPlus,
-  FaTrashAlt,
-} from 'react-icons/fa'
+import { FaCheck, FaEdit, FaLock, FaPlus, FaTrashAlt } from 'react-icons/fa'
 import { toast } from 'react-toastify'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Alert } from '@/components/common/Alert'
@@ -25,23 +17,27 @@ import {
   EFFECT_LABEL,
   OPERATION_CLASSES,
   POLICY_LIMITS,
+  describeMatch,
   draftFromPolicy,
   newAdvancedRule,
-  policyOverview,
   policyPayload,
   policyProblem,
-  policySummary,
+  policyRestricts,
   readManagedPolicies,
+  rowEffect,
+  ruleRows,
+  ruleTakesEffect,
   samePolicy,
-  withDefault,
   type AdvancedRuleDraft,
   type ManagedPolicy,
+  type OperationClass,
   type PolicyDraft,
   type PolicyEffect,
+  type RowChoice,
 } from '@/utils/agents/accessPolicy'
-import { APP_CLASSES, APP_CLASS_HINT, isAppConnection } from '@/utils/agents/appAccess'
+import { APP_CLASS_HINT, isAppConnection, listWords, policySummary } from '@/utils/agents/appAccess'
 
-/** `app`: an app Connection, which has only the four classes of the secrets API. */
+/** `app`: an app Connection, whose four classes are the secrets API's and which takes no HTTP rules. */
 export type PolicyVariant = 'http' | 'app'
 
 const EFFECT_STYLE: Record<PolicyEffect, string> = {
@@ -50,16 +46,54 @@ const EFFECT_STYLE: Record<PolicyEffect, string> = {
   block: 'bg-red-600 text-white dark:bg-red-400/20 dark:text-red-300',
 }
 
+// A row on Default shows the Default's effect in its colour, lighter than an effect of its own.
+const FOLLOWING_STYLE: Record<PolicyEffect, string> = {
+  allow: 'bg-emerald-500/15 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-400',
+  ask: 'bg-amber-500/15 text-amber-800 dark:bg-amber-400/10 dark:text-amber-400',
+  block: 'bg-red-500/15 text-red-800 dark:bg-red-400/10 dark:text-red-400',
+}
+
 const EFFECT_OPTIONS = EFFECTS.map((effect) => ({
   value: effect,
   label: EFFECT_LABEL[effect],
   selectedClass: EFFECT_STYLE[effect],
 }))
 
+// A rule that changes nothing does not show its effect in colour.
+const INERT_OPTIONS = EFFECT_OPTIONS.map((option) => ({
+  ...option,
+  selectedClass: 'bg-neutral-500/20 text-neutral-700 dark:text-neutral-300',
+}))
+
+/** A row's choices: Default, with the effect it gives the row now, then an effect of its own. */
+const rowOptions = (fallback: PolicyEffect) => [
+  {
+    value: 'default' as RowChoice,
+    label: `Default · ${EFFECT_LABEL[fallback]}`,
+    selectedClass: FOLLOWING_STYLE[fallback],
+  },
+  ...EFFECT_OPTIONS,
+]
+
 const EFFECT_TEXT: Record<PolicyEffect, string> = {
   allow: 'text-emerald-700 dark:text-emerald-400',
   ask: 'text-amber-700 dark:text-amber-400',
   block: 'text-red-700 dark:text-red-400',
+}
+
+/** What a row covers: HTTP methods, or on an app Connection what it does with secrets. */
+const rowHint = (name: OperationClass, app: boolean) =>
+  app ? APP_CLASS_HINT[name] : CLASS_LABEL[name].hint
+
+/** Why an HTTP rule changes nothing, or '' when it can change an answer. */
+const noEffectLine = (draft: PolicyDraft, rule: AdvancedRuleDraft): string => {
+  if (ruleTakesEffect(draft, rule)) return ''
+  if (rule.effect === 'allow') return 'No effect: a rule can only make calls stricter.'
+  const rows = ruleRows(rule)
+  const effects = EFFECTS.filter((effect) => rows.some((name) => rowEffect(draft, name) === effect))
+  return `No effect: ${listWords(rows.map((name) => CLASS_LABEL[name].name))} ${
+    rows.length === 1 ? 'is' : 'are'
+  } already ${effects.map((effect) => EFFECT_LABEL[effect]).join(' or ')}.`
 }
 
 const MANAGED_NAME: Record<string, string> = { secret_guard: 'Secret guard' }
@@ -112,8 +146,8 @@ export function ManagedPolicies({ entries }: { entries: unknown }) {
 }
 
 /**
- * The rules of one Connection: an effect per class of call, a default for the rest, and
- * method/path rules under Advanced.
+ * The rules of one Connection: a Default, a row per class of call that follows it until set,
+ * and rules by method and path.
  */
 export function PolicyEditor({
   draft,
@@ -126,7 +160,6 @@ export function PolicyEditor({
 }) {
   const app = variant === 'app'
   const id = useId()
-  const [advancedOpen, setAdvancedOpen] = useState(draft.advanced.length > 0)
   const problem = policyProblem(draft)
   const setRule = (rule: AdvancedRuleDraft, patch: Partial<AdvancedRuleDraft>) =>
     onChange({
@@ -136,132 +169,117 @@ export function PolicyEditor({
       ),
     })
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <section aria-label="Access rules" className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3">
+          <div className="min-w-0">
+            <p className="text-xs font-medium">Default</p>
+            <p className="text-2xs text-neutral-500">Rows set to Default follow this.</p>
+          </div>
+          <ChoiceGroup
+            label="Default"
+            value={draft.default}
+            options={EFFECT_OPTIONS}
+            onChange={(effect) => onChange({ ...draft, default: effect })}
+          />
+        </div>
         <ul className="divide-y divide-neutral-500/10 rounded-lg border border-neutral-500/20">
-          {(app ? APP_CLASSES : OPERATION_CLASSES).map((name) => (
-            <li key={name} className="flex items-center justify-between gap-3 px-3 py-2">
+          {OPERATION_CLASSES.map((name) => (
+            <li
+              key={name}
+              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2"
+            >
               <div className="min-w-0">
                 <p className="text-xs font-medium">{CLASS_LABEL[name].name}</p>
-                <p className="text-2xs text-neutral-500">
-                  {app
-                    ? APP_CLASS_HINT[name as keyof typeof APP_CLASS_HINT]
-                    : CLASS_LABEL[name].hint}
-                </p>
+                <p className="text-2xs text-neutral-500">{rowHint(name, app)}</p>
               </div>
-              <ChoiceGroup
+              <ChoiceGroup<RowChoice>
                 label={`${CLASS_LABEL[name].name} calls`}
                 value={draft.classes[name]}
-                options={EFFECT_OPTIONS}
-                onChange={(effect) =>
-                  onChange({ ...draft, classes: { ...draft.classes, [name]: effect } })
+                options={rowOptions(draft.default)}
+                onChange={(choice) =>
+                  onChange({ ...draft, classes: { ...draft.classes, [name]: choice } })
                 }
               />
             </li>
           ))}
-          {/* Every secrets call is one of the four classes, so nothing else is left. */}
-          {!app && (
-            <li className="flex items-center justify-between gap-3 px-3 py-2">
-              <div className="min-w-0">
-                <p className="text-xs font-medium">Everything else</p>
-                <p className="text-2xs text-neutral-500">Any call no row above covers</p>
-              </div>
-              <ChoiceGroup
-                label="Everything else"
-                value={draft.default}
-                options={EFFECT_OPTIONS}
-                onChange={(effect) => onChange(withDefault(draft, effect))}
-              />
-            </li>
-          )}
         </ul>
         <p className="text-xs text-neutral-500">
           Ask refuses the call and lets the Agent file a Change Request for it. Block refuses it
-          outright.{!app && ' When several rules match, the strictest wins.'}
+          outright.
         </p>
       </section>
 
       {!app && (
-        <section aria-label="Advanced" className="space-y-3">
+        <section aria-label="HTTP rules" className="space-y-3">
+          <div className="space-y-1">
+            <h4 className="text-2xs font-semibold uppercase tracking-wider text-neutral-500">
+              HTTP rules
+            </h4>
+            <p className="text-xs text-neutral-500">
+              A call that matches a rule gets the stricter of the rule and its row.
+            </p>
+          </div>
+          {draft.advanced.map((rule, index) => {
+            const inert = noEffectLine(draft, rule)
+            return (
+              <div
+                key={rule.id}
+                className="space-y-2 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <MethodToggles
+                    label={`Methods for rule ${index + 1}`}
+                    methods={rule.methods}
+                    onChange={(methods) => setRule(rule, { methods })}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    icon={FaTrashAlt}
+                    title={`Remove rule ${index + 1}`}
+                    aria-label={`Remove rule ${index + 1}`}
+                    onClick={() =>
+                      onChange({
+                        ...draft,
+                        advanced: draft.advanced.filter((candidate) => candidate.id !== rule.id),
+                      })
+                    }
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="min-w-48 flex-1">
+                    <Input
+                      id={`${id}-path-${rule.id}`}
+                      aria-label={`Path for rule ${index + 1}`}
+                      value={rule.path}
+                      setValue={(path) => setRule(rule, { path })}
+                      placeholder="/repos/*/*/issues"
+                      maxLength={POLICY_LIMITS.path}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <ChoiceGroup
+                    label={`Effect for rule ${index + 1}`}
+                    value={rule.effect}
+                    options={inert ? INERT_OPTIONS : EFFECT_OPTIONS}
+                    onChange={(effect) => setRule(rule, { effect })}
+                  />
+                </div>
+                {inert && <p className="text-2xs text-neutral-500">{inert}</p>}
+              </div>
+            )
+          })}
           <Button
             type="button"
-            variant="ghost"
-            icon={advancedOpen ? FaChevronDown : FaChevronRight}
-            aria-expanded={advancedOpen}
-            aria-controls={`${id}-advanced`}
-            onClick={() => setAdvancedOpen((open) => !open)}
+            variant="secondary"
+            icon={FaPlus}
+            disabled={draft.advanced.length >= POLICY_LIMITS.rules}
+            onClick={() => onChange({ ...draft, advanced: [...draft.advanced, newAdvancedRule()] })}
           >
-            Advanced: rules by method and path
-            {draft.advanced.length > 0 && ` (${draft.advanced.length})`}
+            Add HTTP rule
           </Button>
-          {advancedOpen && (
-            <div id={`${id}-advanced`} className="space-y-3">
-              {draft.advanced.length === 0 && (
-                <p className="text-xs text-neutral-500">
-                  No rules by method and path. Add one to cover a call the classes above do not,
-                  such as <code>POST /v1/charges/*</code>.
-                </p>
-              )}
-              {draft.advanced.map((rule, index) => (
-                <div
-                  key={rule.id}
-                  className="space-y-2 rounded-lg border border-neutral-500/20 bg-neutral-500/5 p-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <MethodToggles
-                      label={`Methods for rule ${index + 1}`}
-                      methods={rule.methods}
-                      onChange={(methods) => setRule(rule, { methods })}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      icon={FaTrashAlt}
-                      title={`Remove rule ${index + 1}`}
-                      aria-label={`Remove rule ${index + 1}`}
-                      onClick={() =>
-                        onChange({
-                          ...draft,
-                          advanced: draft.advanced.filter((candidate) => candidate.id !== rule.id),
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="min-w-48 flex-1">
-                      <Input
-                        id={`${id}-path-${rule.id}`}
-                        aria-label={`Path for rule ${index + 1}`}
-                        value={rule.path}
-                        setValue={(path) => setRule(rule, { path })}
-                        placeholder="/v1/charges/*"
-                        maxLength={POLICY_LIMITS.path}
-                        autoComplete="off"
-                        spellCheck={false}
-                      />
-                    </div>
-                    <ChoiceGroup
-                      label={`Effect for rule ${index + 1}`}
-                      value={rule.effect}
-                      options={EFFECT_OPTIONS}
-                      onChange={(effect) => setRule(rule, { effect })}
-                    />
-                  </div>
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="secondary"
-                icon={FaPlus}
-                disabled={draft.advanced.length >= POLICY_LIMITS.rules}
-                onClick={() =>
-                  onChange({ ...draft, advanced: [...draft.advanced, newAdvancedRule()] })
-                }
-              >
-                Add rule
-              </Button>
-            </div>
-          )}
         </section>
       )}
 
@@ -274,21 +292,20 @@ export function PolicyEditor({
   )
 }
 
-/** A compact summary of a Connection's rules for its row; nothing when it allows everything. */
+/** A Connection's rules in a few words for its row; nothing when they stop no call. */
 export function PolicySummary({ policy }: { policy: unknown }) {
-  const summary = policySummary(policy)
-  if (!summary) return null
+  if (!policyRestricts(policy)) return null
   return (
     <span
       title="Access rules restrict what Workflows can do with this Connection"
       className="whitespace-nowrap text-2xs font-medium text-amber-700 dark:text-amber-400"
     >
-      {summary}
+      {policySummary(policy)}
     </span>
   )
 }
 
-/** The Connection's own rules, read-only and compact: one line for each thing that is set. */
+/** The Connection's own rules, read-only and compact: the Default, each row, then each HTTP rule. */
 export function PolicyReadOnly({
   policy,
   variant = 'http',
@@ -296,35 +313,52 @@ export function PolicyReadOnly({
   policy: unknown
   variant?: PolicyVariant
 }) {
-  const overview = policyOverview(policy)
+  const draft = draftFromPolicy(policy)
   const app = variant === 'app'
-  const classes = app
-    ? overview.classes.filter((item) =>
-        APP_CLASSES.some((name) => CLASS_LABEL[name].name === item.name)
-      )
-    : overview.classes
   return (
     <ul aria-label="Access rules in force" className="space-y-1 text-xs font-medium">
-      {classes.map((item) => (
-        <li key={item.name} className="flex items-center justify-between gap-3">
-          <span>{item.name}</span>
-          <span className={EFFECT_TEXT[item.effect]}>{EFFECT_LABEL[item.effect]}</span>
-        </li>
-      ))}
-      {!app && (
-        <li className="flex items-center justify-between gap-3">
-          <span>Everything else</span>
-          <span className={EFFECT_TEXT[overview.default]}>{EFFECT_LABEL[overview.default]}</span>
-        </li>
-      )}
-      {(app ? [] : overview.rules).map((rule, index) => (
-        <li key={`${rule.label}-${index}`} className="flex items-center justify-between gap-3">
-          <code className="min-w-0 break-all font-normal">{rule.label}</code>
-          <span className={clsx('shrink-0', EFFECT_TEXT[rule.effect])}>
-            {EFFECT_LABEL[rule.effect]}
-          </span>
-        </li>
-      ))}
+      <li className="flex items-center justify-between gap-3">
+        <span>Default</span>
+        <span className={EFFECT_TEXT[draft.default]}>{EFFECT_LABEL[draft.default]}</span>
+      </li>
+      {OPERATION_CLASSES.map((name) => {
+        const effect = rowEffect(draft, name)
+        return (
+          <li key={name} className="flex items-center justify-between gap-3">
+            <span className="min-w-0">
+              {CLASS_LABEL[name].name}{' '}
+              <span className="font-normal text-neutral-500">{rowHint(name, app)}</span>
+            </span>
+            <span className={clsx('shrink-0', EFFECT_TEXT[effect])}>
+              {draft.classes[name] === 'default'
+                ? `Default · ${EFFECT_LABEL[effect]}`
+                : EFFECT_LABEL[effect]}
+            </span>
+          </li>
+        )
+      })}
+      {(app ? [] : draft.advanced).map((rule) => {
+        const inert = !ruleTakesEffect(draft, rule)
+        return (
+          <li key={rule.id} className="flex items-center justify-between gap-3">
+            <code className="min-w-0 break-all font-normal">
+              {describeMatch({
+                methods: rule.methods.length > 0 ? rule.methods : undefined,
+                path: rule.path || undefined,
+              })}
+            </code>
+            <span
+              className={clsx(
+                'shrink-0',
+                inert ? 'font-normal text-neutral-500' : EFFECT_TEXT[rule.effect]
+              )}
+            >
+              {EFFECT_LABEL[rule.effect]}
+              {inert && ' · No effect'}
+            </span>
+          </li>
+        )
+      })}
     </ul>
   )
 }

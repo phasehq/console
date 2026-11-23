@@ -7,7 +7,7 @@ import {
   PolicyEditor,
   PolicySummary,
 } from '@/components/agents/AgentAccessPolicy'
-import { draftFromPolicy, type PolicyDraft } from '@/utils/agents/accessPolicy'
+import { draftFromPolicy, rowEffect, type PolicyDraft } from '@/utils/agents/accessPolicy'
 import { buttonNamed, settle, type } from './customConnectionTestKit'
 
 jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({
@@ -77,23 +77,82 @@ describe('editing the access rules of a Connection', () => {
         .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
 
-  test('one row per class and Everything else; the secret guard is not part of the editor', async () => {
+  const options = (label: string) =>
+    Array.from(group(label).querySelectorAll('button')).map((button) => button.textContent)
+  const groups = () =>
+    Array.from(container.querySelectorAll('[role="radiogroup"]')).map((element) =>
+      element.getAttribute('aria-label')
+    )
+  const rows = ['Read calls', 'Create calls', 'Update calls', 'Delete calls']
+  const addRule = async () => act(async () => buttonNamed(container, 'Add HTTP rule')!.click())
+  const toggleMethod = async (rule: number, method: string) =>
+    act(async () =>
+      Array.from(
+        container.querySelectorAll<HTMLButtonElement>(
+          `[aria-label="Methods for rule ${rule}"] button`
+        )
+      )
+        .find((button) => button.textContent === method)!
+        .click()
+    )
+  const path = (rule: number) =>
+    container.querySelector<HTMLInputElement>(`input[aria-label="Path for rule ${rule}"]`)!
+
+  test('a Default switch above four rows on Default, each saying what it covers', async () => {
     await open(connection(null))
 
-    for (const label of [
-      'Read calls',
-      'Create calls',
-      'Update calls',
-      'Delete calls',
-      'Everything else',
-    ])
-      expect(checked(label)).toBe('Allow')
-    expect(
-      Array.from(group('Read calls').querySelectorAll('button')).map((b) => b.textContent)
-    ).toEqual(['Allow', 'Ask', 'Block'])
+    // The switch comes first, then one row per class; no Admin, no Everything else.
+    expect(groups()).toEqual(['Default', ...rows])
+    expect(checked('Default')).toBe('Allow')
+    expect(options('Default')).toEqual(['Allow', 'Ask', 'Block'])
+    for (const label of rows) {
+      expect(checked(label)).toBe('Default · Allow')
+      expect(options(label)).toEqual(['Default · Allow', 'Allow', 'Ask', 'Block'])
+    }
+    const text = container.textContent!
+    for (const covers of ['GET, HEAD, OPTIONS', 'POST', 'PUT, PATCH and other methods', 'DELETE'])
+      expect(text).toContain(covers)
+    expect(text).not.toContain('Admin')
+    expect(text).not.toContain('Everything else')
     // Managed rules are listed on the Connection, never offered as a choice.
-    expect(container.textContent).not.toContain('Secret guard')
+    expect(text).not.toContain('Secret guard')
     expect(container.querySelector('[role="radiogroup"][aria-label*="Secret"]')).toBeNull()
+  })
+
+  test('rows follow Default until set, keep their own effect, and follow again on Default', async () => {
+    await open(connection(null))
+    const selected = (label: string) =>
+      group(label).querySelector<HTMLElement>('[aria-checked="true"]')!
+
+    await choose('Delete calls', 'Block')
+    await choose('Default', 'Ask')
+    // Rows on Default move with it and show it in its colour; a set row stays.
+    for (const label of ['Read calls', 'Create calls', 'Update calls']) {
+      expect(checked(label)).toBe('Default · Ask')
+      expect(selected(label).className).toContain('amber')
+    }
+    expect(checked('Delete calls')).toBe('Block')
+
+    // Set to the same effect as Default, a row no longer follows it.
+    await choose('Read calls', 'Ask')
+    await choose('Default', 'Block')
+    expect(checked('Read calls')).toBe('Ask')
+    expect(checked('Create calls')).toBe('Default · Block')
+    expect(selected('Create calls').className).toContain('red')
+
+    // Default makes it follow again.
+    await choose('Read calls', 'Default · Block')
+    await choose('Default', 'Allow')
+    expect(checked('Read calls')).toBe('Default · Allow')
+    expect(checked('Update calls')).toBe('Default · Allow')
+    expect(checked('Delete calls')).toBe('Block')
+
+    await submit()
+    expect(save.mock.calls[0][0].variables.policy).toEqual({
+      version: 1,
+      default: 'allow',
+      rules: [{ class: 'delete', effect: 'block' }],
+    })
   })
 
   test('Save stays disabled until something changes', async () => {
@@ -105,7 +164,7 @@ describe('editing the access rules of a Connection', () => {
     expect(saveButton().disabled).toBe(true)
     await choose('Create calls', 'Ask')
     expect(saveButton().disabled).toBe(false)
-    await choose('Create calls', 'Allow')
+    await choose('Create calls', 'Default · Allow')
     expect(saveButton().disabled).toBe(true)
   })
 
@@ -113,6 +172,7 @@ describe('editing the access rules of a Connection', () => {
     await open(connection(null))
     await choose('Delete calls', 'Block')
     await choose('Create calls', 'Ask')
+    await choose('Default', 'Ask')
     await submit()
 
     expect(save).toHaveBeenCalledWith(
@@ -121,7 +181,7 @@ describe('editing the access rules of a Connection', () => {
           connectionId: 'connection-1',
           policy: {
             version: 1,
-            default: 'allow',
+            default: 'ask',
             rules: [
               { class: 'create', effect: 'ask' },
               { class: 'delete', effect: 'block' },
@@ -132,11 +192,11 @@ describe('editing the access rules of a Connection', () => {
     )
   })
 
-  test('putting every row back to the default saves the policy as cleared', async () => {
+  test('every row back on Default, with Default at Allow, saves the policy as cleared', async () => {
     await open(
       connection({ version: 1, default: 'allow', rules: [{ class: 'delete', effect: 'block' }] })
     )
-    await choose('Delete calls', 'Allow')
+    await choose('Delete calls', 'Default · Allow')
     await submit()
 
     expect(save.mock.calls[0][0].variables).toEqual({ connectionId: 'connection-1', policy: null })
@@ -161,52 +221,110 @@ describe('editing the access rules of a Connection', () => {
     expect(sent).toContain('"update"')
   })
 
-  test('rules by method and path: add, fill in, save, remove', async () => {
+  test('HTTP rules: add, fill in, save, remove', async () => {
     await open(connection(null))
-    await act(async () => buttonNamed(container, 'Advanced: rules by method and path')!.click())
-    await act(async () => buttonNamed(container, 'Add rule')!.click())
+    expect(container.textContent).toContain(
+      'A call that matches a rule gets the stricter of the rule and its row.'
+    )
+    await addRule()
     // An empty rule cannot be saved.
     expect(saveButton().disabled).toBe(true)
     expect(container.textContent).toContain('choose a method or enter a path')
+    expect(path(1).placeholder).toBe('/repos/*/*/issues')
 
-    await act(async () =>
-      Array.from(
-        container.querySelectorAll<HTMLButtonElement>('[aria-label="Methods for rule 1"] button')
-      )
-        .find((button) => button.textContent === 'DELETE')!
-        .click()
-    )
-    await type(
-      container.querySelector<HTMLInputElement>('input[aria-label="Path for rule 1"]')!,
-      '/v1/x/*'
-    )
+    await toggleMethod(1, 'POST')
+    await toggleMethod(1, 'DELETE')
+    await type(path(1), '/repos/*/*/issues')
+    expect(checked('Effect for rule 1')).toBe('Block')
     expect(saveButton().disabled).toBe(false)
     await submit()
     expect(save.mock.calls[0][0].variables.policy).toEqual({
       version: 1,
       default: 'allow',
-      rules: [{ match: { methods: ['DELETE'], path: '/v1/x/*' }, effect: 'block' }],
+      rules: [
+        { match: { methods: ['POST', 'DELETE'], path: '/repos/*/*/issues' }, effect: 'block' },
+      ],
     })
 
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[aria-label="Remove rule 1"]')!.click()
     )
-    expect(container.querySelector('input[aria-label="Path for rule 1"]')).toBeNull()
+    expect(path(1)).toBeNull()
   })
 
   test('a path must begin with a slash', async () => {
     await open(connection(null))
-    await act(async () => buttonNamed(container, 'Advanced: rules by method and path')!.click())
-    await act(async () => buttonNamed(container, 'Add rule')!.click())
-    await type(
-      container.querySelector<HTMLInputElement>('input[aria-label="Path for rule 1"]')!,
-      'v1'
-    )
+    await addRule()
+    await type(path(1), 'v1')
     expect(container.textContent).toContain('begins with "/"')
     expect(saveButton().disabled).toBe(true)
-    expect(
-      container.querySelector<HTMLInputElement>('input[aria-label="Path for rule 1"]')!.maxLength
-    ).toBe(1024)
+    expect(path(1).maxLength).toBe(1024)
+  })
+
+  test('a rule that can never change an answer says so, and does not show its effect in colour', async () => {
+    await open(
+      connection({ version: 1, default: 'allow', rules: [{ class: 'delete', effect: 'block' }] })
+    )
+    await addRule()
+    await toggleMethod(1, 'DELETE')
+    await type(path(1), '/repos/*')
+    const effect = () =>
+      group('Effect for rule 1').querySelector<HTMLElement>('[aria-checked="true"]')!
+
+    expect(container.textContent).toContain('No effect: Delete is already Block.')
+    expect(effect().className).not.toContain('red')
+
+    // GET falls under Read, which allows: now the rule blocks something.
+    await toggleMethod(1, 'GET')
+    expect(container.textContent).not.toContain('No effect')
+    expect(effect().className).toContain('red')
+
+    await choose('Effect for rule 1', 'Ask')
+    expect(container.textContent).not.toContain('No effect')
+    await choose('Read calls', 'Block')
+    expect(container.textContent).toContain('No effect: Read and Delete are already Block.')
+
+    await choose('Effect for rule 1', 'Allow')
+    expect(container.textContent).toContain('No effect: a rule can only make calls stricter.')
+  })
+
+  test('a saved policy opens again just as it was shown', async () => {
+    await open(connection(null))
+    await choose('Default', 'Ask')
+    await choose('Read calls', 'Allow')
+    await choose('Delete calls', 'Ask')
+    await addRule()
+    await toggleMethod(1, 'GET')
+    await type(path(1), '/repos/*/*/issues')
+    await choose('Effect for rule 1', 'Allow')
+    await submit()
+    const policy = save.mock.calls[0][0].variables.policy
+    // The Allow rule is weaker than Default, so the rows on Default are saved as rules.
+    expect(policy).toEqual({
+      version: 1,
+      default: 'ask',
+      rules: [
+        { class: 'read', effect: 'allow' },
+        { class: 'create', effect: 'ask' },
+        { class: 'update', effect: 'ask' },
+        { class: 'delete', effect: 'ask' },
+        { match: { methods: ['GET'], path: '/repos/*/*/issues' }, effect: 'allow' },
+      ],
+    })
+
+    await act(async () => root.render(<div />))
+    await open(connection(policy))
+    expect(checked('Default')).toBe('Ask')
+    expect(rows.map((label) => checked(label))).toEqual([
+      'Allow',
+      'Default · Ask',
+      'Default · Ask',
+      // Set to the effect Default has, it reads back on Default.
+      'Default · Ask',
+    ])
+    expect(path(1).value).toBe('/repos/*/*/issues')
+    expect(checked('Effect for rule 1')).toBe('Allow')
+    expect(saveButton().disabled).toBe(true)
   })
 
   test('a failed save keeps the editor and says why', async () => {
@@ -233,8 +351,15 @@ describe('the editor on its own', () => {
     container.remove()
   })
 
-  test('changing Everything else moves the rows that follow it', async () => {
-    let draft: PolicyDraft = draftFromPolicy(null)
+  test('changing Default moves the rows on Default and leaves the HTTP rules alone', async () => {
+    let draft: PolicyDraft = draftFromPolicy({
+      version: 1,
+      default: 'allow',
+      rules: [
+        { class: 'delete', effect: 'block' },
+        { match: { path: '/x' }, effect: 'ask' },
+      ],
+    })
     const render = () => (
       <PolicyEditor
         draft={draft}
@@ -245,14 +370,15 @@ describe('the editor on its own', () => {
     )
     await act(async () => root.render(render()))
     await act(async () =>
-      Array.from(
-        container.querySelectorAll<HTMLButtonElement>('[aria-label="Everything else"] button')
-      )
+      Array.from(container.querySelectorAll<HTMLButtonElement>('[aria-label="Default"] button'))
         .find((button) => button.textContent === 'Block')!
         .click()
     )
     expect(draft.default).toBe('block')
-    expect(draft.classes.read).toBe('block')
+    expect(draft.classes.read).toBe('default')
+    expect(rowEffect(draft, 'read')).toBe('block')
+    expect(draft.classes.delete).toBe('block')
+    expect(draft.advanced).toHaveLength(1)
   })
 })
 
@@ -288,7 +414,8 @@ describe('the access blocks in the details of a Connection', () => {
   test('Managed by Phase comes first: a locked Secret guard row that cannot be changed', async () => {
     await render()
     const headings = Array.from(container.querySelectorAll('h4')).map((h) => h.textContent)
-    expect(headings).toEqual(['Managed by Phase', 'Access rules'])
+    // The editor's own headings follow, inside the Edit dialog.
+    expect(headings.slice(0, 2)).toEqual(['Managed by Phase', 'Access rules'])
     const guard = container.querySelector('[data-managed-policy="secret_guard"]')!
     expect(guard.textContent).toContain('Secret guard')
     expect(guard.textContent).toContain('mint new credentials or assume another identity')
@@ -323,31 +450,31 @@ describe('the access blocks in the details of a Connection', () => {
   test('the Connection own rules read in compact form', async () => {
     await render({
       connection: {
-        ...connection(
-          {
-            version: 1,
-            default: 'ask',
-            rules: [
-              { class: 'read', effect: 'allow' },
-              { class: 'delete', effect: 'block' },
-              { match: { methods: ['POST'], path: '/v1/charges/*' }, effect: 'ask' },
-            ],
-          },
-          'aws'
-        ),
+        ...connection({
+          version: 1,
+          default: 'ask',
+          rules: [
+            { class: 'read', effect: 'allow' },
+            { class: 'delete', effect: 'block' },
+            { match: { methods: ['POST'], path: '/v1/charges/*' }, effect: 'block' },
+            { match: { methods: ['DELETE'], path: '/v1/charges/*' }, effect: 'block' },
+          ],
+        }),
         takesPolicy: true,
         managedPolicies: MANAGED,
       },
     })
     const rules = container.querySelector('[aria-label="Access rules in force"]')!
-    const row = (label: string) =>
-      Array.from(rules.querySelectorAll('li')).find((item) => item.textContent!.includes(label))!
-    expect(row('Read').textContent).toContain('Allow')
-    expect(row('Delete').textContent).toContain('Block')
-    // A class with no rule of its own follows Everything else.
-    expect(row('Create').textContent).toContain('Ask')
-    expect(row('Everything else').textContent).toContain('Ask')
-    expect(row('POST /v1/charges/*').textContent).toContain('Ask')
+    expect(Array.from(rules.querySelectorAll('li')).map((item) => item.textContent)).toEqual([
+      'DefaultAsk',
+      'Read GET, HEAD, OPTIONSAllow',
+      'Create POSTDefault · Ask',
+      'Update PUT, PATCH and other methodsDefault · Ask',
+      'Delete DELETEBlock',
+      'POST /v1/charges/*Block',
+      // Delete already blocks every DELETE.
+      'DELETE /v1/charges/*Block · No effect',
+    ])
   })
 
   test('Edit is for members who can update Connections', async () => {
@@ -372,7 +499,7 @@ describe('the summary on a collapsed row', () => {
     container.remove()
   })
 
-  test('says how much is restricted, and nothing when nothing is', async () => {
+  test('reads in the words an app Connection uses, and says nothing when nothing is stopped', async () => {
     await act(async () =>
       root.render(
         <PolicySummary
@@ -387,8 +514,23 @@ describe('the summary on a collapsed row', () => {
         />
       )
     )
-    expect(container.textContent).toBe('1 blocked, 1 ask')
-    await act(async () => root.render(<PolicySummary policy={{}} />))
-    expect(container.textContent).toBe('')
+    expect(container.textContent).toBe(
+      'Reads, create and update allowed, delete blocked · 1 HTTP rule'
+    )
+    await act(async () =>
+      root.render(
+        <PolicySummary
+          policy={{ version: 1, default: 'ask', rules: [{ class: 'read', effect: 'allow' }] }}
+        />
+      )
+    )
+    expect(container.textContent).toBe('Reads allowed, writes ask')
+    for (const policy of [
+      {},
+      { version: 1, default: 'allow', rules: [{ class: 'read', effect: 'allow' }] },
+    ]) {
+      await act(async () => root.render(<PolicySummary policy={policy} />))
+      expect(container.textContent).toBe('')
+    }
   })
 })
