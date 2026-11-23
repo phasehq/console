@@ -36,7 +36,7 @@ import { SidebarContext } from '@/contexts/sidebarContext'
 import { useSession } from '@/contexts/userContext'
 import { handleSignout } from '@/apollo/client'
 import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { AppType } from '@/apollo/graphql'
+import { ApiOrganisationPlanChoices, AppType } from '@/apollo/graphql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
 import { Menu, Popover, Transition } from '@headlessui/react'
 import { LogoWordMark } from '../common/LogoWordMark'
@@ -1005,7 +1005,8 @@ const Sidebar = () => {
                 <LogoWordMark className="w-16 max-w-none fill-black dark:fill-white" />
               </div>
             </Link>
-            {activeOrganisation && (
+            {/* A paid plan reads as "Phase Pro". The free plan is just the logo */}
+            {activeOrganisation && activeOrganisation.plan !== ApiOrganisationPlanChoices.Fr && (
               <Fade show={!collapsed}>
                 <span className="flex">
                   <PlanLabel plan={activeOrganisation.plan} size="sm" />
