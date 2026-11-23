@@ -133,7 +133,6 @@ import {
   appSecretRowIsEdited,
   carryRowKeys,
   DeployedChanges,
-  deployIsShown,
   deployReferenceErrors,
   dirtyEnvIds,
   duplicateKeyRowIds,
@@ -146,6 +145,7 @@ import {
   mergeImportedRows,
   moveAppSecretRows,
   parentPath,
+  readBackDeploy,
   repeatedKeyToFix,
   searchedFolders,
   selectionExport,
@@ -222,10 +222,8 @@ const NO_DIRTY_ENVS = new Set<string>()
 const NO_ROW_KEYS: ReadonlyMap<string, string> = new Map()
 const NO_ROWS: ReadonlySet<string> = new Set()
 const NO_ENVS: ReadonlySet<string> = new Set()
-// Once the saved secrets are read again, how long a deploy stays busy for the snapshot that has it
-// before handing control back anyway (ms)
-const DEPLOY_LANDS_WITHIN = 60000
-// How long that read may take before another is sent, and the pause before one that failed is
+// After a deploy the saved secrets are read again before the editor is handed back. How long that
+// read may take before another is sent, and the pause before one that failed is (ms)
 const READ_ANSWERS_WITHIN = 20000
 const READ_RETRY_AFTER = 3000
 const DEPLOYED_UNREAD =
@@ -626,20 +624,24 @@ export const AppSecrets = ({
   const deployLandedRef = useRef<(() => void) | null>(null)
   // Deployed rows keep the React key of the row they replace, so its tints fade out instead of snapping
   const [carriedRowKeys, setCarriedRowKeys] = useState<ReadonlyMap<string, string>>(NO_ROW_KEYS)
+  // The rows a deploy left, read after it and decrypted: they take the place of the staged ones
+  const landDeploy = useCallback((saved: AppSecret[]) => {
+    deployedRef.current = null
+    deployLandedRef.current?.()
+    deployLandedRef.current = null
+    setCarriedRowKeys((carried) =>
+      carryRowKeys(clientRowsRef.current, saved, (id) => carried.get(id) ?? id)
+    )
+    serverSnapshotRef.current = saved
+    setServerAppSecrets(saved)
+    setClientAppSecrets(saved)
+  }, [])
   useEffect(() => {
     const prevServer = serverSnapshotRef.current
     serverSnapshotRef.current = appSecrets
-    const deployLanded =
-      deployedRef.current !== null && snapshotHasDeploy(appSecrets, deployedRef.current)
-    if (deployLanded || !unsavedChangesRef.current) {
-      if (deployLanded) {
-        deployedRef.current = null
-        deployLandedRef.current?.()
-        deployLandedRef.current = null
-        setCarriedRowKeys((carried) =>
-          carryRowKeys(clientRowsRef.current, appSecrets, (id) => carried.get(id) ?? id)
-        )
-      }
+    if (deployedRef.current !== null && snapshotHasDeploy(appSecrets, deployedRef.current))
+      return landDeploy(appSecrets)
+    if (!unsavedChangesRef.current) {
       setServerAppSecrets(appSecrets)
       setClientAppSecrets(appSecrets)
       return
@@ -653,7 +655,7 @@ export const AppSecrets = ({
         environments
       )
     )
-  }, [appSecrets, environments])
+  }, [appSecrets, environments, landDeploy])
 
   // Fetch and decrypt all org secret keys for cross-app reference autocomplete/validation
   const { orgApps: allOrgApps } = useOrgSecretKeys()
@@ -1843,8 +1845,7 @@ export const AppSecrets = ({
         setDeploySaved(true)
         let notice: ReturnType<typeof toast.info> | undefined
         try {
-          const shown = await deployIsShown(readSaved, landed, {
-            within: DEPLOY_LANDS_WITHIN,
+          const readBack = await readBackDeploy(readSaved, landed, {
             answersWithin: READ_ANSWERS_WITHIN,
             retryAfter: READ_RETRY_AFTER,
             onUnread: () => {
@@ -1853,14 +1854,10 @@ export const AppSecrets = ({
             },
             signal: leftRef.current?.signal,
           })
-          if (!shown && deployedRef.current) {
-            // Read back, yet no snapshot matches the deploy (its rows were changed again
-            // elsewhere): the rows as saved replace the staged ones, and the deploy is no longer
-            // waited for
-            deployedRef.current = null
-            deployLandedRef.current = null
-            setClientAppSecrets(serverSnapshotRef.current)
-          }
+          // Read after the deploy, and decrypted: these rows replace the staged ones, whether
+          // the deploy is in them or its rows were changed again elsewhere. Rows from before it
+          // are never handed back, however long that takes: an edit would deploy their old values
+          if (typeof readBack === 'object' && deployedRef.current) landDeploy(readBack.saved)
         } finally {
           if (notice !== undefined) toast.dismiss(notice)
           setDeployUnread(false)

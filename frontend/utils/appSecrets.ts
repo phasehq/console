@@ -533,8 +533,6 @@ export const snapshotHasDeploy = (snapshot: AppSecret[], deployed: DeployedChang
 }
 
 export type DeployWait = {
-  /** How long the snapshot with the deploy is waited for once the saved secrets have been read */
-  within: number
   /** How long one read may take before another is sent */
   answersWithin: number
   /** The pause before a read that failed, or went unanswered, is sent again */
@@ -545,21 +543,24 @@ export type DeployWait = {
   signal?: AbortSignal
 }
 
+/** How the wait ended: the snapshot with the deploy landed, the page was left, or the saved rows were read */
+export type DeployReadBack<Rows> = 'landed' | 'left' | { saved: Rows }
+
 /**
- * Reads the saved secrets again after a deploy and waits for the snapshot that has it. A read that
- * fails, or isn't answered in time, is sent again for as long as it takes: until one comes back
- * the rows on the page are from before the deploy, and the caller keeps them from being edited.
- * False when a read came back and no snapshot showed the deploy within the limit after it.
+ * Reads the saved secrets again after a deploy. `read` resolves with rows that were read after
+ * it and have been decrypted: only those may be edited next. A read that fails, or isn't answered
+ * in time, is sent again for as long as it takes: until one comes back the rows on the page are
+ * from before the deploy, and the caller keeps them from being edited.
  */
-export const deployIsShown = async (
-  read: () => Promise<unknown>,
+export const readBackDeploy = async <Rows>(
+  read: () => Promise<Rows>,
   landed: Promise<unknown>,
-  { within, answersWithin, retryAfter, onUnread, signal }: DeployWait
-): Promise<boolean> => {
+  { answersWithin, retryAfter, onUnread, signal }: DeployWait
+): Promise<DeployReadBack<Rows>> => {
   const timers = new Set<ReturnType<typeof setTimeout>>()
   const after = <T>(ms: number, outcome: T) =>
     new Promise<T>((resolve) => timers.add(setTimeout(() => resolve(outcome), ms)))
-  const shown = landed.then(() => 'shown' as const)
+  const shown = landed.then(() => 'landed' as const)
   const left = new Promise<'left'>((resolve) => {
     if (signal?.aborted) resolve('left')
     signal?.addEventListener('abort', () => resolve('left'), { once: true })
@@ -570,19 +571,16 @@ export const deployIsShown = async (
         shown,
         left,
         read().then(
-          () => 'read' as const,
+          (saved) => ({ saved }),
           () => 'unread' as const
         ),
         after(answersWithin, 'unread' as const),
       ])
-      if (answer === 'shown') return true
-      if (answer === 'left') return false
-      if (answer === 'read') break
+      if (answer !== 'unread') return answer
       if (!told) onUnread?.()
       const next = await Promise.race([shown, left, after(retryAfter, 'again' as const)])
-      if (next !== 'again') return next === 'shown'
+      if (next !== 'again') return next
     }
-    return (await Promise.race([shown, left, after(within, 'late' as const)])) === 'shown'
   } finally {
     timers.forEach(clearTimeout)
   }

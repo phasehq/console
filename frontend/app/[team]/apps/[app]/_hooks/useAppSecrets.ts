@@ -176,93 +176,126 @@ export const useAppSecrets = (
     context,
   })
 
-  useEffect(() => {
-    if (!keyring || !data?.appEnvironments) return
-    const environments = data.appEnvironments as EnvironmentType[]
-    // Guards against a slow decrypt landing after the target has changed
-    let cancelled = false
+  // The decrypt pass under way or last finished: the result it was given, and its snapshot
+  const passRef = useRef<{
+    environments: EnvironmentType[]
+    snapshot: Promise<ProcessedAppSecrets>
+  } | null>(null)
 
-    const decryptEnv = async (env: EnvironmentType): Promise<DecryptedEnv> => {
-      const previous = decryptedRef.current.get(env.id)
-      if (previous && previous.source === env) return previous
+  /**
+   * Decrypts a result of the query and publishes its snapshot, which it resolves with. A result
+   * given while that is under way takes over, and its snapshot then answers this call too.
+   */
+  const show = useCallback(
+    (environments: EnvironmentType[]): Promise<ProcessedAppSecrets> => {
+      if (!keyring) return Promise.reject(new Error('The keyring is locked'))
+      if (passRef.current?.environments === environments) return passRef.current.snapshot
 
-      const envKeys = await unwrapEnvSecretsForUser(env.wrappedSeed!, env.wrappedSalt!, keyring)
-      const raw = (env.secrets ?? []) as SecretType[]
-      const held = decryptedSecretsIn(cache)
-      const fresh = raw.filter((secret) => !held.has(secret))
-      const decryptedFresh = await decryptEnvSecretKVs(fresh, envKeys)
-      fresh.forEach((secret, at) => held.set(secret, decryptedFresh[at]))
-      const secrets = raw.map((secret) => held.get(secret)!)
-      const dynamicSecrets = await decryptDynamicSecretKeyNames(
-        (env.dynamicSecrets ?? []) as DynamicSecretType[],
-        envKeys
-      )
+      const pass = { environments } as NonNullable<typeof passRef.current>
+      passRef.current = pass
+      // Guards against a slow decrypt landing after the target has changed
+      const superseded = () => passRef.current !== pass
+      // The pass that took over, if one did: the page may have gone, or its keyring
+      const successor = () =>
+        passRef.current?.snapshot ?? Promise.reject(new Error('No longer being shown'))
 
-      const result: DecryptedEnv = {
-        source: env,
-        // History, overrides and sharing need the secret's env (and its app)
-        secrets: secrets.map((secret) => ({ ...secret, environment: env })),
-        dynamicSecrets,
-      }
-      decryptedRef.current.set(env.id, result)
-      return result
-    }
+      const decryptEnv = async (env: EnvironmentType): Promise<DecryptedEnv> => {
+        const previous = decryptedRef.current.get(env.id)
+        if (previous && previous.source === env) return previous
 
-    const build = (decrypted: Map<string, DecryptedEnv>): ProcessedAppSecrets => ({
-      environments,
-      appSecrets: buildAppSecretRows(
-        appId,
-        environments.map((env) => ({ env, secrets: decrypted.get(env.id)?.secrets ?? [] }))
-      ),
-      appFolders: buildFolders(environments),
-      appDynamicSecrets: buildDynamicSecrets(appId, environments, decrypted),
-      pendingEnvIds: environments.filter((env) => !decrypted.has(env.id)).map((env) => env.id),
-    })
+        const envKeys = await unwrapEnvSecretsForUser(env.wrappedSeed!, env.wrappedSalt!, keyring)
+        const raw = (env.secrets ?? []) as SecretType[]
+        const held = decryptedSecretsIn(cache)
+        const fresh = raw.filter((secret) => !held.has(secret))
+        const decryptedFresh = await decryptEnvSecretKVs(fresh, envKeys)
+        fresh.forEach((secret, at) => held.set(secret, decryptedFresh[at]))
+        const secrets = raw.map((secret) => held.get(secret)!)
+        const dynamicSecrets = await decryptDynamicSecretKeyNames(
+          (env.dynamicSecrets ?? []) as DynamicSecretType[],
+          envKeys
+        )
 
-    const publish = (result: ProcessedAppSecrets) => {
-      setProcessed(result)
-      setFetching(false)
-      setFailed(false)
-    }
-
-    const run = async () => {
-      const shownIds = new Set(
-        filterEnvSelection(environments, priorityRef.current).map((env) => env.id)
-      )
-      const ordered = [
-        ...environments.filter((env) => shownIds.has(env.id)),
-        ...environments.filter((env) => !shownIds.has(env.id)),
-      ]
-
-      const decrypted = new Map<string, DecryptedEnv>()
-      let publishedShown = false
-      for (const env of ordered) {
-        const needsWork = decryptedRef.current.get(env.id)?.source !== env
-        // Render the checked columns before starting on the hidden ones
-        if (needsWork && !shownIds.has(env.id) && !publishedShown) {
-          publish(build(decrypted))
-          publishedShown = true
+        const result: DecryptedEnv = {
+          source: env,
+          // History, overrides and sharing need the secret's env (and its app)
+          secrets: secrets.map((secret) => ({ ...secret, environment: env })),
+          dynamicSecrets,
         }
-        decrypted.set(env.id, await decryptEnv(env))
-        if (cancelled) return
+        decryptedRef.current.set(env.id, result)
+        return result
       }
 
-      const complete = build(decrypted)
-      cache.set(cacheKey, complete)
-      publish(complete)
-    }
+      const build = (decrypted: Map<string, DecryptedEnv>): ProcessedAppSecrets => ({
+        environments,
+        appSecrets: buildAppSecretRows(
+          appId,
+          environments.map((env) => ({ env, secrets: decrypted.get(env.id)?.secrets ?? [] }))
+        ),
+        appFolders: buildFolders(environments),
+        appDynamicSecrets: buildDynamicSecrets(appId, environments, decrypted),
+        pendingEnvIds: environments.filter((env) => !decrypted.has(env.id)).map((env) => env.id),
+      })
 
-    // One value that won't decrypt would otherwise leave the first load pending for good
-    run().catch(() => {
-      if (cancelled) return
-      setFailed(true)
-      setFetching(false)
-    })
+      const publish = (result: ProcessedAppSecrets) => {
+        setProcessed(result)
+        setFetching(false)
+        setFailed(false)
+      }
 
-    return () => {
-      cancelled = true
-    }
-  }, [data, keyring, appId, cache, cacheKey])
+      const run = async () => {
+        const shownIds = new Set(
+          filterEnvSelection(environments, priorityRef.current).map((env) => env.id)
+        )
+        const ordered = [
+          ...environments.filter((env) => shownIds.has(env.id)),
+          ...environments.filter((env) => !shownIds.has(env.id)),
+        ]
+
+        const decrypted = new Map<string, DecryptedEnv>()
+        let publishedShown = false
+        for (const env of ordered) {
+          const needsWork = decryptedRef.current.get(env.id)?.source !== env
+          // Render the checked columns before starting on the hidden ones
+          if (needsWork && !shownIds.has(env.id) && !publishedShown) {
+            publish(build(decrypted))
+            publishedShown = true
+          }
+          decrypted.set(env.id, await decryptEnv(env))
+          if (superseded()) return successor()
+        }
+
+        const complete = build(decrypted)
+        cache.set(cacheKey, complete)
+        publish(complete)
+        return complete
+      }
+
+      pass.snapshot = run().catch((error) => {
+        if (superseded()) return successor()
+        // One value that won't decrypt would otherwise leave the first load pending for good
+        setFailed(true)
+        setFetching(false)
+        throw error
+      })
+      return pass.snapshot
+    },
+    [keyring, appId, cache, cacheKey]
+  )
+
+  // A pass is for one keyring, app and cache. With another, and once the page has gone, it must
+  // neither publish nor answer a later call
+  useEffect(
+    () => () => {
+      passRef.current = null
+    },
+    [show]
+  )
+
+  useEffect(() => {
+    if (!data?.appEnvironments) return
+    // A failed pass has said so already
+    show(data.appEnvironments as EnvironmentType[]).catch(() => {})
+  }, [data, show])
 
   useEffect(() => {
     if (!error || data) return
@@ -270,11 +303,21 @@ export const useAppSecrets = (
     setFetching(false)
   }, [error, data])
 
+  const showRef = useRef(show)
+  useEffect(() => {
+    showRef.current = show
+  }, [show])
   /**
-   * Reads the saved secrets with a request of its own. No read of this query shares one already
-   * on its way, which may have left before the write it is asked to show.
+   * Reads the saved secrets with a request of its own, and resolves with their rows once those
+   * are decrypted and published. They were read after the call, whatever else was on its way:
+   * rows to edit after a deploy. Rejects when they can't be read or can't be decrypted.
    */
-  const readSaved = useCallback(() => refetch(), [refetch])
+  const readSaved = useCallback(async () => {
+    const { data: saved } = await refetch()
+    if (!saved?.appEnvironments) throw new Error('The saved secrets were not read')
+    const snapshot = await showRef.current(saved.appEnvironments as EnvironmentType[])
+    return snapshot.appSecrets
+  }, [refetch])
 
   return {
     environments: processed?.environments ?? NO_ENVIRONMENTS,

@@ -5,7 +5,6 @@ import {
   appSecretRowIsEdited,
   buildAppSecretRows,
   carryRowKeys,
-  deployIsShown,
   deployReferenceErrors,
   dirtyEnvIds,
   duplicateKeyRowIds,
@@ -16,6 +15,7 @@ import {
   mergeAppSecretsUpdate,
   mergeImportedRows,
   moveAppSecretRows,
+  readBackDeploy,
   repeatedKeyToFix,
   restoreAppSecretEntries,
   revertAppSecretEntries,
@@ -495,12 +495,12 @@ describe('snapshotHasDeploy', () => {
   })
 })
 
-describe('deployIsShown', () => {
-  const WITHIN = 60000
+describe('readBackDeploy', () => {
   const ANSWERS_WITHIN = 20000
   const RETRY_AFTER = 3000
-  const never = new Promise<void>(() => {})
-  const wait = { within: WITHIN, answersWithin: ANSWERS_WITHIN, retryAfter: RETRY_AFTER }
+  const never = new Promise<never>(() => {})
+  const wait = { answersWithin: ANSWERS_WITHIN, retryAfter: RETRY_AFTER }
+  const SAVED = ['the rows as saved']
   /** A promise the test settles by hand */
   const landing = () => {
     let land = () => {}
@@ -511,23 +511,31 @@ describe('deployIsShown', () => {
   beforeEach(() => jest.useFakeTimers())
   afterEach(() => jest.useRealTimers())
 
-  it('is true once the snapshot with the deploy lands', async () => {
-    const { landed, land } = landing()
-    const shown = deployIsShown(async () => {}, landed, wait)
+  it('hands over the saved rows as soon as they are read', async () => {
+    const read = jest.fn().mockResolvedValue(SAVED)
 
-    await jest.advanceTimersByTimeAsync(WITHIN / 2)
+    await expect(readBackDeploy(read, never, wait)).resolves.toEqual({ saved: SAVED })
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('ends when the snapshot with the deploy lands by another road', async () => {
+    const { landed, land } = landing()
+    const outcome = readBackDeploy(() => never, landed, wait)
+
+    await jest.advanceTimersByTimeAsync(ANSWERS_WITHIN / 2)
     land()
 
-    await expect(shown).resolves.toBe(true)
+    await expect(outcome).resolves.toBe('landed')
     expect(jest.getTimerCount()).toBe(0)
   })
 
   it('reads again when the read after the deploy fails, for as long as it takes', async () => {
-    const { landed, land } = landing()
     const onUnread = jest.fn()
+    // Not read, or read but not decrypted: either way there are no rows to hand over
     const read = jest.fn().mockRejectedValue(new Error('Failed to fetch'))
-    let settled: boolean | undefined
-    deployIsShown(read, landed, { ...wait, onUnread }).then((shown) => (settled = shown))
+    let settled: unknown
+    readBackDeploy(read, never, { ...wait, onUnread }).then((outcome) => (settled = outcome))
 
     // The rows on the page are still from before the deploy: no answer yet, however long it takes
     await jest.advanceTimersByTimeAsync(10 * 60000)
@@ -535,61 +543,80 @@ describe('deployIsShown', () => {
     expect(read.mock.calls.length).toBeGreaterThan(100)
     expect(onUnread).toHaveBeenCalledTimes(1)
 
-    // The connection is back: the next read is answered, and its snapshot shows the deploy
-    read.mockResolvedValue(undefined)
+    // The connection is back: the next read is answered
+    read.mockResolvedValue(SAVED)
     await jest.advanceTimersByTimeAsync(RETRY_AFTER)
-    land()
-    await jest.advanceTimersByTimeAsync(0)
-    expect(settled).toBe(true)
+    expect(settled).toEqual({ saved: SAVED })
     expect(jest.getTimerCount()).toBe(0)
   })
 
   it('sends another read when one goes unanswered', async () => {
-    const { landed, land } = landing()
     const onUnread = jest.fn()
-    const read = jest.fn().mockReturnValue(never)
-    let settled: boolean | undefined
-    deployIsShown(read, landed, { ...wait, onUnread }).then((shown) => (settled = shown))
+    const read = jest.fn().mockReturnValueOnce(never).mockResolvedValue(SAVED)
+    let settled: unknown
+    readBackDeploy(read, never, { ...wait, onUnread }).then((outcome) => (settled = outcome))
 
     await jest.advanceTimersByTimeAsync(ANSWERS_WITHIN - 1)
     expect(read).toHaveBeenCalledTimes(1)
     expect(onUnread).not.toHaveBeenCalled()
+    expect(settled).toBeUndefined()
 
     await jest.advanceTimersByTimeAsync(1 + RETRY_AFTER)
     expect(read).toHaveBeenCalledTimes(2)
     expect(onUnread).toHaveBeenCalledTimes(1)
-    expect(settled).toBeUndefined()
-
-    // An answer that comes late still counts: its snapshot lands whichever read brought it
-    land()
-    await jest.advanceTimersByTimeAsync(0)
-    expect(settled).toBe(true)
+    expect(settled).toEqual({ saved: SAVED })
     expect(jest.getTimerCount()).toBe(0)
   })
 
-  it('is false when a read came back and no snapshot shows the deploy within the limit', async () => {
-    let settled: boolean | undefined
-    deployIsShown(async () => {}, never, wait).then((shown) => (settled = shown))
+  it('takes a read that is answered late, in the pause before the next one', async () => {
+    let answer = (rows: string[]) => {}
+    const late = new Promise<string[]>((resolve) => (answer = resolve))
+    const read = jest.fn().mockReturnValueOnce(late).mockReturnValue(never)
+    const { landed, land } = landing()
+    let settled: unknown
+    readBackDeploy(read, landed, wait).then((outcome) => (settled = outcome))
 
-    await jest.advanceTimersByTimeAsync(WITHIN - 1)
+    await jest.advanceTimersByTimeAsync(ANSWERS_WITHIN + 1)
+    // Its snapshot is published by whoever read it, and lands
+    answer(SAVED)
+    land()
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(settled).toBe('landed')
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('does not hand the editor back for the time alone', async () => {
+    const left = new AbortController()
+    let settled: unknown
+    readBackDeploy(() => never, never, { ...wait, signal: left.signal }).then(
+      (outcome) => (settled = outcome)
+    )
+
+    await jest.advanceTimersByTimeAsync(10 * 60000)
     expect(settled).toBeUndefined()
 
-    await jest.advanceTimersByTimeAsync(1)
-    expect(settled).toBe(false)
+    left.abort()
+    await jest.advanceTimersByTimeAsync(0)
+    expect(settled).toBe('left')
+    expect(jest.getTimerCount()).toBe(0)
   })
 
   it('stops reading once the page is left', async () => {
     const left = new AbortController()
     const read = jest.fn().mockRejectedValue(new Error('Failed to fetch'))
-    let settled: boolean | undefined
-    deployIsShown(read, never, { ...wait, signal: left.signal }).then((shown) => (settled = shown))
+    let settled: unknown
+    readBackDeploy(read, never, { ...wait, signal: left.signal }).then(
+      (outcome) => (settled = outcome)
+    )
 
     await jest.advanceTimersByTimeAsync(RETRY_AFTER * 2)
     const sent = read.mock.calls.length
     left.abort()
     await jest.advanceTimersByTimeAsync(10 * 60000)
 
-    expect(settled).toBe(false)
+    expect(settled).toBe('left')
     expect(read).toHaveBeenCalledTimes(sent)
     expect(jest.getTimerCount()).toBe(0)
   })
