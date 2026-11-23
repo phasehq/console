@@ -6,8 +6,6 @@ import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ACCESS_PAGES } from '@/utils/navigation'
-import { SidebarContext } from '@/contexts/sidebarContext'
-import { useShellExperiment } from '@/utils/shellExperiment'
 
 export default function AccessLayout(props: {
   params: Promise<{ team: string }>
@@ -23,11 +21,6 @@ export default function AccessLayout(props: {
 
   const tabs = ACCESS_PAGES
 
-  // TEMPORARY (utils/shellExperiment.ts): while the sidebar is expanded it lists these pages, so the tab bar repeats it
-  const experiment = useShellExperiment()
-  const { sidebarState } = useContext(SidebarContext)
-  const tabsInSidebar = experiment.hideTabs && sidebarState === 'expanded'
-
   useEffect(() => {
     const activeTabIndex = () => {
       const currentUrl = path?.split('/')[3] || ''
@@ -40,23 +33,13 @@ export default function AccessLayout(props: {
 
   return (
     <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto h-full">
-      <div
-        className={clsx(
-          'flex items-center gap-2 pb-3 sm:pb-4 lg:pb-6 px-3 sm:px-4 lg:px-6',
-          tabsInSidebar && experiment.hideSectionHeading && 'min-[1025px]:hidden'
-        )}
-      >
+      <div className="flex items-center gap-2 pb-3 sm:pb-4 lg:pb-6 px-3 sm:px-4 lg:px-6">
         <h1 className="text-lg sm:text-xl font-bold">Access</h1>
       </div>
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
         {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
-        <div
-          className={clsx(
-            'w-full overflow-x-auto scrollbar-hide',
-            tabsInSidebar && 'min-[1025px]:hidden'
-          )}
-        >
+        <div className="w-full overflow-x-auto scrollbar-hide">
           <Tab.List className="flex gap-2 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
             {tabs.map((tab) => (
               <Tab as={Fragment} key={tab.name}>
@@ -77,14 +60,7 @@ export default function AccessLayout(props: {
             ))}
           </Tab.List>
         </div>
-        <div
-          className={clsx(
-            'flex-1 overflow-y-auto',
-            tabsInSidebar ? 'min-[1025px]:pt-0 pt-4' : 'pt-4'
-          )}
-        >
-          {children}
-        </div>
+        <div className="pt-4 flex-1 overflow-y-auto">{children}</div>
       </Tab.Group>
     </div>
   )

@@ -13,7 +13,7 @@ import { generatePageTitle, NavigationContext } from '@/utils/navigation'
 import { useParsedRoute } from '@/utils/route'
 
 // Where the current route sits: its org, app and environment
-export const useNavigationContext = (): NavigationContext => {
+const useNavigationContext = (): NavigationContext => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const { team, context, appId, envId, page, subPage } = useParsedRoute()
 

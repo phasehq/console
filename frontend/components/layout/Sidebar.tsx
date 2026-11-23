@@ -42,12 +42,7 @@ import { Menu, Popover, Transition } from '@headlessui/react'
 import { LogoWordMark } from '../common/LogoWordMark'
 import { Avatar } from '../common/Avatar'
 import { openCommandPalette, useModifierKey } from '../common/CommandPalette'
-import {
-  Status,
-  STATUS_PAGE_BASE_URL,
-  statusColor,
-  useSystemStatus,
-} from '../common/StatusIndicator'
+import { STATUS_PAGE_BASE_URL, statusColor, useSystemStatus } from '../common/StatusIndicator'
 import { OrgMenuItems } from './OrgSwitcher'
 import { SIDEBAR_WIDTH, SidebarResizeHandle } from './SidebarResizeHandle'
 import { ModeToggle } from '../common/ModeToggle'
@@ -56,7 +51,6 @@ import { FaCodeMerge, FaListUl } from 'react-icons/fa6'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 import { sortApps } from '@/utils/app'
 import { ACCESS_PAGES, getIntegrationPages } from '@/utils/navigation'
-import { useShellExperiment } from '@/utils/shellExperiment'
 
 type SidebarSubLinkT = {
   name: string
@@ -402,28 +396,9 @@ const SidebarFooterMenu = ({
 
 type FooterMenuProps = { collapsed: boolean; animating: boolean }
 
-// TEMPORARY: statuses to look at while developing locally, where there is none (utils/shellExperiment.ts)
-const MOCK_STATUS = {
-  none: 'All Systems Operational',
-  minor: 'Partially Degraded Service',
-  major: 'Partial System Outage',
-  critical: 'Major Service Outage',
-} as const
-
-// The hosted service's status. Self-hosted instances have none
-const useServiceStatus = () => {
-  const { mockStatus } = useShellExperiment()
-  const live = useSystemStatus()
-
-  if (!mockStatus) return live
-
-  const indicator = mockStatus === true ? 'none' : mockStatus
-  const status: Status = { indicator, description: MOCK_STATUS[indicator] }
-  return { status, isLoading: false, enabled: true }
-}
-
 const HelpMenu = (props: FooterMenuProps) => {
-  const { status, isLoading, enabled } = useServiceStatus()
+  // The hosted service's status. Self-hosted instances have none
+  const { status, isLoading, enabled } = useSystemStatus()
   // An incident marks the button, so it is seen without opening the menu
   const incident = enabled && !!status && ['minor', 'major', 'critical'].includes(status.indicator)
 
@@ -518,10 +493,9 @@ const ThemeRow = ({ className }: { className: string }) => (
 const AccountMenu = ({
   team,
   active,
-  showOrganisations,
   collapsed,
   animating,
-}: FooterMenuProps & { team: string; active: boolean; showOrganisations: boolean }) => {
+}: FooterMenuProps & { team: string; active: boolean }) => {
   const { data: session } = useSession()
   const { activeOrganisation } = useContext(organisationContext)
 
@@ -593,7 +567,7 @@ const AccountMenu = ({
               {({ close }) => (
                 <>
                   <AccountHeader />
-                  {showOrganisations && <OrgMenuItems heading="Organisations" onNavigate={close} />}
+                  <OrgMenuItems heading="Organisations" onNavigate={close} />
                   <div className="space-y-0.5 p-1">
                     <ThemeRow className={MENU_ROW_STYLE} />
                     <FooterMenuLink href="/account" icon={FaUserCircle} onClick={close}>
@@ -833,8 +807,6 @@ const Sidebar = () => {
   const pathname = usePathname()
   const [, team, section, page] = pathname?.split('/') ?? []
   const { activeOrganisation } = useContext(organisationContext)
-  // TEMPORARY: variant switches, see utils/shellExperiment.ts
-  const experiment = useShellExperiment()
 
   const navRef = useRef<HTMLElement>(null)
 
@@ -1086,7 +1058,6 @@ const Sidebar = () => {
           <AccountMenu
             team={team}
             active={settingsActive}
-            showOrganisations={!experiment.breadcrumbs}
             collapsed={collapsed}
             animating={animating}
           />

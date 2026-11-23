@@ -1,7 +1,6 @@
 'use client'
 
 import '@/app/globals.css'
-import { Breadcrumbs } from '@/components/layout/Breadcrumbs'
 import { PageTitle } from '@/components/layout/PageTitle'
 import CommandPalette from '@/components/common/CommandPalette'
 import Sidebar from '@/components/layout/Sidebar'
@@ -12,7 +11,6 @@ import clsx from 'clsx'
 import { usePathname, useRouter } from 'next/navigation'
 import { useContext, useEffect, useMemo, use } from 'react'
 import UnlockKeyringDialog from '@/components/auth/UnlockKeyringDialog'
-import { useShellExperiment } from '@/utils/shellExperiment'
 
 export default function RootLayout(props: {
   children: React.ReactNode
@@ -25,8 +23,6 @@ export default function RootLayout(props: {
   const { activeOrganisation, setActiveOrganisation, organisations, loading } =
     useContext(organisationContext)
   const { user } = useUser()
-  // TEMPORARY: variant switches, see utils/shellExperiment.ts
-  const experiment = useShellExperiment()
 
   const router = useRouter()
 
@@ -149,17 +145,12 @@ export default function RootLayout(props: {
       )}
       <div
         className={clsx(
-          'flex min-w-0 flex-1 flex-col',
-          showNav && [
-            'mb-[var(--mobile-tabbar-height)] overflow-hidden rounded-b-2xl border-b border-neutral-500/20 bg-neutral-200 dark:bg-neutral-900',
-            experiment.inset
-              ? 'md:my-2 md:mr-2 md:rounded-xl md:border'
-              : 'md:rounded-none md:border-b-0 md:border-l',
-          ]
+          'min-w-0 flex-1 overflow-auto',
+          showNav &&
+            'mb-[var(--mobile-tabbar-height)] rounded-b-2xl border-b border-neutral-500/20 bg-neutral-200 dark:bg-neutral-900 md:rounded-none md:border-b-0 md:border-l'
         )}
       >
-        {showNav && experiment.breadcrumbs && <Breadcrumbs />}
-        <div className="min-h-0 flex-1 overflow-auto">{orgInSync && children}</div>
+        {orgInSync && children}
       </div>
     </div>
   )

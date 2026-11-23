@@ -5,7 +5,6 @@ import Link from 'next/link'
 import clsx from 'clsx'
 import { Menu } from '@headlessui/react'
 import { FaCheck, FaPlus } from 'react-icons/fa'
-import { TbSelector } from 'react-icons/tb'
 import { organisationContext } from '@/contexts/organisationContext'
 import { RoleLabel } from '../users/RoleLabel'
 
@@ -102,31 +101,5 @@ export const OrgMenuItems = ({
         </div>
       )}
     </>
-  )
-}
-
-// Organisation switcher shown beside the first breadcrumb
-export const OrgSwitcher = () => {
-  const { switchableOrganisations } = useOrganisations()
-
-  if (switchableOrganisations.length < 2) return null
-
-  return (
-    <Menu>
-      <Menu.Button
-        title="Switch organisation"
-        className="-ml-1 flex size-5 shrink-0 items-center justify-center rounded text-neutral-500 transition ease hover:bg-zinc-900/5 hover:text-zinc-900 data-[open]:bg-zinc-900/10 data-[open]:text-zinc-900 dark:hover:bg-white/5 dark:hover:text-zinc-100 dark:data-[open]:bg-white/10 dark:data-[open]:text-zinc-100"
-      >
-        <TbSelector className="size-3.5" />
-      </Menu.Button>
-      {/* Anchored, so it renders in a portal: the breadcrumb trail clips its overflow */}
-      <Menu.Items
-        anchor={{ to: 'bottom start', gap: 8 }}
-        transition
-        className="z-20 w-56 origin-top-left divide-y divide-neutral-500/20 rounded-md bg-neutral-200 shadow-2xl ring-1 ring-inset ring-neutral-500/40 transition duration-100 ease-out focus:outline-none data-[closed]:scale-95 data-[closed]:opacity-0 dark:bg-neutral-800"
-      >
-        <OrgMenuItems />
-      </Menu.Items>
-    </Menu>
   )
 }
