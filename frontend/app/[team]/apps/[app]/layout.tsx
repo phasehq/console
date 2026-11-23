@@ -97,7 +97,7 @@ export default function AppLayout(props: {
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
         {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
-        <div className="w-full shrink-0 overflow-x-auto">
+        <div className="w-full shrink-0 overflow-x-auto scrollbar-hide">
           <Tab.List className="flex gap-0 sm:gap-2 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
             {tabs.map((tab) => (
               <Tab as={Fragment} key={tab.name}>

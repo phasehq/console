@@ -51,7 +51,12 @@ export default function AccessLayout(props: {
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
         {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
-        <div className={clsx('w-full overflow-x-auto', tabsInSidebar && 'min-[1025px]:hidden')}>
+        <div
+          className={clsx(
+            'w-full overflow-x-auto scrollbar-hide',
+            tabsInSidebar && 'min-[1025px]:hidden'
+          )}
+        >
           <Tab.List className="flex gap-2 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
             {tabs.map((tab) => (
               <Tab as={Fragment} key={tab.name}>
