@@ -241,8 +241,10 @@ const SidebarItem = ({
 
       {collapsed &&
         (hasSublinks ? (
-          // pl-4 bridges the hover gap; the hide delay lets Tab move focus into the flyout
-          <div className="invisible absolute left-full top-0 z-50 pl-4 transition-[visibility] delay-100 duration-0 group-hover/item:visible group-hover/item:delay-0 group-has-[:focus-visible]/item:visible group-has-[:focus-visible]/item:delay-0">
+          // pl-4 bridges the hover gap. Hidden with opacity, not visibility: it shows and hides at once,
+          // so two flyouts are never open together as the pointer crosses the rail, and its links
+          // stay focusable, so Tab can move from the icon into it
+          <div className="pointer-events-none absolute left-full top-0 z-50 pl-4 opacity-0 group-hover/item:pointer-events-auto group-hover/item:opacity-100 group-has-[:focus-visible]/item:pointer-events-auto group-has-[:focus-visible]/item:opacity-100">
             <div className="w-52 rounded-md bg-neutral-200 p-1 shadow-2xl ring-1 ring-inset ring-neutral-500/40 dark:bg-neutral-800">
               <div className="px-2 py-1 text-2xs font-semibold uppercase tracking-wide text-neutral-500">
                 {link.name}
