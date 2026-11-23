@@ -1650,7 +1650,7 @@ def _connection_policy(connection, policy):
     except ConfigRegistryError as exc:
         raise GraphQLError(str(exc)) from exc
     if checked and not connection_takes_policy(connection):
-        raise GraphQLError("Access policies apply only to HTTP Connections")
+        raise GraphQLError("Access rules apply only to HTTP Connections")
     return checked
 
 
@@ -1722,7 +1722,7 @@ class SetAgentConnectionPolicyMutation(graphene.Mutation):
                 AuditEvent.UPDATE,
                 AuditEvent.AGENT_CONNECTION,
                 connection,
-                f"Changed the access policy of Agent Connection '{connection.name}'",
+                f"Changed the access rules of Agent Connection '{connection.name}'",
                 service_type=connection.service_type,
                 policy=connection.policy,
                 previous_policy=previous,

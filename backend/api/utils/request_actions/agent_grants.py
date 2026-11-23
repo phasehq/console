@@ -159,8 +159,8 @@ def _refuse_blocked(connection, allow):
         return
     if allow_is_blocked(connection.policy, allow):
         raise ActionError(
-            "This Connection's access policy blocks that call, and a temporary "
-            "allow never changes a block. A member has to change the policy.",
+            "This Connection's access rules block that call, and a temporary "
+            "allow never changes a block. A member has to change the rules.",
             code="access_policy_blocks_allow",
         )
 
@@ -228,7 +228,7 @@ class AllowCall(ActionHandler):
         grant = _granted(request, action["connectionId"])
         if not connection_takes_policy(grant.connection):
             raise ActionError(
-                "Access policies apply only to HTTP Connections.",
+                "Access rules apply only to HTTP Connections.",
                 code="access_policy_not_supported",
             )
         if is_app_service(grant.connection.service_type):

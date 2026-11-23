@@ -155,7 +155,7 @@ def test_a_policy_set_by_a_member_reaches_the_session(space):
     assert audit.resource_metadata["policy"] == ASK_DELETES
     assert audit.resource_metadata["previous_policy"] == {}
     assert audit.resource_metadata["workflow_ids"] == [str(space.workflow.id)]
-    assert "access policy" in audit.description
+    assert "access rules" in audit.description
 
 
 def test_setting_the_same_policy_again_changes_nothing(space):
