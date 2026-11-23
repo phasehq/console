@@ -27,9 +27,8 @@ const useOrganisations = () => {
   }
 }
 
-// The organisation rows: every organisation with the user's role in it, and a check on the current one.
-// In a Headless UI Menu they are menu items. With `onNavigate` they are plain links, for a popover.
-// `touch` makes them taller, for the phone More menu
+// Menu items inside a Headless UI Menu; with `onNavigate`, plain links for a popover.
+// `touch` makes the rows taller, for the phone More menu
 export const OrgMenuItems = ({
   heading,
   touch = false,

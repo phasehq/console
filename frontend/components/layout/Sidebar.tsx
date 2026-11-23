@@ -76,9 +76,8 @@ const ACTIVE_TEXT = 'text-zinc-900 dark:text-zinc-100'
 const HOVER_BG = 'hover:bg-zinc-900/5 dark:hover:bg-white/5'
 const INACTIVE_STYLE =
   'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
-// The navigation borrows the docs' palette: the current page gets a faint highlight and bright text and,
-// in a sublist, an emerald marker on the guide line. Nothing but the text changes on hover.
-// The docs' 2.5% highlight was too faint on the light shell colour, so the light theme uses 5%
+// The docs' navigation palette: a faint highlight and, in a sublist, an emerald marker on the guide
+// line. The light theme uses 5%: the docs' 2.5% was too faint on the light shell colour
 const NAV_ACTIVE_BG = 'bg-zinc-800/5 dark:bg-white/[0.025]'
 const NAV_ACTIVE_TEXT = 'text-zinc-900 dark:text-white'
 const NAV_INACTIVE_TEXT =
@@ -237,9 +236,8 @@ const SidebarItem = ({
       {collapsed &&
         !animating &&
         (hasSublinks ? (
-          // pl-4 bridges the hover gap. Hidden with opacity, not visibility: it shows and hides at once,
-          // so two flyouts are never open together as the pointer crosses the rail, and its links
-          // stay focusable, so Tab can move from the icon into it
+          // Hidden with opacity, not visibility: it switches at once, and its links stay focusable so
+          // Tab can move from the icon into it. pl-4 bridges the hover gap
           <div className="pointer-events-none absolute left-full top-0 z-50 pl-4 opacity-0 group-hover/item:pointer-events-auto group-hover/item:opacity-100 group-has-[:focus-visible]/item:pointer-events-auto group-has-[:focus-visible]/item:opacity-100">
             <div className="w-52 rounded-md bg-neutral-200 p-1 shadow-2xl ring-1 ring-inset ring-neutral-500/40 dark:bg-neutral-800">
               <div className="px-2 py-1 text-2xs font-semibold uppercase tracking-wide text-neutral-500">
