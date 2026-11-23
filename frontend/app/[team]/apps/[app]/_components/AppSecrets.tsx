@@ -9,6 +9,7 @@ import {
   CreateEnvironmentDialogHandle,
 } from '@/components/environments/CreateEnvironmentDialog'
 import { DeletedEnvironmentDialog } from '@/components/environments/DeletedEnvironmentDialog'
+import { DeletedEnvironments } from '@/components/environments/DeletedEnvironments'
 import { useDeletedEnvironments } from '@/hooks/useDeletedEnvironments'
 import { LogSecretReads } from '@/graphql/mutations/environments/readSecret.gql'
 import { UpdateEnvOrder } from '@/graphql/mutations/environments/updateEnvironmentOrder.gql'
@@ -2313,6 +2314,19 @@ export const AppSecrets = ({
   const loadingGrid =
     ((fetching && !hasContent) || selectionLoading) &&
     (!organisation || (userCanReadEnvironments && userCanReadSecrets))
+  // Where the grid isn't shown there are no struck-out columns to restore an environment from:
+  // the same environments as a list
+  const scheduledEnvironments = deletedEnvs.environments.length > 0 && (
+    <div className="mx-auto w-full max-w-2xl px-4 sm:px-6 lg:px-8">
+      <DeletedEnvironments
+        environments={deletedEnvs.environments}
+        allowRestore={userCanDeleteEnvironments}
+        restoringId={deletedEnvs.restoringId}
+        onRestore={deletedEnvs.restore}
+        onDeleteNow={deletedEnvs.deleteNow}
+      />
+    </div>
+  )
   // Last visit's layout; unread until mounted, as the server render can't see this browser's storage
   const [savedShape, setSavedShape] = useState<GridShape | null | undefined>(undefined)
   useLayoutEffect(() => setSavedShape(readGridShape(app)), [app])
@@ -2886,36 +2900,42 @@ export const AppSecrets = ({
             />
           )
         ) : !userCanReadEnvironments || !userCanReadSecrets ? (
-          <EmptyState
-            title="Access restricted"
-            subtitle="You don't have the permissions required to view Secrets in this app."
-            graphic={
-              <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                <FaBan />
-              </div>
-            }
-          >
-            {/* Creating an environment reads no secret; its button is otherwise in the grid's header */}
-            {userCanCreateEnvironments ? <CreateEnvironmentDialog appId={app} /> : <></>}
-          </EmptyState>
-        ) : loadFailed && !hasContent ? (
-          <EmptyState
-            title="Couldn't load secrets"
-            subtitle="Something went wrong while fetching or decrypting this App's secrets."
-            graphic={
-              <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-                <FaTimesCircle />
-              </div>
-            }
-          >
-            <Button
-              variant="outline"
-              icon={FaArrowsRotate}
-              onClick={() => window.location.reload()}
+          <>
+            <EmptyState
+              title="Access restricted"
+              subtitle="You don't have the permissions required to view Secrets in this app."
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <FaBan />
+                </div>
+              }
             >
-              Reload
-            </Button>
-          </EmptyState>
+              {/* Creating an environment reads no secret; its button is otherwise in the grid's header */}
+              {userCanCreateEnvironments ? <CreateEnvironmentDialog appId={app} /> : <></>}
+            </EmptyState>
+            {scheduledEnvironments}
+          </>
+        ) : loadFailed && !hasContent ? (
+          <>
+            <EmptyState
+              title="Couldn't load secrets"
+              subtitle="Something went wrong while fetching or decrypting this App's secrets."
+              graphic={
+                <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+                  <FaTimesCircle />
+                </div>
+              }
+            >
+              <Button
+                variant="outline"
+                icon={FaArrowsRotate}
+                onClick={() => window.location.reload()}
+              >
+                Reload
+              </Button>
+            </EmptyState>
+            {scheduledEnvironments}
+          </>
         ) : (
           // The scroller is the only scrolling region, on both axes: headers stick to
           // its top and the key column to its left edge. `isolate` keeps the sticky
