@@ -25,13 +25,20 @@ def user_is_org_member(user_id, org_id):
     ).exists()
 
 
-def user_can_access_app(user_id, app_id):
+def user_can_access_app(user_id, app_id, include_deleted=False):
+    """`include_deleted` also reaches an app pending deletion, which is
+    otherwise refused; only listing and restoring those need it.
+
+    A team reaches an app through any environment in its scope, also one
+    pending deletion: its members can still open the app to find and restore
+    it. The environment itself stays locked."""
     OrganisationMember = apps.get_model("api", "OrganisationMember")
     App = apps.get_model("api", "App")
     TeamMembership = apps.get_model("api", "TeamMembership")
 
+    manager = App.all_objects if include_deleted else App.objects
     try:
-        app = App.objects.get(id=app_id)
+        app = manager.get(id=app_id)
         org_member = OrganisationMember.objects.get(
             user_id=user_id, organisation=app.organisation, deleted_at=None
         )
@@ -75,13 +82,16 @@ def service_account_can_access_app(account_id, app_id):
     ).exists()
 
 
-def user_can_access_environment(user_id, env_id):
+def user_can_access_environment(user_id, env_id, include_deleted=False):
+    """`include_deleted` also reaches an environment pending deletion, which
+    is otherwise inaccessible. Only restoring it needs that."""
     OrganisationMember = apps.get_model("api", "OrganisationMember")
     Environment = apps.get_model("api", "Environment")
     EnvironmentKey = apps.get_model("api", "EnvironmentKey")
 
+    manager = Environment.all_objects if include_deleted else Environment.objects
     try:
-        env = Environment.objects.get(id=env_id)
+        env = manager.get(id=env_id)
         org_member = OrganisationMember.objects.get(
             organisation=env.app.organisation, user_id=user_id, deleted_at=None
         )
@@ -243,6 +253,17 @@ def user_has_permission(
 
     except OrganisationMember.DoesNotExist:
         return False  # User is not a member of the organization
+
+
+def user_can_delete_app(user, app):
+    """Whether `user` may delete `app`, and so restore it or delete it now
+    while it is scheduled for deletion: by their organisation role, as
+    deleteApp checks it, or by their role for this app, which a team can
+    set, as the REST API does."""
+    organisation = app.organisation
+    return user_has_permission(
+        user, "delete", "Apps", organisation
+    ) or user_has_permission(user, "delete", "Apps", organisation, app=app)
 
 
 def role_has_global_access(role):

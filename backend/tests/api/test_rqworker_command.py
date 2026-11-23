@@ -41,8 +41,9 @@ def test_maintenance_worker_listens_on_the_maintenance_queue():
 
 
 def test_registers_the_org_deletion_sweep_at_startup():
-    """The sweep's schedule lives only in Redis. Registering it at startup
-    restores it after a Redis restart, instead of at the next migrate."""
+    """The sweep's schedule lives only in Redis. Workers register it when
+    they start: that restores it after a Redis restart, and a sweep that is
+    new in a release is not scheduled before a worker that knows it exists."""
     with patch(
         "api.tasks.organisation_deletion.init_organisation_deletion_sweeper"
     ) as init:
@@ -54,6 +55,25 @@ def test_registers_the_org_deletion_sweep_at_startup():
 def test_a_failed_sweep_registration_does_not_stop_the_workers():
     with patch(
         "api.tasks.organisation_deletion.init_organisation_deletion_sweeper",
+        side_effect=ConnectionError("Redis is down"),
+    ):
+        process = _start(rqworker.Command())
+
+    assert process.return_value.start.called
+
+
+def test_registers_the_app_and_environment_deletion_sweep_at_startup():
+    with patch(
+        "api.tasks.resource_deletion.init_resource_deletion_sweeper"
+    ) as init:
+        _start(rqworker.Command())
+
+    init.assert_called_once_with()
+
+
+def test_a_failed_resource_sweep_registration_does_not_stop_the_workers():
+    with patch(
+        "api.tasks.resource_deletion.init_resource_deletion_sweeper",
         side_effect=ConnectionError("Redis is down"),
     ):
         process = _start(rqworker.Command())

@@ -13,6 +13,7 @@ import { FaBan, FaPlus } from 'react-icons/fa'
 import { FaBoxOpen } from 'react-icons/fa6'
 import { Button } from '@/components/common/Button'
 import { AppsView } from '@/components/apps/AppsView'
+import { DeletedApps } from '@/components/apps/DeletedApps'
 import { UpsellDialog } from '@/components/settings/organisation/UpsellDialog'
 import { PlanLabel } from '@/components/settings/organisation/PlanLabel'
 import { isCloudHosted } from '@/utils/appConfig'
@@ -104,6 +105,8 @@ export default function AppsHome() {
           )}
 
           <AppsView loading={loading} apps={apps} />
+
+          <DeletedApps organisationId={organisation.id} />
 
           {!loading && apps?.length === 0 && userCanCreateApps && (
             <div className="xl:col-span-2 1080p:col-span-3 justify-center p-8 sm:p-10 lg:p-14">

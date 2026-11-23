@@ -1,7 +1,7 @@
 import re
 
 from api.auth import PhaseTokenAuthentication
-from api.models import Environment, EnvironmentKey
+from api.models import Environment, EnvironmentKey, RotatingSecret
 from api.serializers import EnvironmentSerializer
 from api.utils.access.permissions import (
     user_has_permission,
@@ -12,6 +12,13 @@ from api.utils.access.permissions import (
 )
 from api.utils.audit_logging import log_audit_event, get_actor_info, build_change_values
 from api.utils.environments import create_environment
+from api.utils.resource_deletion import (
+    ResourceDeletionError,
+    deletion_scheduled_for,
+    environment_name_conflict,
+    environment_name_conflict_message,
+    schedule_environment_deletion,
+)
 from api.utils.rest import (
     METHOD_TO_ACTION,
     get_request_principal,
@@ -266,13 +273,10 @@ class PublicEnvironmentDetailView(APIView):
             )
 
         # Check for duplicate name (case-insensitive, excluding self)
-        if (
-            Environment.objects.filter(app=app, name__iexact=name)
-            .exclude(id=env.id)
-            .exists()
-        ):
+        conflict = environment_name_conflict(app, name, exclude_id=env.id)
+        if conflict:
             return Response(
-                {"error": f"An environment named '{name}' already exists in this app."},
+                {"error": environment_name_conflict_message(conflict, name)},
                 status=status.HTTP_409_CONFLICT,
             )
 
@@ -314,14 +318,32 @@ class PublicEnvironmentDetailView(APIView):
             )
         self._check_env_access(request, env)
 
+        # As the deleteEnvironment mutation: deleting the environment deletes
+        # its rotating secrets and revokes their credentials.
+        if RotatingSecret.objects.filter(
+            environment=env, deleted_at__isnull=True
+        ).exists():
+            account, is_sa = get_request_principal(request)
+            if not user_has_permission(
+                account, "delete", "RotatingSecrets", org, True, is_sa, app=app
+            ):
+                raise PermissionDenied(
+                    "This environment contains rotating secrets. You need "
+                    "permission to delete rotating secrets to remove it."
+                )
+
         if env.env_type not in ("dev", "staging", "prod") and not can_use_custom_envs(org):
             return Response(
                 {"error": "Custom environments are not available on the Free plan."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Locked now and purged by a background job after the grace period.
         env_name = env.name
-        env.delete()
+        try:
+            schedule_environment_deletion(env)
+        except ResourceDeletionError as e:
+            return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
 
         # Audit log
         actor_type, actor_id, actor_meta = get_actor_info(request)
@@ -336,7 +358,10 @@ class PublicEnvironmentDetailView(APIView):
             actor_metadata=actor_meta,
             resource_metadata={"name": env_name, "app_id": str(app.id), "app_name": app.name},
             old_values={"name": env_name},
-            description=f"Deleted environment '{env_name}' from app '{app.name}'",
+            description=(
+                f"Scheduled environment '{env_name}' in app '{app.name}' for "
+                f"deletion on {deletion_scheduled_for(env):%Y-%m-%d %H:%M} UTC"
+            ),
             ip_address=ip_address,
             user_agent=user_agent,
         )

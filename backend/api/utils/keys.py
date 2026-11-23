@@ -244,7 +244,6 @@ def provision_pending_team_keys(org_member):
             .distinct()
         )
 
-        for app_id in team_app_ids:
-            app = App.objects.get(id=app_id)
-            if app.sse_enabled:
-                provision_team_environment_keys(tm.team, app, members=[tm])
+        # A filter, not a get per ID: apps pending deletion are left out.
+        for app in App.objects.filter(id__in=team_app_ids, sse_enabled=True):
+            provision_team_environment_keys(tm.team, app, members=[tm])

@@ -460,7 +460,9 @@ def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
         if not user_can_access_app(info.context.user.userId, app_id):
             raise GraphQLError("You don't have access to this app")
         return EnvironmentSync.objects.filter(
-            environment__app__id=app_id, deleted_at=None
+            environment__app__id=app_id,
+            environment__deleted_at=None,
+            deleted_at=None,
         )
 
     # If only env_id is provided
@@ -495,6 +497,7 @@ def resolve_syncs(root, info, app_id=None, env_id=None, org_id=None):
             EnvironmentSync.objects.filter(
                 environment__app__organisation_id=org_id,
                 environment__app_id__in=accessible_app_ids,
+                environment__deleted_at=None,
                 deleted_at=None,
             )
         )

@@ -5,37 +5,39 @@ from unittest.mock import MagicMock, patch
 
 from django.conf import settings
 
+from api.tasks import recurring
 from api.tasks import sessions as jobs
 
 
-def test_registration_replaces_the_schedule():
-    """Registration runs on every migrate and worker start, so it must
-    replace the schedule, never add a second one."""
+def test_the_purge_is_scheduled_daily_on_the_maintenance_queue():
     scheduler = MagicMock()
-    with patch.object(
-        jobs.django_rq, "get_scheduler", return_value=scheduler
-    ) as get_scheduler:
+    scheduler.__contains__.return_value = False
+    with patch.object(recurring.django_rq, "get_scheduler", return_value=scheduler):
         jobs.init_expired_session_purge()
 
-    get_scheduler.assert_called_once_with("scheduled-jobs")
-    assert [name for name, _, _ in scheduler.mock_calls] == ["cancel", "schedule"]
-    scheduler.cancel.assert_called_once_with(jobs.PURGE_JOB_ID)
     kwargs = scheduler.schedule.call_args.kwargs
     assert kwargs["id"] == jobs.PURGE_JOB_ID
     assert kwargs["func"] == jobs.purge_expired_sessions
-    assert kwargs["interval"] == jobs.PURGE_INTERVAL_SECONDS
-    assert kwargs["repeat"] is None
-    assert kwargs["result_ttl"] == -1
+    assert kwargs["interval"] == jobs.PURGE_INTERVAL_SECONDS == 24 * 60 * 60
+    # Nothing waits on it, so it does not hold up the jobs with deadlines.
     assert kwargs["queue_name"] == "maintenance"
 
 
-def test_registration_survives_a_failed_cancel():
+def test_a_purge_that_is_already_scheduled_keeps_its_time():
+    # Each worker start registers it: its next run must not move every time.
     scheduler = MagicMock()
-    scheduler.cancel.side_effect = RuntimeError("no such job")
-    with patch.object(jobs.django_rq, "get_scheduler", return_value=scheduler):
+    scheduler.__contains__.return_value = True
+    # As the releases before this one stored it.
+    scheduler.job_class.fetch.return_value = MagicMock(
+        func_name="api.tasks.sessions.purge_expired_sessions",
+        meta={"interval": 24 * 60 * 60},
+        origin="maintenance",
+    )
+    with patch.object(recurring.django_rq, "get_scheduler", return_value=scheduler):
         jobs.init_expired_session_purge()
 
-    scheduler.schedule.assert_called_once()
+    scheduler.schedule.assert_not_called()
+    scheduler.cancel.assert_not_called()
 
 
 def test_purge_clears_expired_sessions_of_the_configured_engine():
