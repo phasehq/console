@@ -370,7 +370,7 @@ describe('Agent Connections', () => {
 
     test('the collapsed row says what is restricted, and only when something is', () => {
       expect(cells('guarded')[1].textContent).toBe(
-        'guardedReads, create and update allowed, delete blocked · 1 HTTP rule'
+        'guardedReads, creates and updates allowed, deletes blocked · 1 path rule'
       )
       expect(cells('built-in')[1].textContent).toBe('built-in')
       // PostgreSQL takes no rules.

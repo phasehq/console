@@ -27,7 +27,10 @@ import {
   rowEffect,
   ruleRows,
   ruleTakesEffect,
+  rulesInForce,
+  rulesSaveTurnsOff,
   samePolicy,
+  savedRuleCount,
   type AdvancedRuleDraft,
   type ManagedPolicy,
   type OperationClass,
@@ -161,14 +164,18 @@ export function PolicyEditor({
   draft,
   onChange,
   variant = 'http',
+  stored,
 }: {
   draft: PolicyDraft
   onChange: (draft: PolicyDraft) => void
   variant?: PolicyVariant
+  /** The policy as saved, to tell which rules are in force now. */
+  stored?: unknown
 }) {
   const app = variant === 'app'
   const id = useId()
   const problem = policyProblem(draft)
+  const turnedOff = stored === undefined ? new Set<string>() : rulesSaveTurnsOff(stored, draft)
   const setRule = (rule: AdvancedRuleDraft, patch: Partial<AdvancedRuleDraft>) =>
     onChange({
       ...draft,
@@ -229,7 +236,12 @@ export function PolicyEditor({
             </p>
           </div>
           {draft.advanced.map((rule, index) => {
-            const inert = noEffectLine(draft, rule)
+            // A rule the stored policy gives effect to is shown as in force, with what saving does.
+            const inForce = turnedOff.has(rule.id)
+            const inert = inForce ? '' : noEffectLine(draft, rule)
+            const note = inForce
+              ? 'In force now, but saving the rules turns it off: a rule can only make calls stricter.'
+              : inert
             return (
               <div
                 key={rule.id}
@@ -262,7 +274,7 @@ export function PolicyEditor({
                       aria-label={`Path for rule ${index + 1}`}
                       value={rule.path}
                       setValue={(path) => setRule(rule, { path })}
-                      placeholder="/repos/*/*/issues"
+                      placeholder="/v1/items/*"
                       maxLength={POLICY_LIMITS.path}
                       autoComplete="off"
                       spellCheck={false}
@@ -275,7 +287,7 @@ export function PolicyEditor({
                     onChange={(effect) => setRule(rule, { effect })}
                   />
                 </div>
-                {inert && <p className="text-2xs text-neutral-500">{inert}</p>}
+                {note && <p className="text-2xs text-neutral-500">{note}</p>}
               </div>
             )
           })}
@@ -283,7 +295,7 @@ export function PolicyEditor({
             type="button"
             variant="secondary"
             icon={FaPlus}
-            disabled={draft.advanced.length >= POLICY_LIMITS.rules}
+            disabled={savedRuleCount(draft) >= POLICY_LIMITS.rules}
             onClick={() => onChange({ ...draft, advanced: [...draft.advanced, newAdvancedRule()] })}
           >
             Add HTTP rule
@@ -322,6 +334,8 @@ export function PolicyReadOnly({
   variant?: PolicyVariant
 }) {
   const draft = draftFromPolicy(policy)
+  // As the proxy reads the stored rules, which a policy written elsewhere may not match.
+  const inForce = rulesInForce(policy)
   const app = variant === 'app'
   return (
     <ul aria-label="Access rules in force" className="space-y-1 text-xs font-medium">
@@ -345,8 +359,8 @@ export function PolicyReadOnly({
           </li>
         )
       })}
-      {(app ? [] : draft.advanced).map((rule) => {
-        const inert = !ruleTakesEffect(draft, rule)
+      {(app ? [] : draft.advanced).map((rule, index) => {
+        const inert = !inForce[index]
         return (
           <li key={rule.id} className="flex items-center justify-between gap-3">
             <code className="min-w-0 break-all font-normal">
@@ -382,6 +396,7 @@ export type PolicyConnection = {
 export function EditConnectionPolicyDialog({ connection }: { connection: PolicyConnection }) {
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const initial = useRef<PolicyDraft>(draftFromPolicy(connection.policy))
+  const opened = useRef<unknown>(connection.policy)
   const [draft, setDraft] = useState<PolicyDraft>(initial.current)
   const [failure, setFailure] = useState('')
   const [save, { loading }] = useMutation(SetAgentConnectionPolicyOp)
@@ -390,6 +405,7 @@ export function EditConnectionPolicyDialog({ connection }: { connection: PolicyC
   const variant: PolicyVariant = isAppConnection(connection.serviceType) ? 'app' : 'http'
 
   const begin = () => {
+    opened.current = connection.policy
     initial.current = draftFromPolicy(connection.policy)
     setDraft(initial.current)
     setFailure('')
@@ -428,7 +444,7 @@ export function EditConnectionPolicyDialog({ connection }: { connection: PolicyC
           These rules apply to every Workflow granted <strong>{connection.name}</strong>. They can
           narrow what the Connection allows, never widen it.
         </p>
-        <PolicyEditor draft={draft} onChange={setDraft} variant={variant} />
+        <PolicyEditor draft={draft} onChange={setDraft} variant={variant} stored={opened.current} />
         {failure && (
           <div role="alert">
             <Alert variant="danger" icon size="sm">

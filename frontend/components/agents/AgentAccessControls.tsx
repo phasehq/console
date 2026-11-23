@@ -3,7 +3,7 @@
 import clsx from 'clsx'
 import { Input } from '@/components/common/Input'
 import { AgentSelect } from '@/components/agents/AgentSelect'
-import { HTTP_METHODS } from '@/utils/agents/accessPolicy'
+import { COMMON_METHODS } from '@/utils/agents/accessPolicy'
 import {
   DURATION_CHOICES,
   DURATION_UNITS,
@@ -63,7 +63,10 @@ export function ChoiceGroup<T extends string>({
   )
 }
 
-/** The HTTP methods as toggles, in their usual order; any number may be on. */
+/**
+ * The common HTTP methods as toggles, in their usual order; any number may be on. Another
+ * method a stored rule names is shown too, until it is turned off.
+ */
 export function MethodToggles({
   label,
   methods,
@@ -73,9 +76,10 @@ export function MethodToggles({
   methods: string[]
   onChange: (methods: string[]) => void
 }) {
+  const shown = [...COMMON_METHODS, ...methods.filter((method) => !COMMON_METHODS.includes(method))]
   return (
     <div role="group" aria-label={label} className="flex flex-wrap gap-1">
-      {HTTP_METHODS.map((method) => {
+      {shown.map((method) => {
         const selected = methods.includes(method)
         return (
           <button
@@ -84,7 +88,7 @@ export function MethodToggles({
             aria-pressed={selected}
             onClick={() =>
               onChange(
-                HTTP_METHODS.filter((candidate) =>
+                shown.filter((candidate) =>
                   candidate === method ? !selected : methods.includes(candidate)
                 )
               )

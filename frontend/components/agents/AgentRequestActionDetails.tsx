@@ -7,7 +7,7 @@ import { AgentBadge, AgentTime } from '@/components/agents/AgentUI'
 import { describeDuration } from '@/utils/agents/accessDuration'
 import { describeTarget, policyRestricts } from '@/utils/agents/accessPolicy'
 import { diffLines, diffStats } from '@/utils/agents/textDiff'
-import { ACCESS_LEVEL_LABEL, describeClasses, policySummary } from '@/utils/agents/appAccess'
+import { ACCESS_LEVEL_LABEL, describeClasses, policyWords } from '@/utils/agents/appAccess'
 import { AppEnvironments, WithheldApp } from '@/components/agents/WithheldAsset'
 import type {
   AccessRecord,
@@ -63,7 +63,7 @@ export function AllowDetails({
   const shown = target ?? review.allow
   const summary =
     review.policy && policyRestricts(review.policy)
-      ? policySummary(review.policy).replace(/^./, (letter) => letter.toLowerCase())
+      ? policyWords(review.policy).replace(/^./, (letter) => letter.toLowerCase())
       : ''
   if (review.app || review.visibility.appRestricted)
     return (

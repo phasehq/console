@@ -51,6 +51,13 @@ const METHOD_CLASS: Record<string, OperationClass> = {
   DELETE: 'delete',
 }
 
+/** The methods a rule is written with; a stored rule may name another of `HTTP_METHODS`. */
+export const COMMON_METHODS = Object.keys(METHOD_CLASS)
+
+/** The methods of a class, in their usual order. */
+export const classMethods = (name: OperationClass): string[] =>
+  COMMON_METHODS.filter((method) => METHOD_CLASS[method] === name)
+
 export type PolicyMatch = { methods?: string[]; path?: string }
 export type PolicyRule =
   | { class: OperationClass; effect: PolicyEffect }
@@ -272,23 +279,35 @@ export const policyFromDraft = (draft: PolicyDraft): AccessPolicy | null => {
   return { version: POLICY_VERSION, default: draft.default, rules }
 }
 
+/** How many rules a draft saves: class rules count toward the limit too. */
+export const savedRuleCount = (draft: PolicyDraft): number =>
+  classRuleNames(draft).length + draft.advanced.length
+
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/
+// The proxy decodes a request's path before comparing it, so the backend refuses an escape.
+const PERCENT_ESCAPE = /%[0-9A-Fa-f]{2}/
+
+/** Why a rule's path would be refused, or ''. Mirrors `validate_path_glob` on the backend. */
+export const pathProblem = (path: string): string => {
+  if (!path.startsWith('/')) return 'a path begins with "/".'
+  if (path.length > POLICY_LIMITS.path)
+    return `use at most ${POLICY_LIMITS.path} characters in a path.`
+  if (CONTROL_CHARACTER.test(path)) return 'the path has a control character.'
+  if (PERCENT_ESCAPE.test(path))
+    return 'write the path decoded, for example a space instead of %20; paths are compared after decoding.'
+  return ''
+}
 
 /** Why the draft cannot be saved, or ''. */
 export const policyProblem = (draft: PolicyDraft): string => {
-  const classRules = classRuleNames(draft)
-  if (classRules.length + draft.advanced.length > POLICY_LIMITS.rules)
+  if (savedRuleCount(draft) > POLICY_LIMITS.rules)
     return `Use at most ${POLICY_LIMITS.rules} rules.`
   for (const [index, rule] of draft.advanced.entries()) {
     const position = `Rule ${index + 1}`
     const path = rule.path.trim()
     if (rule.methods.length === 0 && !path) return `${position}: choose a method or enter a path.`
-    if (path) {
-      if (!path.startsWith('/')) return `${position}: a path begins with "/".`
-      if (path.length > POLICY_LIMITS.path)
-        return `${position}: use at most ${POLICY_LIMITS.path} characters in a path.`
-      if (CONTROL_CHARACTER.test(path)) return `${position}: the path has a control character.`
-    }
+    const problem = path ? pathProblem(path) : ''
+    if (problem) return `${position}: ${problem}`
   }
   return ''
 }
@@ -314,6 +333,87 @@ export const ruleRows = (rule: Pick<AdvancedRuleDraft, 'methods'>): OperationCla
  */
 export const ruleTakesEffect = (draft: PolicyDraft, rule: AdvancedRuleDraft): boolean =>
   ruleRows(rule).some((name) => STRENGTH[rule.effect] > STRENGTH[rowEffect(draft, name)])
+
+const ruleKey = (match: PolicyMatch, effect: PolicyEffect) =>
+  JSON.stringify([
+    HTTP_METHODS.filter((method) => match.methods?.includes(method)),
+    match.path?.trim() ?? '',
+    effect,
+  ])
+
+/**
+ * Whether each stored HTTP rule may change an answer as the proxy reads the stored rules, in
+ * order. Against a class rule for its row, a rule must be stricter. With none, the HTTP rules
+ * decide their calls alone: an Allow rule there lets through what Default would hold back,
+ * and one equal to Default still stops a weaker rule under the same row.
+ */
+export const rulesInForce = (value: unknown): boolean[] => {
+  const policy = readPolicy(value)
+  const matches = policy.rules.flatMap((rule) => ('match' in rule ? [rule] : []))
+  const rows = (rule: (typeof matches)[number]) => ruleRows({ methods: rule.match.methods ?? [] })
+  return matches.map((rule) =>
+    rows(rule).some((name) => {
+      const own = policy.rules.flatMap((other) =>
+        'class' in other && other.class === name ? [other.effect] : []
+      )
+      if (own.length) return STRENGTH[rule.effect] > STRENGTH[own.reduce(strongest)]
+      return (
+        rule.effect !== policy.default ||
+        matches.some(
+          (other) =>
+            other !== rule &&
+            rows(other).includes(name) &&
+            STRENGTH[other.effect] < STRENGTH[policy.default]
+        )
+      )
+    })
+  )
+}
+
+/**
+ * The ids of a draft's HTTP rules that are in force in the stored policy though the draft
+ * says they change nothing: saving writes rules for the rows on Default, which turns them off.
+ */
+export const rulesSaveTurnsOff = (stored: unknown, draft: PolicyDraft): Set<string> => {
+  const inForce = rulesInForce(stored)
+  const keys = new Set(
+    readPolicy(stored)
+      .rules.flatMap((rule) => ('match' in rule ? [ruleKey(rule.match, rule.effect)] : []))
+      .filter((_, index) => inForce[index])
+  )
+  return new Set(
+    draft.advanced
+      .filter(
+        (rule) =>
+          !ruleTakesEffect(draft, rule) &&
+          keys.has(ruleKey({ methods: rule.methods, path: rule.path }, rule.effect))
+      )
+      .map((rule) => rule.id)
+  )
+}
+
+/**
+ * What a policy does with a call by each common method, on a path no rule names: the
+ * strongest of its class rule and the rules naming the method with no path, or Default.
+ * Mirrors `method_effects` on the backend.
+ */
+export const methodEffects = (value: unknown): Record<string, PolicyEffect> => {
+  const policy = readPolicy(value)
+  return Object.fromEntries(
+    COMMON_METHODS.map((method) => {
+      const found = policy.rules.flatMap((rule) =>
+        (
+          'class' in rule
+            ? rule.class === METHOD_CLASS[method]
+            : !rule.match.path && (rule.match.methods ?? []).includes(method)
+        )
+          ? [rule.effect]
+          : []
+      )
+      return [method, found.length ? found.reduce(strongest) : policy.default]
+    })
+  )
+}
 
 /** Whether a policy stops or holds back any call: a row or an HTTP rule that is not Allow. */
 export const policyRestricts = (value: unknown): boolean => {

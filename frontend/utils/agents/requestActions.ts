@@ -7,6 +7,7 @@ import { parseHttpDefinition, type HttpDefinition } from '@/utils/agents/httpDef
 import {
   HTTP_METHODS,
   OPERATION_CLASSES,
+  pathProblem,
   readPolicy,
   readTemporaryAllows,
   type AccessPolicy,
@@ -451,9 +452,8 @@ export const allowDraftProblem = (draft: AllowDraft): string => {
   if (draft.scope === 'class') return draft.class ? '' : 'Choose a class of calls.'
   const path = draft.path.trim()
   if (draft.methods.length === 0 && !path) return 'Choose a method or enter a path.'
-  if (path && !path.startsWith('/')) return 'A path begins with "/".'
-  if (path.length > 1024) return 'Use at most 1024 characters in a path.'
-  return ''
+  const problem = path ? pathProblem(path) : ''
+  return problem && problem.charAt(0).toUpperCase() + problem.slice(1)
 }
 
 /** Whether the reviewer's rule differs from the requested one. */

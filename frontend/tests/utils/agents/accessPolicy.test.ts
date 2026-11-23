@@ -10,6 +10,11 @@ import {
   policyPayload,
   policyProblem,
   policyRestricts,
+  COMMON_METHODS,
+  methodEffects,
+  pathProblem,
+  rulesInForce,
+  savedRuleCount,
   readPolicy,
   readTemporaryAllows,
   rowEffect,
@@ -534,6 +539,10 @@ describe('what is saved is what the editor shows', () => {
     const wrong: string[] = []
     for (const draft of drafts()) {
       const saved = policyFromDraft(draft)
+      // For a policy the editor saved, the stored rules say the same.
+      const stored = rulesInForce(saved)
+      if (draft.advanced.some((rule, index) => stored[index] !== ruleTakesEffect(draft, rule)))
+        wrong.push(`stored judgement differs on ${label(draft)}`)
       for (const rule of draft.advanced) {
         const without = policyFromDraft({
           ...draft,
@@ -550,5 +559,109 @@ describe('what is saved is what the editor shows', () => {
       }
     }
     expect(wrong).toEqual([])
+  })
+
+  test('a stored rule judged to have no effect changes no answer, whoever wrote the policy', () => {
+    // Policies the editor would not write: any class rules, or none, beside any HTTP rules.
+    const OWN: Array<PolicyEffect | null> = [null, ...EFFECTS]
+    const wrong: string[] = []
+    for (const fallback of EFFECTS)
+      for (const advanced of RULE_SETS)
+        for (let index = 0; index < OWN.length ** OPERATION_CLASSES.length; index += 1) {
+          const rules: AccessPolicy['rules'] = OPERATION_CLASSES.flatMap((name, position) => {
+            const effect = OWN[Math.floor(index / OWN.length ** position) % OWN.length]
+            return effect ? [{ class: name, effect }] : []
+          })
+          const matches = advanced.map((rule) => ({
+            match: { ...(rule.methods.length ? { methods: rule.methods } : {}), path: rule.path },
+            effect: rule.effect,
+          }))
+          const policy: AccessPolicy = {
+            version: 1,
+            default: fallback,
+            rules: [...rules, ...matches],
+          }
+          const inForce = rulesInForce(policy)
+          matches.forEach((rule, position) => {
+            const without = { ...policy, rules: policy.rules.filter((other) => other !== rule) }
+            const changes = HTTP_METHODS.some((method) =>
+              ['/jobs/x', '/jobs/y'].some(
+                (path) => answer(policy, method, path) !== answer(without, method, path)
+              )
+            )
+            if (
+              (!inForce[position] && changes) ||
+              (matches.length === 1 && inForce[position] !== changes)
+            )
+              wrong.push(`${JSON.stringify(rule)} in ${JSON.stringify(policy)}`)
+          })
+        }
+    expect(wrong).toEqual([])
+  })
+})
+
+describe('the stored rules, as the proxy and the backend read them', () => {
+  test('an Allow rule with no class rule for its row lets its calls through', () => {
+    const policy = {
+      version: 1,
+      default: 'ask',
+      rules: [
+        { class: 'read', effect: 'allow' },
+        { match: { methods: ['POST'], path: '/jobs/*' }, effect: 'allow' },
+      ],
+    }
+    expect(rulesInForce(policy)).toEqual([true])
+    // The editor shows Create on Default and saves a rule for it, which turns the Allow off.
+    const draft = draftFromPolicy(policy)
+    expect(ruleTakesEffect(draft, draft.advanced[0])).toBe(false)
+    expect(policyFromDraft(draft)?.rules).toContainEqual({ class: 'create', effect: 'ask' })
+  })
+
+  test('each common method takes its class rule and its path-less rules, else Default', () => {
+    expect(COMMON_METHODS).toEqual(['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'])
+    expect(
+      methodEffects({
+        version: 1,
+        default: 'allow',
+        rules: [
+          { match: { methods: ['DELETE'] }, effect: 'block' },
+          { class: 'update', effect: 'ask' },
+          { match: { methods: ['PATCH'] }, effect: 'block' },
+          // A rule with a path decides only its own paths.
+          { match: { methods: ['GET'], path: '/x' }, effect: 'block' },
+        ],
+      })
+    ).toEqual({
+      GET: 'allow',
+      HEAD: 'allow',
+      OPTIONS: 'allow',
+      POST: 'allow',
+      PUT: 'ask',
+      PATCH: 'block',
+      DELETE: 'block',
+    })
+    expect(methodEffects(null).POST).toBe('allow')
+  })
+
+  test('a path is refused as the backend refuses it', () => {
+    expect(pathProblem('/a/*')).toBe('')
+    expect(pathProblem('a')).toMatch(/begins with/)
+    expect(pathProblem('/a\u0007')).toMatch(/control character/)
+    expect(pathProblem('/a%20b')).toBe(
+      'write the path decoded, for example a space instead of %20; paths are compared after decoding.'
+    )
+    // A percent sign that is not an escape is a character like any other.
+    expect(pathProblem('/a%zz')).toBe('')
+  })
+
+  test('the rule count includes the rows saved as rules', () => {
+    const draft = draftFromPolicy({
+      version: 1,
+      default: 'ask',
+      rules: [{ match: { methods: ['GET'], path: '/x' }, effect: 'allow' }],
+    })
+    // The Allow rule is weaker than Default: all four rows are saved as rules.
+    expect(savedRuleCount(draft)).toBe(5)
+    expect(savedRuleCount(draftFromPolicy(null))).toBe(0)
   })
 })

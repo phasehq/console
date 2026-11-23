@@ -950,7 +950,7 @@ export function AgentActionApproveDialog({
                       placeholder="Choose a kind of call"
                       options={OPERATION_CLASSES.map((name) => ({
                         value: name,
-                        label: CLASS_LABEL[name].name,
+                        label: `${CLASS_LABEL[name].name} · ${CLASS_LABEL[name].hint}`,
                       }))}
                     />
                   </div>
@@ -966,7 +966,7 @@ export function AgentActionApproveDialog({
                       label="Path"
                       value={allowDraft.path}
                       setValue={(path) => setAllowDraft({ ...allowDraft, path })}
-                      placeholder="/v1/charges/*"
+                      placeholder="/v1/items/*"
                       maxLength={POLICY_LIMITS.path}
                       autoComplete="off"
                       spellCheck={false}

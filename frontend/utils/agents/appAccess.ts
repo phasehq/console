@@ -3,7 +3,12 @@
  * backend is the authority; this file reads what it sends and words it.
  */
 
-import { draftFromPolicy, rowEffect, type PolicyEffect } from '@/utils/agents/accessPolicy'
+import {
+  classMethods,
+  draftFromPolicy,
+  methodEffects,
+  type PolicyEffect,
+} from '@/utils/agents/accessPolicy'
 
 export const APP_SERVICE_TYPE = 'phase_app'
 
@@ -163,27 +168,43 @@ const EFFECT_WORD: Record<PolicyEffect, string> = {
   block: 'blocked',
 }
 
+// Each kind of call as a plural noun, as in "Reads allowed, writes ask".
+const CLASS_NOUN: Record<AppClass, string> = {
+  read: 'reads',
+  create: 'creates',
+  update: 'updates',
+  delete: 'deletes',
+}
+
 /**
- * A Connection's rules in a few words, the same for every kind of Connection: "Reads
- * allowed, writes ask", then how many HTTP rules it has.
+ * What a Connection's rules do with each kind of call, the same words for every kind of
+ * Connection: "Reads allowed, writes ask". A rule naming methods with no path counts toward
+ * their effect, as the backend's `method_effects` has it; a kind of call whose methods differ
+ * is named by method.
  */
-export const policySummary = (policy: unknown): string => {
-  const draft = draftFromPolicy(policy)
-  const byEffect = new Map<PolicyEffect, AppClass[]>()
-  for (const name of APP_CLASSES) {
-    const effect = rowEffect(draft, name)
-    byEffect.set(effect, [...(byEffect.get(effect) ?? []), name])
-  }
+export const policyWords = (policy: unknown): string => {
+  const effects = methodEffects(policy)
   const parts = (['allow', 'ask', 'block'] as const).flatMap((effect) => {
-    const names = byEffect.get(effect)
-    if (!names) return []
-    const words = classWords(names).map((word) =>
-      word === 'write' ? 'writes' : word === 'read' ? 'reads' : word
-    )
-    return [`${listWords(words)} ${EFFECT_WORD[effect]}`]
+    const words: string[] = []
+    for (const name of APP_CLASSES) {
+      const methods = classMethods(name)
+      if (methods.every((method) => effects[method] === effect)) words.push(CLASS_NOUN[name])
+      else words.push(...methods.filter((method) => effects[method] === effect))
+    }
+    if (!words.length) return []
+    const writes = WRITE_CLASSES.map((name) => CLASS_NOUN[name])
+    const grouped = writes.every((word) => words.includes(word))
+      ? [...words.filter((word) => !writes.includes(word)), 'writes']
+      : words
+    return [`${listWords(grouped)} ${EFFECT_WORD[effect]}`]
   })
-  const rules = draft.advanced.length
-  return `${capitalise(parts.join(', '))}${rules ? ` · ${rules} HTTP rule${rules === 1 ? '' : 's'}` : ''}`
+  return capitalise(parts.join(', '))
+}
+
+/** `policyWords` for a Connection's row, then how many rules name a path. */
+export const policySummary = (policy: unknown): string => {
+  const paths = draftFromPolicy(policy).advanced.filter((rule) => rule.path).length
+  return `${policyWords(policy)}${paths ? ` · ${paths} path rule${paths === 1 ? '' : 's'}` : ''}`
 }
 
 /** The name a new app Connection starts with. */

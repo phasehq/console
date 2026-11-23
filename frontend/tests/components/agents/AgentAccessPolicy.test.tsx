@@ -230,7 +230,13 @@ describe('editing the access rules of a Connection', () => {
     // An empty rule cannot be saved.
     expect(saveButton().disabled).toBe(true)
     expect(container.textContent).toContain('choose a method or enter a path')
-    expect(path(1).placeholder).toBe('/repos/*/*/issues')
+    expect(path(1).placeholder).toBe('/v1/items/*')
+    // The seven usual methods; CONNECT and TRACE are not offered.
+    expect(
+      Array.from(container.querySelectorAll('[aria-label="Methods for rule 1"] button')).map(
+        (button) => button.textContent
+      )
+    ).toEqual(['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE'])
 
     await toggleMethod(1, 'POST')
     await toggleMethod(1, 'DELETE')
@@ -261,6 +267,87 @@ describe('editing the access rules of a Connection', () => {
     expect(container.textContent).toContain('begins with "/"')
     expect(saveButton().disabled).toBe(true)
     expect(path(1).maxLength).toBe(1024)
+  })
+
+  test('a path with a percent escape is refused as the backend refuses it', async () => {
+    await open(connection(null))
+    await addRule()
+    await type(path(1), '/files/a%20b')
+    expect(container.textContent).toContain(
+      'Rule 1: write the path decoded, for example a space instead of %20; paths are compared after decoding.'
+    )
+    expect(saveButton().disabled).toBe(true)
+  })
+
+  test('Add HTTP rule stops at the rule limit, counting the rows saved as rules', async () => {
+    // Default Ask with an Allow rule: the four rows on Default are saved as rules too.
+    const rules = Array.from({ length: 46 }, (_, index) => ({
+      match: { methods: ['DELETE'], path: `/r/${index}` },
+      effect: index === 0 ? 'allow' : 'block',
+    }))
+    await open(connection({ version: 1, default: 'ask', rules }))
+    expect(buttonNamed(container, 'Add HTTP rule')!.disabled).toBe(true)
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Remove rule 2"]')!.click()
+    )
+    expect(buttonNamed(container, 'Add HTTP rule')!.disabled).toBe(false)
+  })
+
+  test('a stored rule naming another method still shows it, until it is turned off', async () => {
+    await open(
+      connection({
+        version: 1,
+        default: 'allow',
+        rules: [{ match: { methods: ['GET', 'TRACE'], path: '/x' }, effect: 'block' }],
+      })
+    )
+    const pills = () =>
+      Array.from(
+        container.querySelectorAll<HTMLButtonElement>('[aria-label="Methods for rule 1"] button')
+      )
+    expect(pills().map((button) => button.textContent)).toEqual([
+      'GET',
+      'HEAD',
+      'OPTIONS',
+      'POST',
+      'PUT',
+      'PATCH',
+      'DELETE',
+      'TRACE',
+    ])
+    expect(
+      pills()
+        .find((button) => button.textContent === 'TRACE')!
+        .getAttribute('aria-pressed')
+    ).toBe('true')
+    await toggleMethod(1, 'TRACE')
+    expect(pills().map((button) => button.textContent)).not.toContain('TRACE')
+    await submit()
+    expect(save.mock.calls[0][0].variables.policy.rules).toEqual([
+      { match: { methods: ['GET'], path: '/x' }, effect: 'block' },
+    ])
+  })
+
+  test('a stored rule the stored policy gives effect to shows as in force, and what saving does', async () => {
+    // Written elsewhere: no class rule for Create, so the Allow rule alone decides POST /jobs/*.
+    await open(
+      connection({
+        version: 1,
+        default: 'ask',
+        rules: [
+          { class: 'read', effect: 'allow' },
+          { match: { methods: ['POST'], path: '/jobs/*' }, effect: 'allow' },
+        ],
+      })
+    )
+    expect(checked('Effect for rule 1')).toBe('Allow')
+    expect(
+      group('Effect for rule 1').querySelector<HTMLElement>('[aria-checked="true"]')!.className
+    ).toContain('emerald-600')
+    expect(container.textContent).toContain(
+      'In force now, but saving the rules turns it off: a rule can only make calls stricter.'
+    )
+    expect(container.textContent).not.toContain('No effect')
   })
 
   test('a rule that can never change an answer says so, and does not show its effect in colour', async () => {
@@ -493,8 +580,8 @@ describe('the access blocks in the details of a Connection', () => {
           rules: [
             { class: 'read', effect: 'allow' },
             { class: 'delete', effect: 'block' },
-            { match: { methods: ['POST'], path: '/v1/charges/*' }, effect: 'block' },
-            { match: { methods: ['DELETE'], path: '/v1/charges/*' }, effect: 'block' },
+            { match: { methods: ['POST'], path: '/v1/items/*' }, effect: 'block' },
+            { match: { methods: ['DELETE'], path: '/v1/items/*' }, effect: 'block' },
           ],
         }),
         takesPolicy: true,
@@ -508,10 +595,34 @@ describe('the access blocks in the details of a Connection', () => {
       'Create POSTDefault · Ask',
       'Update PUT, PATCH and other methodsDefault · Ask',
       'Delete DELETEBlock',
-      'POST /v1/charges/*Block',
+      'POST /v1/items/*Block',
       // Delete already blocks every DELETE.
-      'DELETE /v1/charges/*Block · No effect',
+      'DELETE /v1/items/*Block · No effect',
     ])
+  })
+
+  test('a rule is shown as the proxy reads the stored rules, even ones written elsewhere', async () => {
+    await render({
+      connection: {
+        ...connection({
+          version: 1,
+          default: 'ask',
+          rules: [
+            { class: 'read', effect: 'allow' },
+            { match: { methods: ['POST'], path: '/jobs/*' }, effect: 'allow' },
+          ],
+        }),
+        takesPolicy: true,
+        managedPolicies: MANAGED,
+      },
+    })
+    const rules = container.querySelector('[aria-label="Access rules in force"]')!
+    const line = Array.from(rules.querySelectorAll('li')).find((item) =>
+      item.textContent!.startsWith('POST /jobs/*')
+    )!
+    // No class rule covers Create, so the Allow rule alone decides: POST /jobs/x is allowed.
+    expect(line.textContent).toBe('POST /jobs/*Allow')
+    expect(line.querySelector('span')!.className).toContain('emerald')
   })
 
   test('Edit is for members who can update Connections', async () => {
@@ -545,14 +656,14 @@ describe('the summary on a collapsed row', () => {
             default: 'allow',
             rules: [
               { class: 'delete', effect: 'block' },
-              { match: { methods: ['POST'], path: '/v1/charges/*' }, effect: 'ask' },
+              { match: { methods: ['POST'], path: '/v1/items/*' }, effect: 'ask' },
             ],
           }}
         />
       )
     )
     expect(container.textContent).toBe(
-      'Reads, create and update allowed, delete blocked · 1 HTTP rule'
+      'Reads, creates and updates allowed, deletes blocked · 1 path rule'
     )
     await act(async () =>
       root.render(
@@ -562,6 +673,32 @@ describe('the summary on a collapsed row', () => {
       )
     )
     expect(container.textContent).toBe('Reads allowed, writes ask')
+    // A rule naming a method with no path decides every call by it, as the backend words it.
+    await act(async () =>
+      root.render(
+        <PolicySummary
+          policy={{
+            version: 1,
+            default: 'allow',
+            rules: [{ match: { methods: ['DELETE'] }, effect: 'block' }],
+          }}
+        />
+      )
+    )
+    expect(container.textContent).toBe('Reads, creates and updates allowed, deletes blocked')
+    // When it splits a kind of call, the methods are named.
+    await act(async () =>
+      root.render(
+        <PolicySummary
+          policy={{
+            version: 1,
+            default: 'allow',
+            rules: [{ match: { methods: ['HEAD'] }, effect: 'block' }],
+          }}
+        />
+      )
+    )
+    expect(container.textContent).toBe('GET, OPTIONS and writes allowed, HEAD blocked')
     for (const policy of [
       {},
       { version: 1, default: 'allow', rules: [{ class: 'read', effect: 'allow' }] },

@@ -259,7 +259,7 @@ describe('app access in words', () => {
         default: 'allow',
         rules: [{ class: 'delete', effect: 'block' }],
       })
-    ).toBe('Reads, create and update allowed, delete blocked')
+    ).toBe('Reads, creates and updates allowed, deletes blocked')
     expect(policySummary(null)).toBe('Reads and writes allowed')
     // Rows on Default take its effect.
     expect(

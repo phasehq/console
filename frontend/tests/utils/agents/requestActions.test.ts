@@ -224,6 +224,10 @@ describe('requests for access, renewals and context', () => {
     })
     expect(allowDraftProblem({ ...draft, methods: [], path: '' })).toMatch(/Choose a method/)
     expect(allowDraftProblem({ ...draft, path: 'x' })).toMatch(/begins with/)
+    expect(allowDraftProblem({ ...draft, path: '/repos/a%2Fb' })).toMatch(/^Write the path decoded/)
+    expect(allowDraftProblem({ ...draft, path: '/repos/a\nb' })).toBe(
+      'The path has a control character.'
+    )
     expect(allowDraftProblem({ ...classDraft, class: '' })).toMatch(/Choose a class/)
   })
 

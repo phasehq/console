@@ -187,7 +187,7 @@ describe('reviewing requests for access, renewals and context', () => {
       expect(text).toContain('This is temporary')
       expect(text).toContain('asked for 1 hour')
       expect(text).toContain(
-        "The Connection's rules now: reads, create and update allowed, delete ask."
+        "The Connection's rules now: reads, creates and updates allowed, deletes ask."
       )
     })
 
@@ -269,6 +269,15 @@ describe('reviewing requests for access, renewals and context', () => {
         (element) => options(element)
       )
       expect(kinds).not.toContain('credential_minting')
+      // Each kind of call says which methods it covers.
+      expect(
+        Array.from(select('-allow-class').options).map((option) => option.textContent)
+      ).toEqual([
+        'Read · GET, HEAD, OPTIONS',
+        'Create · POST',
+        'Update · PUT, PATCH and other methods',
+        'Delete · DELETE',
+      ])
       await choose(select('-allow-scope'), 'match')
       await type(field(container, 'Path'), '/repos/acme/x')
       const variables = await approved('Approve and allow')
@@ -276,6 +285,21 @@ describe('reviewing requests for access, renewals and context', () => {
         match: { methods: ['DELETE'], path: '/repos/acme/x' },
       })
       expect(JSON.stringify(variables)).not.toContain('credential_minting')
+    })
+
+    test('a narrowed path with a percent escape or a control character cannot be approved', async () => {
+      await open(allowRequest())
+      await click(container, 'Narrow the rule')
+      expect(field(container, 'Path').placeholder).toBe('/v1/items/*')
+      await type(field(container, 'Path'), '/repos/acme/a%20b')
+      expect(buttonNamed(container, 'Approve and allow')!.disabled).toBe(true)
+      expect(buttonNamed(container, 'Approve and allow')!.title).toBe(
+        'Write the path decoded, for example a space instead of %20; paths are compared after decoding.'
+      )
+      await type(field(container, 'Path'), '/repos/acme/a\u0007b')
+      expect(buttonNamed(container, 'Approve and allow')!.title).toBe(
+        'The path has a control character.'
+      )
     })
 
     test('the request list shows the same rule without a dialog', async () => {
