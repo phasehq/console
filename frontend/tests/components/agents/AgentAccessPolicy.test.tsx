@@ -699,6 +699,19 @@ describe('the summary on a collapsed row', () => {
       )
     )
     expect(container.textContent).toBe('GET, OPTIONS and writes allowed, HEAD blocked')
+    // A rule for every path is no path rule: it answers every call by its methods.
+    await act(async () =>
+      root.render(
+        <PolicySummary
+          policy={{
+            version: 1,
+            default: 'allow',
+            rules: [{ match: { path: '/*' }, effect: 'block' }],
+          }}
+        />
+      )
+    )
+    expect(container.textContent).toBe('Reads and writes blocked')
     for (const policy of [
       {},
       { version: 1, default: 'allow', rules: [{ class: 'read', effect: 'allow' }] },

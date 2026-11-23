@@ -392,10 +392,17 @@ export const rulesSaveTurnsOff = (stored: unknown, draft: PolicyDraft): Set<stri
   )
 }
 
+// Paths that take in every call, so a rule naming one answers by method alone.
+const EVERY_PATH = new Set(['/*', '*'])
+
+/** Whether a rule's path limits it to some calls. Mirrors `_path_of` on the backend. */
+export const limitedPath = (match: PolicyMatch): boolean =>
+  !!match.path && !EVERY_PATH.has(match.path)
+
 /**
  * What a policy does with a call by each common method, on a path no rule names: the
- * strongest of its class rule and the rules naming the method with no path, or Default.
- * Mirrors `method_effects` on the backend.
+ * strongest of its class rule and the rules for every path that name the method or none,
+ * or Default. Mirrors `method_effects` on the backend.
  */
 export const methodEffects = (value: unknown): Record<string, PolicyEffect> => {
   const policy = readPolicy(value)
@@ -405,7 +412,8 @@ export const methodEffects = (value: unknown): Record<string, PolicyEffect> => {
         (
           'class' in rule
             ? rule.class === METHOD_CLASS[method]
-            : !rule.match.path && (rule.match.methods ?? []).includes(method)
+            : !limitedPath(rule.match) &&
+              (!rule.match.methods || rule.match.methods.includes(method))
         )
           ? [rule.effect]
           : []

@@ -5,8 +5,9 @@
 
 import {
   classMethods,
-  draftFromPolicy,
+  limitedPath,
   methodEffects,
+  readPolicy,
   type PolicyEffect,
 } from '@/utils/agents/accessPolicy'
 
@@ -201,9 +202,11 @@ export const policyWords = (policy: unknown): string => {
   return capitalise(parts.join(', '))
 }
 
-/** `policyWords` for a Connection's row, then how many rules name a path. */
+/** `policyWords` for a Connection's row, then how many rules are limited to some paths. */
 export const policySummary = (policy: unknown): string => {
-  const paths = draftFromPolicy(policy).advanced.filter((rule) => rule.path).length
+  const paths = readPolicy(policy).rules.filter(
+    (rule) => 'match' in rule && limitedPath(rule.match)
+  ).length
   return `${policyWords(policy)}${paths ? ` · ${paths} path rule${paths === 1 ? '' : 's'}` : ''}`
 }
 

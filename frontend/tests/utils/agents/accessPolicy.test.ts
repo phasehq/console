@@ -641,6 +641,23 @@ describe('the stored rules, as the proxy and the backend read them', () => {
       DELETE: 'block',
     })
     expect(methodEffects(null).POST).toBe('allow')
+    // A rule for every path answers by its methods, or every method when it names none.
+    expect(
+      Object.values(
+        methodEffects({
+          version: 1,
+          default: 'allow',
+          rules: [{ match: { path: '/*' }, effect: 'block' }],
+        })
+      )
+    ).toEqual(Array(7).fill('block'))
+    expect(
+      methodEffects({
+        version: 1,
+        default: 'allow',
+        rules: [{ match: { methods: ['POST'], path: '*' }, effect: 'ask' }],
+      }).POST
+    ).toBe('ask')
   })
 
   test('a path is refused as the backend refuses it', () => {
