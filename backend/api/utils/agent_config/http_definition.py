@@ -10,7 +10,7 @@ from copy import deepcopy
 import re
 from typing import Any, Mapping
 
-from .access_policy import validate_operation_classes, validate_path_glob
+from .access_policy import validate_path_glob
 from .registry import (
     ConfigRegistryError,
     get_config_registry,
@@ -497,7 +497,7 @@ def validate_definition(definition: Any) -> dict[str, Any]:
     _keys(
         definition,
         required={"specVersion", "hosts", "fields", "injections"},
-        optional={"preset", "allowPlainHttp", "operationClasses"},
+        optional={"preset", "allowPlainHttp"},
         location="definition",
     )
     fields = _validate_fields(definition["fields"], "definition.fields")
@@ -522,19 +522,6 @@ def validate_definition(definition: Any) -> dict[str, Any]:
     if allow_plain_http:
         # Written only when set, so the default has one stored spelling.
         checked["allowPlainHttp"] = True
-    if definition.get("operationClasses"):
-        # How an access policy classifies this service's calls, where the
-        # method alone would mislead. Written only when there are any.
-        try:
-            checked["operationClasses"] = validate_operation_classes(
-                definition["operationClasses"], "definition.operationClasses"
-            )
-        except DefinitionError:
-            raise
-        except ConfigRegistryError as exc:
-            raise DefinitionError(str(exc)) from exc
-    elif definition.get("operationClasses") not in (None, []):
-        raise DefinitionError("definition.operationClasses: expected a list")
     return checked
 
 
@@ -607,11 +594,6 @@ def agent_visible_texts(definition: Mapping[str, Any]) -> list[tuple[str, str]]:
         texts.append((f"host {number}", host["value"]))
         if host.get("path"):
             texts.append((f"the path of host {number}", host["path"]))
-    classes = definition.get("operationClasses", [])
-    for number, entry in enumerate(classes, start=1):
-        path = entry["match"].get("path")
-        if path:
-            texts.append((f"the path of call class {number}", path))
     return texts
 
 
@@ -738,7 +720,6 @@ def compile_service(definition: Mapping[str, Any]) -> dict[str, Any]:
         "required_features": list(REQUIRED_CLIENT_FEATURES),
         # Unless set, the proxy never puts the value on a plain-HTTP request.
         "allow_plain_http": bool(definition.get("allowPlainHttp", False)),
-        "operation_classes": deepcopy(definition.get("operationClasses", [])),
         # The Connection's own fields are what its tools read credentials from.
         "credential_environment": sorted(
             binding["name"] for binding in environment_bindings

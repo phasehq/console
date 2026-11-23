@@ -1,8 +1,6 @@
-"""What the packaged manifests and presets say about variables and classes."""
+"""What the packaged manifests say about variables."""
 
 from api.utils.agent_config import REGISTRY
-from api.utils.agent_config.access_policy import classify_http_call
-from api.utils.agent_config.presets import PRESETS
 
 
 # GitHub Enterprise Server
@@ -29,19 +27,3 @@ def test_github_binds_every_variable_its_cli_reads_a_token_from():
         ) == ("set", "decoy", "token", True), name
         assert name in github["context_template"]
 
-
-# Slack
-
-
-def test_slack_allocating_an_upload_url_is_a_write():
-    classes = PRESETS["slack"]["definition"]["operationClasses"]
-
-    def classed(method, path):
-        return classify_http_call(classes, method, path)
-
-    assert classed("POST", "/api/files.getUploadURLExternal") == "create"
-    assert classed("GET", "/api/files.getUploadURLExternal") == "create"
-    assert classed("POST", "/api/files.completeUploadExternal") == "update"
-    # Other "get" methods still read.
-    assert classed("POST", "/api/users.getPresence") == "read"
-    assert classed("GET", "/api/team.getProfile") == "read"

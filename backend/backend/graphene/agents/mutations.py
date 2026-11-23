@@ -61,7 +61,6 @@ from api.utils.agent_app_access import (
 )
 from api.utils.agent_config.access_policy import (
     live_temporary_allows,
-    takes_operations,
     validate_policy,
 )
 from api.utils.agent_connection_values import (
@@ -1647,9 +1646,7 @@ def _connection_policy(connection, policy):
     try:
         if is_app_service(connection.service_type):
             return validate_app_policy(policy)
-        checked = validate_policy(
-            policy, operations=takes_operations(connection.service_type)
-        )
+        checked = validate_policy(policy)
     except ConfigRegistryError as exc:
         raise GraphQLError(str(exc)) from exc
     if checked and not connection_takes_policy(connection):

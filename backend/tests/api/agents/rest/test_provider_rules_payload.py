@@ -29,7 +29,9 @@ from ..custom_connections import (
 from ..provider_rules import expected_wire
 
 
-RULE_KEYS = {"credentialEnvironment", "secretGuard", "actionClasses"}
+RULE_KEYS = {"credentialEnvironment", "secretGuard"}
+# Calls are classed by their HTTP method alone, so no Connection carries a list.
+REMOVED_KEYS = {"actionClasses", "operationClasses"}
 MATERIAL = {
     "aws": AWS_MATERIAL,
     "github": {"access_token": "live-github-token"},
@@ -98,6 +100,8 @@ def test_each_connection_carries_exactly_its_manifests_rules(space):
         assert _rules(connections["http"]) == {
             "credentialEnvironment": ["EXAMPLE_API_KEY", "EXAMPLE_USER"]
         }
+        for connection in connections.values():
+            assert not REMOVED_KEYS & set(connection)
 
     connections = _by_service(opened)
     assert set(_rules(connections["aws"])) == RULE_KEYS
@@ -113,8 +117,6 @@ def test_each_connection_carries_exactly_its_manifests_rules(space):
     # The data maps reach the client under the provider's own names.
     aws = connections["aws"]
     assert "cognito-identity" in aws["secretGuard"]["operations"]
-    assert aws["actionClasses"]["exact"]["kms:CreateGrant"] == "admin"
-    assert aws["actionClasses"]["s3Subresources"]["publicAccessBlock"] == "admin"
     assert aws["secretGuard"]["paths"][2]["hostLabel"] == "iot"
 
 
@@ -125,23 +127,6 @@ def test_the_emitted_aws_and_github_rules_are_the_recorded_ones(space):
 
     aws = connections["aws"]
     assert aws["secretGuard"] == expected_wire("aws")["secretGuard"]
-    assert aws["actionClasses"] == expected_wire("aws")["actionClasses"]
-    assert set(aws["actionClasses"]) == {
-        "scheme",
-        "version",
-        "readVerbs",
-        "createVerbs",
-        "deleteVerbs",
-        "adminServices",
-        "adminSuffixes",
-        "exact",
-        "s3Subresources",
-        "restOperations",
-        "queryProtocolServices",
-        "dualProtocolServices",
-        "jsonTargetServices",
-        "mixedServices",
-    }
     assert connections["github"]["secretGuard"] == expected_wire("github")["secretGuard"]
 
 
@@ -218,11 +203,8 @@ def _changed_registry(tmp_path):
 
     rewrite(
         "aws.json",
-        lambda document: (
-            document["secret_guard"]["operations"].update(
-                {"sso": ["GetRoleCredentials"]}
-            ),
-            document["action_classes"]["read_verbs"].append("Peek"),
+        lambda document: document["secret_guard"]["operations"].update(
+            {"sso": ["GetRoleCredentials"]}
         ),
     )
     rewrite(
@@ -253,7 +235,6 @@ def test_a_refresh_carries_changed_rules(space, monkeypatch, tmp_path):
         assert after["aws"]["secretGuard"]["operations"]["sso"] == [
             "GetRoleCredentials"
         ]
-        assert after["aws"]["actionClasses"]["readVerbs"][-1] == "Peek"
         assert after["github"]["credentialEnvironment"][-1] == "GITHUB_APP_TOKEN"
         assert after["github"]["secretGuard"]["paths"][-1] == {
             "method": "POST",
@@ -273,11 +254,6 @@ def test_the_renderer_leaves_data_map_keys_as_the_provider_wrote_them():
                     "operations": {"some_service": ["Action"]},
                     "paths": [{"pattern": "/x", "operation": "X", "host_label": "a"}],
                 },
-                "action_classes": {
-                    "read_verbs": ["Get"],
-                    "exact": {"some_service:Action": "read"},
-                    "s3_subresources": {"x_amz": "admin"},
-                },
             }
         ]
     }
@@ -288,13 +264,9 @@ def test_the_renderer_leaves_data_map_keys_as_the_provider_wrote_them():
     [connection] = kept["connections"]
     assert connection["secretGuard"]["operations"] == {"some_service": ["Action"]}
     assert connection["secretGuard"]["paths"][0]["hostLabel"] == "a"
-    assert connection["actionClasses"]["readVerbs"] == ["Get"]
-    assert connection["actionClasses"]["exact"] == {"some_service:Action": "read"}
-    assert connection["actionClasses"]["s3Subresources"] == {"x_amz": "admin"}
     # The plain converter would have rewritten them.
     [plain] = converted["connections"]
     assert plain["secretGuard"]["operations"] == {"someService": ["Action"]}
-    assert plain["actionClasses"]["exact"] == {"someService:Action": "read"}
 
 
 def test_the_registry_endpoint_keeps_data_map_keys(space):
@@ -302,5 +274,6 @@ def test_the_registry_endpoint_keeps_data_map_keys(space):
     assert response.status_code == 200, response.content
     aws = response.json()["services"]["aws"]
     assert aws["secretGuard"] == expected_wire("aws")["secretGuard"]
-    assert aws["actionClasses"] == expected_wire("aws")["actionClasses"]
     assert aws["credentialEnvironment"] == expected_wire("aws")["credentialEnvironment"]
+    services = response.json()["services"].values()
+    assert not any(REMOVED_KEYS & set(service) for service in services)

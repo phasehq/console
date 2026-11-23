@@ -7,11 +7,7 @@ from django.utils import timezone
 import pytest
 
 from api.utils.agent_config import REGISTRY
-from api.utils.agent_config.access_policy import (
-    compile_policy,
-    is_minting_operation,
-    managed_policies,
-)
+from api.utils.agent_config.access_policy import compile_policy, managed_policies
 
 
 SECRET_GUARD = {
@@ -187,11 +183,6 @@ def test_the_aws_guard_stops_grafana_service_account_and_gamelift_compute_tokens
         "operation": "grafana:CreateWorkspaceServiceAccountToken",
         "services": ["grafana"],
     } in aws["secret_guard"]["paths"]
-    for operation in (
-        "gamelift:GetComputeAuthToken",
-        "grafana:CreateWorkspaceServiceAccountToken",
-    ):
-        assert is_minting_operation(operation)
 
 
 def _aws_guard_stops(service, method, path, query=(), host=None):
@@ -270,102 +261,6 @@ def test_the_iot_certificate_rules_apply_only_to_an_iot_host():
     assert _aws_guard_stops(
         "execute-api", "POST", "/certificates", host="iot.us-east-1.amazonaws.com"
     )
-
-
-def test_the_new_aws_guard_rules_that_name_an_operation_are_minting_operations():
-    for operation in (
-        "appsync:ListApiKeys",
-        "appsync:CreateApiKey",
-        "appsync:UpdateApiKey",
-        "iot:CreateProvisioningClaim",
-        "iot:CreateCertificateFromCsr",
-    ):
-        assert is_minting_operation(operation), operation
-    # Reading API Gateway keys without their values stays allowable.
-    assert not is_minting_operation("apigateway:GetApiKeys")
-    assert not is_minting_operation("apigateway:GetApiKey")
-
-
-def _aws_class(service, action):
-    """The class the proxy gives one named AWS action, in the order
-    aws_classes.go applies the manifest's tables."""
-
-    classes = REGISTRY.get_service("aws")["action_classes"]
-    exact = {key.lower(): value for key, value in classes["exact"].items()}
-    if f"{service}:{action}".lower() in exact:
-        return exact[f"{service}:{action}".lower()]
-
-    def starts_with(verbs):
-        return any(
-            action.startswith(verb)
-            and (action[len(verb):][:1] == "" or not action[len(verb)].islower())
-            for verb in verbs
-        )
-
-    if starts_with(classes["read_verbs"]):
-        return "read"
-    if service in classes["admin_services"] or any(
-        action.lower().endswith(suffix.lower()) for suffix in classes["admin_suffixes"]
-    ):
-        return "admin"
-    if starts_with(classes["create_verbs"]):
-        return "create"
-    if starts_with(classes["delete_verbs"]):
-        return "delete"
-    return "update"
-
-
-@pytest.mark.parametrize(
-    "action",
-    [
-        "AdminAddUserToGroup",
-        "AdminConfirmSignUp",
-        "AdminCreateUser",
-        "AdminDeleteUserAttributes",
-        "AdminDisableProviderForUser",
-        "AdminDisableUser",
-        "AdminEnableUser",
-        "AdminForgetDevice",
-        "AdminInitiateAuth",
-        "AdminLinkProviderForUser",
-        "AdminRemoveUserFromGroup",
-        "AdminResetUserPassword",
-        "AdminRespondToAuthChallenge",
-        "AdminSetUserMFAPreference",
-        "AdminSetUserPassword",
-        "AdminSetUserSettings",
-        "AdminUpdateAuthEventFeedback",
-        "AdminUpdateDeviceStatus",
-        "AdminUpdateUserAttributes",
-        "AdminUserGlobalSignOut",
-    ],
-)
-def test_a_cognito_admin_user_action_is_classed_admin(action):
-    """An admin block covers Cognito's user administration, which the Admin
-    prefix would otherwise leave as an update."""
-
-    assert _aws_class("cognito-idp", action) == "admin"
-    assert _aws_class("cognito-idp", action.upper()) == "admin"
-
-
-def test_a_cognito_admin_user_delete_is_classed_delete():
-    assert _aws_class("cognito-idp", "AdminDeleteUser") == "delete"
-
-
-def test_cognito_user_pool_calls_without_the_admin_prefix_keep_their_verb_class():
-    assert _aws_class("cognito-idp", "ListUsers") == "read"
-    assert _aws_class("cognito-idp", "CreateUserPool") == "create"
-    assert _aws_class("cognito-idp", "DeleteUserPool") == "delete"
-
-
-def test_no_guarded_aws_call_also_has_an_exact_class():
-    # The CLI refuses a manifest whose guarded call could be reclassified
-    # into something a policy allows.
-    aws = REGISTRY.get_service("aws")
-    exact = aws["action_classes"]["exact"]
-    for service, operations in aws["secret_guard"]["operations"].items():
-        for operation in operations:
-            assert f"{service}:{operation}" not in exact
 
 
 # Which Connections list the guard

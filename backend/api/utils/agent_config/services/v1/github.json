@@ -27,12 +27,7 @@
   ],
   "credential_providers": ["github"],
   "client_matchers": [{"kind": "executable", "values": ["gh"]}],
-  "operation_classes": [
-    {"match": {"methods": ["POST"], "path": "/graphql"}, "class": "update"},
-    {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"},
-    {"match": {"methods": ["POST"], "path": "/*/api/graphql"}, "class": "update"}
-  ],
-  "context_template": "The GitHub API through the Phase proxy. GITHUB_TOKEN and GH_TOKEN, and GH_ENTERPRISE_TOKEN and GITHUB_ENTERPRISE_TOKEN for an Enterprise Server, hold a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached. Reads and writes share the GraphQL endpoint, so this Connection's access rules treat every call to it as an update.",
+  "context_template": "The GitHub API through the Phase proxy. GITHUB_TOKEN and GH_TOKEN, and GH_ENTERPRISE_TOKEN and GITHUB_ENTERPRISE_TOKEN for an Enterprise Server, hold a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached. A GraphQL call is a POST, so this Connection's access rules count it as a create whether it reads or writes.",
   "credential_environment": [
     "GH_ENTERPRISE_TOKEN",
     "GH_TOKEN",

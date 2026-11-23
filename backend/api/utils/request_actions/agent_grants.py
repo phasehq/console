@@ -28,21 +28,14 @@ from api.utils.agent_app_access import (
     ordered_classes,
     require_member_can_release,
 )
-from api.utils.agent_config import (
-    ConfigRegistryError,
-    is_app_service,
-    is_custom_service,
-    service_for_connection,
-)
+from api.utils.agent_config import is_app_service, is_custom_service
 from api.utils.agent_config.access_policy import (
     CREDENTIAL_MINTING,
     USER_CLASSES,
     PolicyError,
     allow_is_blocked,
     full_policy,
-    is_minting_operation,
     live_temporary_allows,
-    takes_operations,
     validate_allow,
 )
 from api.utils.agent_sessions import refresh_workflow_sessions
@@ -77,8 +70,6 @@ _BLOCKED_CALL_MEMBERS = {
     "host": 512,
     "path": 4096,
     "class": 32,
-    # The AWS action of the call, when the proxy could name it.
-    "operation": 200,
 }
 _BLOCKED_CALL_CLASSES = frozenset({*USER_CLASSES, CREDENTIAL_MINTING})
 
@@ -119,19 +110,6 @@ def _blocked_call(value):
     if "class" in checked and checked["class"] not in _BLOCKED_CALL_CLASSES:
         raise ActionError("action.blockedCall.class is not a known class.")
     return checked
-
-
-def _operation_classes(connection):
-    """How the calls of an HTTP Connection are classified by method and path,
-    which the Console can apply. None for AWS, whose calls only the proxy
-    classifies, by their action."""
-
-    if takes_operations(connection.service_type):
-        return None
-    try:
-        return service_for_connection(connection).get("operation_classes", [])
-    except ConfigRegistryError:
-        return None
 
 
 def _app_allow(value):
@@ -179,9 +157,7 @@ def _refuse_blocked(connection, allow):
                 code="access_policy_blocks_allow",
             )
         return
-    if allow_is_blocked(
-        connection.policy, allow, operation_classes=_operation_classes(connection)
-    ):
+    if allow_is_blocked(connection.policy, allow):
         raise ActionError(
             "This Connection's access policy blocks that call, and a temporary "
             "allow never changes a block. A member has to change the policy.",
@@ -205,8 +181,6 @@ def _describe_allow(allow, connection=None):
         return f"{describe_classes(_allow_classes(allow))} secrets"
     if "class" in allow:
         return f"{allow['class']} calls"
-    if "operation" in allow:
-        return f"AWS action {allow['operation']}"
     match = allow["match"]
     return " ".join(
         part
@@ -261,11 +235,7 @@ class AllowCall(ActionHandler):
             allow = _app_allow(action["allow"])
         else:
             try:
-                allow = validate_allow(
-                    action["allow"],
-                    "action.allow",
-                    operations=takes_operations(grant.connection.service_type),
-                )
+                allow = validate_allow(action["allow"], "action.allow")
             except PolicyError as exc:
                 raise ActionError(str(exc), code="invalid_access_allow") from exc
         checked = {
@@ -276,9 +246,7 @@ class AllowCall(ActionHandler):
         }
         if action.get("blockedCall") is not None:
             checked["blockedCall"] = blocked = _blocked_call(action["blockedCall"])
-            if blocked.get("class") == CREDENTIAL_MINTING or is_minting_operation(
-                blocked.get("operation")
-            ):
+            if blocked.get("class") == CREDENTIAL_MINTING:
                 raise ActionError(
                     "The secret guard blocks calls that mint credentials, and "
                     "nothing overrides it.",

@@ -18,13 +18,11 @@ from api.models import (
     AuditEvent,
 )
 from api.utils.agent_access import iso_timestamp
-from api.utils.agent_config import DefinitionError, validate_definition
 from api.utils.agents import create_agent_workflow
 from backend.graphene.agents.mutations import (
     ApproveAgentRequestActionMutation,
     GrantAgentWorkflowMutation,
     RemoveAgentWorkflowGrantAllowMutation,
-    UpdateCustomAgentConnectionMutation,
 )
 from backend.schema import schema
 
@@ -63,7 +61,6 @@ BLOCK_DELETES = {
     "default": "allow",
     "rules": [{"class": "delete", "effect": "block"}],
 }
-OPERATION_CLASSES = [{"match": {"methods": ["POST"], "path": "/graphql"}, "class": "read"}]
 DELETE_X = {"match": {"methods": ["DELETE"], "path": "/repos/acme/x"}}
 
 
@@ -132,7 +129,8 @@ def test_a_connection_with_no_policy_gains_only_the_documented_keys(space):
     ):
         connection = _only(payload)
         assert connection["policy"] == unrestricted_policy()
-        assert connection["operationClasses"] == []
+        # A call's class comes from its method, so no list travels with it.
+        assert "operationClasses" not in connection
         assert "grantExpiresAt" not in connection
         assert payload["expiredConnections"] == []
 
@@ -184,19 +182,6 @@ def test_a_non_allow_default_is_carried(space):
 
     policy = _only(session_get(space.client, space.session))["policy"]
     assert (policy["default"], policy["rules"]) == ("ask", [])
-
-
-def test_the_definitions_operation_classes_are_in_the_payload(db):
-    space = workspace("classes")
-    connection = custom_connection(
-        space, {**bearer_definition(), "operationClasses": OPERATION_CLASSES}
-    )
-    grant(space, connection)
-    client = member_client(space)
-    opened = open_session(client, space.workflow)
-
-    for payload in (opened, session_get(client, opened, "discover")):
-        assert _only(payload)["operationClasses"] == OPERATION_CLASSES
 
 
 def test_one_policy_holds_every_workflow_granted_the_connection(space):
@@ -267,6 +252,11 @@ def test_a_connection_no_workflow_has_takes_a_policy(db):
         ({"version": 1, "rules": [{"class": "credential_minting", "effect": "allow"}]}, "secret guard"),
         ({"version": 1, "rules": [{"class": "delete"}]}, "effect"),
         ({"version": 1, "extra": True}, "unknown field"),
+        ({"version": 1, "rules": [{"class": "admin", "effect": "block"}]}, "expected one of"),
+        (
+            {"version": 1, "rules": [{"operation": "ec2:TerminateInstances", "effect": "ask"}]},
+            "unknown field",
+        ),
     ],
 )
 def test_an_invalid_policy_is_refused(space, policy, message):
@@ -457,23 +447,6 @@ def test_credential_minting_is_refused_everywhere_it_could_be_written(space):
     minting = {"class": "credential_minting"}
     with pytest.raises(GraphQLError, match="secret guard"):
         _set_policy(space, {"version": 1, "rules": [{**minting, "effect": "allow"}]})
-    with pytest.raises(DefinitionError, match="secret guard"):
-        validate_definition(
-            {
-                **bearer_definition(),
-                "operationClasses": [{"match": {"path": "/sts"}, **minting}],
-            }
-        )
-    with pytest.raises(GraphQLError, match="secret guard"):
-        UpdateCustomAgentConnectionMutation.mutate(
-            None,
-            space.info,
-            connection_id=space.connection.id,
-            definition={
-                **bearer_definition(),
-                "operationClasses": [{"match": {"path": "/sts"}, **minting}],
-            },
-        )
     _set_policy(space, ASK_DELETES)
     refused(ask(space.client, action=_allow_action(space, minting)), "invalid_access_allow")
     refused(
@@ -668,6 +641,10 @@ def test_an_allow_is_refused_at_approval_when_the_policy_now_blocks_it(space):
         ({"blockedCall": {"method": "DELETE", "body": "x"}}, "invalid_request_action"),
         ({"blockedCall": {"path": "x" * 4097}}, "invalid_request_action"),
         ({"blockedCall": {"class": "everything"}}, "invalid_request_action"),
+        ({"blockedCall": {"class": "admin"}}, "invalid_request_action"),
+        ({"blockedCall": {"operation": "ec2:TerminateInstances"}}, "invalid_request_action"),
+        ({"allow": {"class": "admin"}}, "invalid_access_allow"),
+        ({"allow": {"operation": "ec2:TerminateInstances"}}, "invalid_access_allow"),
         ({"blockedCall": "DELETE /x"}, "invalid_request_action"),
         ({"blockedCall": {"path": "/t/ghp_" + "a" * 24}}, "credential_in_request_action"),
     ],
@@ -902,6 +879,8 @@ def test_events_for_stopped_calls_and_scrubbed_responses_are_accepted(space):
         {"rule": {"class": "delete"}},
         {"rule": {"class": "delete", "effect": "block", "note": "x"}},
         {"rule": {"class": "everything", "effect": "block"}},
+        {"rule": {"class": "admin", "effect": "block"}},
+        {"rule": {"operation": "ec2:TerminateInstances", "effect": "block"}},
         {"rule": {"match": {"path": "relative"}, "effect": "block"}},
         {"rule": ["delete"]},
         {"matched": {"class": "delete", "effect": "block"}},
@@ -1040,22 +1019,16 @@ def test_the_connection_type_says_whether_it_takes_a_policy(space):
     assert takes == {"http": True, "postgres": False}
 
 
-# Rules and allows by AWS action
+# AWS calls, classed by their method like any other
 
 
-TERMINATE = "ec2:TerminateInstances"
-ASK_TERMINATE = {
-    "version": 1,
-    "default": "allow",
-    "rules": [{"operation": TERMINATE, "effect": "ask"}],
-}
 BLOCKED_AWS_CALL = {
     "method": "POST",
     "host": "ec2.us-east-2.amazonaws.com",
     "path": "/",
-    "class": "delete",
-    "operation": TERMINATE,
+    "class": "create",
 }
+AWS_POST = {"match": {"methods": ["POST"], "path": "/"}}
 
 
 @pytest.fixture
@@ -1079,14 +1052,14 @@ def _connection(payload, connection):
     return found
 
 
-def test_an_aws_connection_takes_rules_by_action(aws):
+def test_an_aws_connection_takes_the_same_rules_as_any_http_connection(aws):
     policy = {
         "version": 1,
         "default": "allow",
         "rules": [
-            {"operation": TERMINATE, "effect": "ask"},
-            {"operation": "dynamodb:DeleteTable", "effect": "block"},
-            {"class": "admin", "effect": "block"},
+            {"class": "create", "effect": "ask"},
+            {"class": "delete", "effect": "block"},
+            {"match": {"methods": ["GET"], "path": "/admin/*"}, "effect": "block"},
         ],
     }
 
@@ -1096,247 +1069,91 @@ def test_an_aws_connection_takes_rules_by_action(aws):
     for endpoint in ("config", "discover"):
         sent = _connection(session_get(aws.client, aws.session, endpoint), aws.connection)
         assert sent["policy"] == unrestricted_policy(rules=policy["rules"])
-        # AWS keeps its own classification, by action.
-        assert "operationClasses" not in sent
-
-
-@pytest.mark.parametrize(
-    "operation",
-    [
-        "ec2:*",
-        "ec2:Terminate*",
-        "EC2:TerminateInstances",
-        "TerminateInstances",
-        "ec2:Terminate Instances",
-        "ec2:" + "A" * 129,
-        "a" * 65 + ":Get",
-        ":Get",
-        "ec2:",
-        ["ec2:TerminateInstances"],
-    ],
-)
-def test_an_operation_is_one_exact_action(aws, operation):
-    with pytest.raises(GraphQLError, match="one exact AWS action"):
-        _set_policy(aws, {"version": 1, "rules": [{"operation": operation, "effect": "ask"}]})
-    refused(
-        ask(aws.client, action=_allow_action(aws, {"operation": operation})),
-        "invalid_access_allow",
-    )
-
-
-def test_a_rule_names_exactly_one_of_class_match_or_operation(aws):
+        # No list of AWS actions travels with it.
+        assert not {"actionClasses", "operationClasses"} & set(sent)
     for rule in (
-        {"operation": TERMINATE, "class": "delete", "effect": "ask"},
-        {"operation": TERMINATE, "match": {"methods": ["POST"]}, "effect": "ask"},
+        {"operation": "ec2:TerminateInstances", "effect": "ask"},
+        {"class": "admin", "effect": "block"},
     ):
-        with pytest.raises(GraphQLError, match="exactly one of class, match or operation"):
+        with pytest.raises(GraphQLError):
             _set_policy(aws, {"version": 1, "rules": [rule]})
-    refused(
-        ask(aws.client, action=_allow_action(aws, {"operation": TERMINATE, "class": "delete"})),
-        "invalid_access_allow",
-    )
 
 
-def test_only_an_aws_connection_takes_an_operation(aws):
-    by_action = {"version": 1, "rules": [{"operation": TERMINATE, "effect": "ask"}]}
-    postgres = packaged_connection(aws, "postgres")
-
-    for connection in (aws.http, postgres):
-        with pytest.raises(GraphQLError, match="only an AWS Connection"):
-            _set_policy(aws, by_action, connection)
-        connection.refresh_from_db()
-        assert connection.policy == {}
-    error = refused(
-        ask(
-            aws.client,
-            action={
-                **_allow_action(aws, {"operation": TERMINATE}),
-                "connectionId": str(aws.http.id),
-            },
-        ),
-        "invalid_access_allow",
-    )
-    assert "only an AWS Connection" in error["message"]
-    assert not AgentRequest.objects.filter(workflow=aws.workflow).exists()
-
-
-@pytest.mark.parametrize(
-    "operation",
-    [
-        "sts:AssumeRole",
-        "sts:assumerole",
-        "sts:GetSessionToken",
-        "sts:GetFederationToken",
-        "iam:CreateAccessKey",
-        "ecr:GetAuthorizationToken",
-        "codeartifact:GetAuthorizationToken",
-    ],
-)
-def test_an_action_that_mints_credentials_is_refused_like_the_class(aws, operation):
-    for effect in ("allow", "ask", "block"):
-        with pytest.raises(GraphQLError, match="secret guard"):
-            _set_policy(
-                aws, {"version": 1, "rules": [{"operation": operation, "effect": effect}]}
-            )
-    _set_policy(aws, {"version": 1, "default": "ask"})
-    error = refused(
-        ask(aws.client, action=_allow_action(aws, {"operation": operation})),
-        "invalid_access_allow",
-    )
-    assert "secret guard" in error["message"]
-    refused(
-        ask(
-            aws.client,
-            action=_allow_action(
-                aws, {"class": "read"}, blockedCall={**BLOCKED_AWS_CALL, "operation": operation}
-            ),
-        ),
-        "secret_guard_blocks_call",
-    )
-    assert not AgentRequest.objects.filter(workflow=aws.workflow).exists()
-    aws.connection.refresh_from_db()
-    assert "operation" not in str(aws.connection.policy)
-
-
-def test_an_agent_asks_to_be_allowed_one_aws_action(aws):
-    _set_policy(aws, ASK_TERMINATE)
-    action = _allow_action(aws, {"operation": TERMINATE}, blockedCall=BLOCKED_AWS_CALL)
+def test_an_agent_asks_to_be_allowed_an_aws_call_by_its_method_and_path(aws):
+    _set_policy(aws, {"version": 1, "rules": [{"class": "create", "effect": "ask"}]})
+    action = _allow_action(aws, AWS_POST, blockedCall=BLOCKED_AWS_CALL)
 
     response = ask(aws.client, kind="access_change", durationSeconds=900, action=action)
 
     assert response.status_code == 201, response.content
     answer = response.json()
-    # Stored and returned exactly as the proxy sent it.
     assert answer["action"] == action
-    assert answer["title"] == "Allow AWS action ec2:TerminateInstances on AWS"
-    agent_request = AgentRequest.objects.get(id=answer["id"])
-    review = graphql(
-        aws,
-        "query($o: ID!, $r: ID!) { agentRequests(organisationId: $o, requestId: $r)"
-        " { title actionReview } }",
-        o=str(aws.organisation.id),
-        r=str(agent_request.id),
-    )
-    assert review.errors is None, review.errors
-    described = review.data["agentRequests"][0]["actionReview"]
-    assert described["title"] == "Allow AWS action ec2:TerminateInstances on AWS"
-    assert described["requested"] == {
-        "allow": {"operation": TERMINATE},
-        "blockedCall": BLOCKED_AWS_CALL,
-        "durationSeconds": 900,
-    }
-    # What the reviewer is shown beside it: the Connection's rules and what
-    # this Workflow has already been allowed.
-    assert described["current"] == {
-        "name": "AWS",
-        "policy": ASK_TERMINATE,
-        "temporaryAllows": [],
-    }
+    assert answer["title"] == "Allow POST / on AWS"
 
-    result = approve(aws, agent_request)
+    result = approve(aws, AgentRequest.objects.get(id=answer["id"]))
 
     assert result.runtime_action == "retry"
     aws.grant.refresh_from_db()
     [allow] = aws.grant.temporary_allows
-    assert set(allow) == {"id", "operation", "expiresAt", "requestId"}
-    assert allow["operation"] == TERMINATE
-    assert result.request.applied_action["allow"] == {"operation": TERMINATE}
-    assert result.request.applied_action["blockedCall"] == BLOCKED_AWS_CALL
+    assert allow["match"] == AWS_POST["match"]
     for endpoint in ("config", "discover"):
         sent = _connection(session_get(aws.client, aws.session, endpoint), aws.connection)
         assert sent["policy"]["temporaryAllows"] == [
-            {"id": allow["id"], "operation": TERMINATE, "expiresAt": allow["expiresAt"]}
+            {"id": allow["id"], **AWS_POST, "expiresAt": allow["expiresAt"]}
         ]
     # The other Connection of the same Workflow is not opened by it.
     other = _connection(session_get(aws.client, aws.session), aws.http)
     assert other["policy"]["temporaryAllows"] == []
-    aws.connection.refresh_from_db()
-    assert aws.connection.policy == ASK_TERMINATE
 
 
-def test_the_reviewer_may_name_another_exact_action(aws):
-    _set_policy(aws, {"version": 1, "default": "ask"})
-    agent_request = filed(ask(aws.client, action=_allow_action(aws, {"operation": TERMINATE})))
+def test_an_allow_for_an_aws_post_is_refused_when_creates_are_blocked(aws):
+    """Most AWS calls are POSTs, so a block on creates stops them whatever
+    action each names."""
 
-    approve(
-        aws,
-        agent_request,
-        action=_allow_action(aws, {"operation": "ec2:StopInstances"}),
-    )
+    _set_policy(aws, {"version": 1, "rules": [{"class": "create", "effect": "block"}]})
 
-    aws.grant.refresh_from_db()
-    assert [allow["operation"] for allow in aws.grant.temporary_allows] == [
-        "ec2:StopInstances"
-    ]
-    agent_request.refresh_from_db()
-    assert agent_request.action["allow"] == {"operation": TERMINATE}
-    assert agent_request.applied_action["allow"] == {"operation": "ec2:StopInstances"}
-
-
-def test_an_allow_for_an_action_the_connection_blocks_is_refused(aws):
-    _set_policy(
-        aws,
-        {
-            "version": 1,
-            "rules": [
-                {"operation": TERMINATE, "effect": "block"},
-                {"operation": "ec2:StopInstances", "effect": "ask"},
-            ],
-        },
-    )
-
-    for operation in (TERMINATE, "ec2:terminateinstances"):
+    for path in ("/", "/2015-03-31/functions"):
+        post = {"match": {"methods": ["POST"], "path": path}}
         error = refused(
-            ask(aws.client, action=_allow_action(aws, {"operation": operation})),
+            ask(aws.client, action=_allow_action(aws, post)),
             "access_policy_blocks_allow",
         )
         assert "never changes a block" in error["message"]
-    # Only an ask rule stands in the way of this one.
-    agent_request = filed(
-        ask(aws.client, action=_allow_action(aws, {"operation": "ec2:StopInstances"}))
-    )
-    # The Connection's policy is read again when the request is approved.
-    _set_policy(
-        aws, {"version": 1, "rules": [{"operation": "ec2:stopinstances", "effect": "block"}]}
-    )
-    with pytest.raises(GraphQLError, match="never changes a block"):
-        approve(aws, agent_request)
-    aws.grant.refresh_from_db()
-    assert aws.grant.temporary_allows == []
+    delete = {"match": {"methods": ["DELETE"], "path": "/x"}}
+    assert filed(ask(aws.client, action=_allow_action(aws, delete)))
 
 
-def test_the_proxy_reports_a_rule_by_action(aws):
+def test_the_proxy_names_a_guarded_aws_action_but_no_rule_by_action(aws):
     detail = {
         "connectionId": str(aws.connection.id),
         "connectionName": "AWS",
-        "class": "delete",
-        "operation": TERMINATE,
+        "class": "credential_minting",
+        "operation": "sts:AssumeRole",
         "method": "POST",
         "path": "/",
     }
-    rule = {"operation": TERMINATE, "effect": "ask"}
 
     response = _ship(
         aws,
         _event(
-            "asked-action",
+            "guarded-action",
             grantId=str(aws.grant.id),
             provider="aws",
-            proxyDecision="ask",
-            reason="agent_access_policy_ask",
-            detail={**detail, "rule": rule},
+            reason="agent_access_policy_blocked",
+            detail={**detail, "rule": "secret_guard"},
         ),
     )
 
     assert response.status_code == 202, response.content
-    stored = AgentEvent.objects.get(event_id="asked-action")
-    assert stored.detail["rule"] == rule
-    assert stored.detail["operation"] == TERMINATE
-    for malformed in (
-        {"operation": "ec2:*", "effect": "ask"},
-        {"operation": TERMINATE, "class": "delete", "effect": "ask"},
-        {"operation": TERMINATE},
-    ):
-        refusal = _ship(aws, _event("malformed-action", detail={"rule": malformed}))
-        assert refusal.status_code == 400, refusal.content
-    assert not AgentEvent.objects.filter(event_id="malformed-action").exists()
+    stored = AgentEvent.objects.get(event_id="guarded-action")
+    assert stored.detail["operation"] == "sts:AssumeRole"
+    assert stored.detail["rule"] == "secret_guard"
+    refusal = _ship(
+        aws,
+        _event(
+            "rule-by-action",
+            detail={"rule": {"operation": "ec2:TerminateInstances", "effect": "ask"}},
+        ),
+    )
+    assert refusal.status_code == 400, refusal.content
+    assert not AgentEvent.objects.filter(event_id="rule-by-action").exists()

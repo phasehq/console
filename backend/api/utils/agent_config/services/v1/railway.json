@@ -24,10 +24,7 @@
   ],
   "credential_providers": ["railway"],
   "client_matchers": [{"kind": "executable", "values": ["railway"]}],
-  "operation_classes": [
-    {"match": {"methods": ["POST"], "path": "/graphql/*"}, "class": "update"}
-  ],
-  "context_template": "The Railway API through the Phase proxy. RAILWAY_API_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached. Reads and writes share the GraphQL endpoint, so this Connection's access rules treat every call to it as an update.",
+  "context_template": "The Railway API through the Phase proxy. RAILWAY_API_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached. A GraphQL call is a POST, so this Connection's access rules count it as a create whether it reads or writes.",
   "credential_environment": [
     "RAILWAY_API_TOKEN"
   ],

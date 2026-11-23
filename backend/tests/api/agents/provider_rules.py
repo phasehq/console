@@ -14,22 +14,8 @@ SERVICES = tuple(sorted(path.stem for path in RECORDED.glob("*.json")))
 _TOP = {
     "credential_environment": "credentialEnvironment",
     "secret_guard": "secretGuard",
-    "action_classes": "actionClasses",
 }
 _PATH_RULE = {"host_label": "hostLabel"}
-_ACTION_CLASSES = {
-    "read_verbs": "readVerbs",
-    "create_verbs": "createVerbs",
-    "delete_verbs": "deleteVerbs",
-    "admin_services": "adminServices",
-    "admin_suffixes": "adminSuffixes",
-    "s3_subresources": "s3Subresources",
-    "rest_operations": "restOperations",
-    "query_protocol_services": "queryProtocolServices",
-    "dual_protocol_services": "dualProtocolServices",
-    "json_target_services": "jsonTargetServices",
-    "mixed_services": "mixedServices",
-}
 
 
 def recorded(service_type):
@@ -59,8 +45,6 @@ def wire(manifest):
                     else {}
                 ),
             }
-        elif key == "action_classes":
-            value = {_ACTION_CLASSES.get(name, name): item for name, item in value.items()}
         result[_TOP[key]] = value
     return result
 

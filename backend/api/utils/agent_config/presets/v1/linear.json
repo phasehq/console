@@ -38,17 +38,6 @@
         "whenAbsent": "attach"
       }
     ],
-    "preset": "headers",
-    "operationClasses": [
-      {
-        "match": {
-          "methods": [
-            "POST"
-          ],
-          "path": "/graphql"
-        },
-        "class": "update"
-      }
-    ]
+    "preset": "headers"
   }
 }

@@ -8,7 +8,7 @@ from graphql import GraphQLError
 
 from api.models import AgentConnection, AgentRequest
 from api.utils.agent_config import get_config_registry, validate_definition
-from api.utils.agent_config.access_policy import allow_is_blocked, classify_http_call
+from api.utils.agent_config.access_policy import allow_is_blocked
 from api.utils.agent_config.http_definition import compile_service, secret_field_names
 from api.utils.agent_config.presets import (
     DEFAULT_PRESET_ROOT,
@@ -142,64 +142,29 @@ def test_the_presets_say_where_each_provider_takes_its_secret():
     } == {"datadog", "sentry", "mcp-server"}
 
 
-def test_graphql_endpoints_are_classified_as_able_to_change_data():
-    classes = PRESETS["linear"]["definition"]["operationClasses"]
-
-    assert classes == [
-        {"match": {"methods": ["POST"], "path": "/graphql"}, "class": "update"}
-    ]
+def test_no_preset_classes_its_own_calls():
+    for preset in PRESETS.values():
+        assert "operationClasses" not in preset["definition"]
 
 
-def _slack_class(method, path):
-    classes = PRESETS["slack"]["definition"]["operationClasses"]
-    return classify_http_call(classes, method, path)
+def _blocking(name):
+    return {"version": 1, "rules": [{"class": name, "effect": "block"}]}
 
 
 @pytest.mark.parametrize(
-    "path,expected",
-    [
-        ("/api/chat.delete", "delete"),
-        ("/api/files.delete", "delete"),
-        ("/api/reactions.remove", "delete"),
-        ("/api/conversations.kick", "delete"),
-        ("/api/conversations.archive", "delete"),
-        ("/api/conversations.list", "read"),
-        ("/api/users.info", "read"),
-        ("/api/conversations.history", "read"),
-        ("/api/conversations.replies", "read"),
-        ("/api/users.getPresence", "read"),
-        ("/api/auth.test", "read"),
-        ("/api/chat.postMessage", "update"),
-        ("/api/conversations.unarchive", "update"),
-    ],
+    "path",
+    ["/api/chat.delete", "/api/conversations.history", "/graphql", "/mcp"],
+    ids=["slack-delete", "slack-read", "linear-graphql", "mcp"],
 )
-def test_slack_calls_are_classified_by_method_name(path, expected):
-    assert _slack_class("POST", path) == expected
+def test_a_preset_call_by_post_is_a_create_whatever_it_does(path):
+    """Slack's Web API, Linear's GraphQL and an MCP server are classed by
+    HTTP method like any other service."""
 
+    post = {"match": {"methods": ["POST"], "path": path}}
 
-def test_the_mcp_server_preset_classifies_its_one_endpoint_as_able_to_change_data():
-    classes = PRESETS["mcp-server"]["definition"]["operationClasses"]
-
-    assert classes == [{"match": {"methods": ["POST"]}, "class": "update"}]
-    assert classify_http_call(classes, "POST", "/mcp") == "update"
-    assert classify_http_call(classes, "GET", "/mcp") == "read"
-
-
-def test_a_blocked_delete_class_covers_a_slack_delete():
-    blocked = {
-        "version": 1,
-        "default": "allow",
-        "rules": [{"class": "delete", "effect": "block"}],
-    }
-    classes = PRESETS["slack"]["definition"]["operationClasses"]
-    allow = {"match": {"methods": ["POST"], "path": "/api/chat.delete"}}
-
-    assert allow_is_blocked(blocked, allow, operation_classes=classes)
-    assert not allow_is_blocked(
-        blocked,
-        {"match": {"methods": ["POST"], "path": "/api/chat.postMessage"}},
-        operation_classes=classes,
-    )
+    assert allow_is_blocked(_blocking("create"), post)
+    assert not allow_is_blocked(_blocking("delete"), post)
+    assert not allow_is_blocked(_blocking("read"), post)
 
 
 @pytest.mark.parametrize("category", [[], ["ai"], {}, {"ai": 1}])

@@ -16,12 +16,6 @@ from api.utils.agent_config import (
     ConfigRegistry,
     ConfigRegistryError,
 )
-from api.utils.agent_config.access_policy import (
-    PolicyError,
-    is_minting_operation,
-    takes_operations,
-    validate_allow,
-)
 from tests.api.agents.provider_rules import SERVICES, recorded
 
 
@@ -54,117 +48,20 @@ def test_every_service_carries_the_rules_recorded_from_the_cli():
         service = REGISTRY.get_service(service_type)
         expected = recorded(service_type)
         assert service["credential_environment"] == expected["credential_environment"]
-        for key in ("secret_guard", "action_classes"):
-            assert service.get(key) == expected.get(key), (service_type, key)
+        assert service.get("secret_guard") == expected.get("secret_guard"), service_type
 
 
-def test_the_services_with_a_guard_are_known_and_only_aws_has_call_classes():
+def test_the_services_with_a_guard_are_known_and_none_classes_calls():
     guarded = {
         service_type
         for service_type, service in REGISTRY.services.items()
         if "secret_guard" in service
     }
-    classed = {
-        service_type
-        for service_type, service in REGISTRY.services.items()
-        if "action_classes" in service
-    }
     assert guarded == {"aws", "cloudflare", "github", "gitlab", "supabase", "vercel"}
     assert guarded == REGISTRY.guarded_service_types
-    assert classed == {"aws"}
-
-
-# The Console's minting list, derived from the guards
-
-# The list access_policy.py kept by hand before the manifests held the guard.
-_HAND_KEPT_MINTING_OPERATIONS = {
-    "sts:AssumeRole",
-    "sts:AssumeRoleWithSAML",
-    "sts:AssumeRoleWithWebIdentity",
-    "sts:AssumeRoot",
-    "sts:GetFederationToken",
-    "sts:GetSessionToken",
-    "sts:GetWebIdentityToken",
-    "iam:CreateAccessKey",
-    "iam:CreateLoginProfile",
-    "iam:UpdateLoginProfile",
-    "iam:CreateServiceSpecificCredential",
-    "iam:ResetServiceSpecificCredential",
-    "iam:UploadSSHPublicKey",
-    "iam:UploadSigningCertificate",
-    "ecr:GetAuthorizationToken",
-    "ecr-public:GetAuthorizationToken",
-    "codeartifact:GetAuthorizationToken",
-    "redshift:GetClusterCredentials",
-    "redshift:GetClusterCredentialsWithIAM",
-    "redshift-serverless:GetCredentials",
-    "cognito-identity:GetCredentialsForIdentity",
-    "cognito-identity:GetOpenIdToken",
-    "cognito-identity:GetOpenIdTokenForDeveloperIdentity",
-    "ec2:CreateKeyPair",
-    "elasticmapreduce:GetClusterSessionCredentials",
-    "lightsail:GetInstanceAccessDetails",
-    "lightsail:CreateKeyPair",
-    "lightsail:DownloadDefaultKeyPair",
-    "lightsail:CreateBucketAccessKey",
-    "s3express:CreateSession",
-}
-# AWS calls the CLI's guard blocked by path, which the hand-kept list missed.
-# A rule or an allow naming one could never apply, so it is refused too.
-_GUARDED_BY_PATH_ONLY = {
-    "iot:CreateKeysAndCertificate",
-    "apigateway:CreateApiKey",
-    "airflow:CreateCliToken",
-    "airflow:CreateWebLoginToken",
-    "grafana:CreateWorkspaceApiKey",
-    "emr-containers:GetManagedEndpointSessionCredentials",
-}
-# Added to the manifest's guard after both lists were recorded.
-_GUARDED_SINCE = {
-    "gamelift:GetComputeAuthToken",
-    "grafana:CreateWorkspaceServiceAccountToken",
-    "appsync:ListApiKeys",
-    "appsync:CreateApiKey",
-    "appsync:UpdateApiKey",
-    "iot:CreateProvisioningClaim",
-    "iot:CreateCertificateFromCsr",
-}
-_MINTING_OPERATIONS = (
-    _HAND_KEPT_MINTING_OPERATIONS | _GUARDED_BY_PATH_ONLY | _GUARDED_SINCE
-)
-
-
-def test_the_minting_list_is_the_manifests_guard():
-    assert REGISTRY.minting_operations == {
-        operation.lower() for operation in _MINTING_OPERATIONS
-    }
-    for operation in _MINTING_OPERATIONS:
-        assert is_minting_operation(operation)
-        with pytest.raises(PolicyError, match="secret guard"):
-            validate_allow({"operation": operation}, operations=True)
-    # A path rule of another service names no AWS action and adds nothing.
-    assert not any(
-        operation.startswith(("git", "cloudflare", "vercel", "supabase"))
-        for operation in REGISTRY.minting_operations
-    )
-
-
-def test_the_services_that_take_operations_are_the_ones_with_call_classes():
-    assert REGISTRY.operation_service_types == {"aws"}
-    assert takes_operations("aws") is True
-    assert takes_operations("github") is False
-
-
-def test_a_new_guarded_operation_reaches_the_minting_list(tmp_path):
-    registry = _load_with(
-        tmp_path,
-        "aws.json",
-        lambda document: document["secret_guard"]["operations"].update(
-            {"sso": ["GetRoleCredentials"]}
-        ),
-    )
-    assert "sso:getrolecredentials" in registry.minting_operations
-    assert "sso:getrolecredentials" not in REGISTRY.minting_operations
+    # Every call is classed by its HTTP method alone.
+    for service in REGISTRY.services.values():
+        assert not {"action_classes", "operation_classes"} & set(service)
 
 
 # credential_environment
@@ -335,105 +232,35 @@ def test_an_aws_secret_guard_rejects_bad_operations(tmp_path, mutate, message):
     _refused(tmp_path, "aws.json", mutate, message)
 
 
-# action_classes
+# An AWS Connection always carries its guard
 
 
-def _classes(**changes):
-    def mutate(document):
-        document["action_classes"].update(changes)
-
-    return mutate
-
-
-@pytest.mark.parametrize(
-    ("mutate", "message"),
-    [
-        (_classes(scheme="gcp_methods"), "expected 'aws_actions'"),
-        (_classes(version=2), "expected 1"),
-        (_classes(version=True), "expected 1"),
-        (_classes(extra=[]), "unknown field"),
-        (lambda d: d["action_classes"].pop("mixed_services"), "missing required"),
-        (_classes(read_verbs=["Get", "Get"]), "duplicate"),
-        (_classes(read_verbs=[]), "must not be empty"),
-        (_classes(create_verbs=[]), "must not be empty"),
-        (_classes(delete_verbs=[]), "must not be empty"),
-        (_classes(query_protocol_services=[]), "must not be empty"),
-        (_classes(json_target_services=[]), "must not be empty"),
-        (_classes(read_verbs=["Get", ""]), "non-empty string"),
-        (_classes(admin_services=[""]), "non-empty string"),
-        (_classes(admin_suffixes=[""]), "non-empty string"),
-        (_classes(dual_protocol_services=[""]), "non-empty string"),
-        (_classes(mixed_services=[""]), "non-empty string"),
-        (_classes(json_target_services=["lambda", ""]), "non-empty string"),
-        (_classes(read_verbs=["Get*"]), "invalid value"),
-        (_classes(admin_services=["IAM"]), "invalid value"),
-        (_classes(exact={"kms:CreateGrant": "mint"}), "expected one of"),
-        (_classes(exact={"kms:*": "admin"}), "service:Action"),
-        (_classes(exact={"CreateGrant": "admin"}), "service:Action"),
-        (_classes(s3_subresources={"policy": "owner"}), "expected one of"),
-        (_classes(s3_subresources={"a&b": "admin"}), "invalid key"),
-        (
-            _classes(rest_operations=[{"service": "lambda", "method": "POST", "pattern": "/x"}]),
-            "missing required",
-        ),
-        (
-            _classes(
-                rest_operations=[
-                    {"service": "lambda", "method": "post", "pattern": "/x", "action": "A"}
-                ]
-            ),
-            "upper-case HTTP method",
-        ),
-        (
-            _classes(
-                rest_operations=[
-                    {"service": "lambda", "method": "POST", "pattern": "x", "action": "A"}
-                ]
-            ),
-            "must begin with '/'",
-        ),
-    ],
-)
-def test_aws_call_classes_reject_bad_shapes(tmp_path, mutate, message):
-    _refused(tmp_path, "aws.json", mutate, message)
-
-
-@pytest.mark.parametrize(
-    "key", ["admin_services", "admin_suffixes", "dual_protocol_services", "mixed_services"]
-)
-def test_the_other_call_class_lists_may_be_empty(tmp_path, key):
-    registry = _load_with(tmp_path, "aws.json", _classes(**{key: []}))
-    assert registry.get_service("aws")["action_classes"][key] == []
-
-
-def test_call_classes_are_refused_on_a_service_not_signed_for_aws(tmp_path):
-    classes = recorded("aws")["action_classes"]
-    _refused(
-        tmp_path,
-        "github.json",
-        lambda document: document.update({"action_classes": classes}),
-        "only valid for a service signed",
-    )
-
-
-# An AWS Connection always carries its guard and classes
-
-
-@pytest.mark.parametrize("key", ["secret_guard", "action_classes"])
-def test_the_aws_manifest_cannot_load_without_its_guard_or_classes(tmp_path, key):
+def test_the_aws_manifest_cannot_load_without_its_guard(tmp_path):
     _refused(
         tmp_path,
         "aws.json",
-        lambda document: document.pop(key),
-        "needs secret_guard and action_classes",
+        lambda document: document.pop("secret_guard"),
+        "needs secret_guard",
     )
 
 
-def test_the_packaged_aws_manifest_has_both():
+@pytest.mark.parametrize(
+    ("filename", "key"),
+    [("aws.json", "action_classes"), ("github.json", "operation_classes")],
+)
+def test_a_manifest_that_classes_calls_is_refused(tmp_path, filename, key):
+    _refused(
+        tmp_path,
+        filename,
+        lambda document: document.update({key: {}}),
+        f"unknown field\\(s\\): {key}",
+    )
+
+
+def test_the_packaged_aws_manifest_has_its_guard():
     service = REGISTRY.get_service("aws")
     assert service["injection"]["action"] == "aws_sigv4"
     assert service["secret_guard"]["operations"]
-    assert service["action_classes"]["scheme"] == "aws_actions"
 
 
 # credential_fields (token providers)
@@ -514,5 +341,4 @@ def test_a_provider_is_read_by_one_service_only(tmp_path):
 def test_the_registry_endpoint_payload_carries_the_new_fields():
     services = REGISTRY.as_dict()["services"]
     assert services["aws"]["secret_guard"] == recorded("aws")["secret_guard"]
-    assert services["aws"]["action_classes"] == recorded("aws")["action_classes"]
     assert services["github"]["credential_fields"] == {"token": "access_token"}

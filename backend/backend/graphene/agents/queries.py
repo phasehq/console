@@ -451,7 +451,7 @@ def _service_type(template):
         # real secret material.
         decoy_format=template.get("decoy_format", {}),
         credential_providers=template["credential_providers"],
-        operation_classes=template.get("operation_classes", []),
+        operation_classes=[],
     )
 
 

@@ -192,7 +192,7 @@ _UNRESTRICTED_POLICY = {
         }
     ],
 }
-_LATER_KEYS = {"policy", "grantExpiresAt", "operationClasses"}
+_LATER_KEYS = {"policy", "grantExpiresAt"}
 _LATER_SERVICES = {
     "cloudflare",
     "github",
@@ -240,7 +240,7 @@ def _without_later_additions(text):
             assert connection.pop("policy") == _UNRESTRICTED_POLICY
         # Each Connection's provider rules, exactly as its manifest has them.
         rules = expected_wire(connection["serviceType"])
-        for key in ("credentialEnvironment", "secretGuard", "actionClasses"):
+        for key in ("credentialEnvironment", "secretGuard"):
             assert connection.pop(key, None) == rules.get(key), key
         # Nothing for PostgreSQL, and nothing else for a grant without expiry.
         assert not _LATER_KEYS & set(connection)

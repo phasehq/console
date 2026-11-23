@@ -195,7 +195,7 @@ def required_client_features(item):
         required.append(WHEN_ABSENT_FEATURE)
     if requires_client_feature(item["grant"].connection.policy):
         required.append(ACCESS_POLICY_FEATURE)
-    if service.get("secret_guard") or service.get("action_classes"):
+    if service.get("secret_guard"):
         required.append(PROVIDER_RULES_FEATURE)
     return required
 
@@ -755,10 +755,6 @@ def _connection_payload(
     if custom:
         payload["injections"] = service["injections"]
         payload["allow_plain_http"] = service["allow_plain_http"]
-        payload["operation_classes"] = service["operation_classes"]
-    elif service.get("operation_classes"):
-        # A packaged HTTP service's own overrides of how its calls are classed.
-        payload["operation_classes"] = deepcopy(service["operation_classes"])
     if service["protocol"] == "http":
         # The rules are the Connection's, the same for every Workflow granted
         # it; the temporary allows are this Workflow's own. Both are read from
@@ -785,13 +781,12 @@ def _connection_payload(
 def provider_rules(service):
     """A Connection's provider rules from its manifest, in the runtime API's spelling.
 
-    A custom Connection exports its own fields' variables and has no guard or call classes.
+    A custom Connection exports its own fields' variables and has no guard.
     """
 
     rules = {"credential_environment": list(service["credential_environment"])}
-    for key in ("secret_guard", "action_classes"):
-        if key in service:
-            rules[key] = deepcopy(service[key])
+    if "secret_guard" in service:
+        rules["secret_guard"] = deepcopy(service["secret_guard"])
     return rules
 
 

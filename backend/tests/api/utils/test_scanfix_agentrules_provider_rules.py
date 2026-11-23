@@ -1,6 +1,6 @@
 """A GitLab or GitHub Enterprise API served below one path segment is guarded
-and classed as one served at the root, and a credential that names a deeper
-path is refused, so a Connection's hosts and its provider rules always agree.
+as one served at the root, and a credential that names a deeper path is
+refused, so a Connection's hosts and its provider rules always agree.
 
 The guard is compared as the proxy compares it, from the rules a session
 receives; nothing here reaches a network or a database.
@@ -12,7 +12,6 @@ import re
 import pytest
 
 from api.utils.agent_config import REGISTRY
-from api.utils.agent_config.access_policy import classify_http_call
 from api.utils.agent_credentials import (
     CredentialResolutionError,
     _github_config,
@@ -120,13 +119,6 @@ def test_a_prefixed_gitlab_connections_guard_leaves_other_calls_alone(method, pa
     assert not _guard_stops("gitlab", method, path)
 
 
-def test_a_prefixed_gitlab_graphql_call_is_classed_as_an_update():
-    classes = REGISTRY.get_service("gitlab")["operation_classes"]
-
-    assert classify_http_call(classes, "POST", "/api/graphql") == "update"
-    assert classify_http_call(classes, "POST", "/gitlab/api/graphql") == "update"
-
-
 # GitHub Enterprise Server below a path prefix
 
 _GITHUB_ENTERPRISE_MINTING_CALLS = [
@@ -154,18 +146,6 @@ def test_a_prefixed_github_enterprise_connection_guards_the_calls_an_unprefixed_
 def test_github_coms_guard_stops_adding_an_ssh_key_to_the_tokens_user():
     assert _guard_stops("github", "POST", "/user/keys")
     assert not _guard_stops("github", "GET", "/user/keys")
-
-
-def test_a_prefixed_github_enterprise_graphql_call_is_classed_as_an_update():
-    classes = REGISTRY.get_service("github")["operation_classes"]
-
-    assert _routed(_github_hosts("https://ghe.example.com/ghe/api/v3"), "/ghe/api/graphql")
-    for path in ("/graphql", "/api/graphql", "/ghe/api/graphql"):
-        assert classify_http_call(classes, "POST", path) == "update", path
-    # Other calls keep the class of their method.
-    assert classify_http_call(classes, "POST", "/ghe/api/v3/repos/acme/app/issues") == (
-        "create"
-    )
 
 
 # A credential's host is taken only as deep as the rules reach

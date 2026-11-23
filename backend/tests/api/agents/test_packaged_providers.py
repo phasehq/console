@@ -54,7 +54,6 @@ from .custom_connections import (
 
 
 BEARER = ("Authorization", "Bearer {value}")
-GRAPHQL_IS_AN_UPDATE = {"methods": ["POST"]}
 
 # What each provider's definition has to say, held against the sync
 # integration of the same provider: its API host, the header its token goes
@@ -77,11 +76,6 @@ PROVIDERS = {
         ],
         "decoy": r"ghp_[A-Za-z0-9]{36}",
         "executable": "gh",
-        "classes": [
-            {"match": {"methods": ["POST"], "path": "/graphql"}, "class": "update"},
-            {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"},
-            {"match": {"methods": ["POST"], "path": "/*/api/graphql"}, "class": "update"},
-        ],
     },
     "gitlab": {
         "display": "GitLab",
@@ -98,10 +92,6 @@ PROVIDERS = {
         "env": ["GITLAB_TOKEN"],
         "decoy": r"glpat-[A-Za-z0-9]{32}",
         "executable": "glab",
-        "classes": [
-            {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"},
-            {"match": {"methods": ["POST"], "path": "/*/api/graphql"}, "class": "update"},
-        ],
     },
     "cloudflare": {
         "display": "Cloudflare",
@@ -173,9 +163,6 @@ PROVIDERS = {
         "env": ["RAILWAY_API_TOKEN"],
         "decoy": r"[0-9a-f]{36}",
         "executable": "railway",
-        "classes": [
-            {"match": {"methods": ["POST"], "path": "/graphql/*"}, "class": "update"}
-        ],
     },
     "supabase": {
         "display": "Supabase",
@@ -284,7 +271,7 @@ def test_the_definition_loads_and_uses_the_providers_own_credential(provider):
     assert service["client_matchers"] == [
         {"kind": "executable", "values": [expected["executable"]]}
     ]
-    assert service.get("operation_classes", []) == expected.get("classes", [])
+    assert "operation_classes" not in service
     assert expected["display"] in service["context_template"]
     assert all(name in service["context_template"] for name in expected["env"])
 
@@ -363,11 +350,15 @@ def test_a_provider_connection_reaches_the_session(space, provider):
         *identifier_env,
         *expected["env"],
     ]
-    assert sent.get("operationClasses") == expected.get("classes")
-    assert ("operationClasses" in sent) == ("classes" in expected)
     # Not a custom Connection: one injection, no sealed value, and never a
-    # credential on a plain-HTTP request.
-    for absent in ("injections", "allowPlainHttp", "sealedMaterial", "grantExpiresAt"):
+    # credential on a plain-HTTP request. A call's class comes from its method.
+    for absent in (
+        "injections",
+        "allowPlainHttp",
+        "sealedMaterial",
+        "grantExpiresAt",
+        "operationClasses",
+    ):
         assert absent not in sent
     assert opened["configEnv"] == {}
 
@@ -384,7 +375,7 @@ def test_a_provider_connection_reaches_the_session(space, provider):
         "environmentBindings",
     ):
         assert discovered[key] == sent[key], key
-    assert discovered.get("operationClasses") == expected.get("classes")
+    assert "operationClasses" not in discovered
     # A refresh keeps the decoy the Agent already holds.
     refreshed = _only(session_get(client, opened))
     assert refreshed["decoyMaterial"] == {"token": decoy}
@@ -978,7 +969,7 @@ def test_a_provider_credential_fits_only_its_own_service(space):
     )
 
 
-# Access rules and call classes
+# Access rules
 
 
 def test_a_provider_connection_takes_access_rules_like_any_http_connection(space):
@@ -1004,8 +995,8 @@ def test_a_provider_connection_takes_access_rules_like_any_http_connection(space
     assert _only(session_get(client, opened))["policy"] == unrestricted_policy(
         rules=policy["rules"]
     )
-    # A rule by AWS action belongs to AWS Connections only.
-    with pytest.raises(GraphQLError, match="only an AWS Connection"):
+    # No Connection takes a rule by AWS action.
+    with pytest.raises(GraphQLError, match="unknown field"):
         set_policy(
             space,
             {"version": 1, "rules": [{"operation": "ec2:RunInstances", "effect": "ask"}]},
@@ -1022,13 +1013,14 @@ def test_a_provider_connection_takes_access_rules_like_any_http_connection(space
             },
         )
 
-    # GitHub's own override classes a GraphQL call as an update, which this
-    # Connection blocks, so an allow for it could not help.
-    refused(
-        allow({"methods": ["POST"], "path": "/graphql"}), "access_policy_blocks_allow"
-    )
-    # Any other POST is a create by its method, and a delete is only asked about.
+    # A GraphQL call is a POST, so a create like any other POST, which this
+    # Connection does not block; an update by its method is blocked.
+    assert allow({"methods": ["POST"], "path": "/graphql"}).status_code == 201
     assert allow({"methods": ["POST"], "path": "/repos/acme/x/issues"}).status_code == 201
+    refused(
+        allow({"methods": ["PATCH"], "path": "/repos/acme/x"}), "access_policy_blocks_allow"
+    )
+    # A delete is only asked about.
     assert allow({"methods": ["DELETE"], "path": "/repos/acme/x"}).status_code == 201
 
 
@@ -1061,7 +1053,7 @@ def test_the_registry_endpoint_lists_each_service_with_its_public_hosts(space):
             assert service["hostRulesMode"] == expected["mode"]
             assert service["injection"]["whenAbsent"] == "attach"
             assert service["injection"].get("valueFormats") == expected.get("formats")
-            assert service.get("operationClasses", []) == expected.get("classes", [])
+            assert "operationClasses" not in service
         assert services["aws"]["hosts"] == [{"match": "suffix", "value": ".amazonaws.com"}]
         # PostgreSQL has no public host: each Connection names its own.
         assert services["postgres"]["hosts"] == []
@@ -1086,7 +1078,8 @@ def test_the_console_lists_the_services_as_templates(space):
         assert template["credentialProviders"] == [provider]
         assert template["hosts"] == expected["hosts"]
         assert template["hostRulesMode"] == expected["mode"]
-        assert template["operationClasses"] == expected.get("classes", [])
+        # Kept in the schema, and always empty: calls are classed by method.
+        assert template["operationClasses"] == []
         assert template["injection"]["when_absent"] == "attach"
     assert templates["aws"]["operationClasses"] == []
     assert templates["postgres"]["operationClasses"] == []

@@ -161,7 +161,7 @@ class ProviderRulesJSONRenderer(CamelCaseJSONRenderer):
 
     json_underscoreize = {
         **CamelCaseJSONRenderer.json_underscoreize,
-        "ignore_fields": ("operations", "exact", "s3Subresources"),
+        "ignore_fields": ("operations",),
     }
 
 

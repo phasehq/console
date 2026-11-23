@@ -1,7 +1,18 @@
 """Access policies on a Connection: allow, ask or block each call.
 
+A policy is ``{"version": 1, "default": effect, "rules": [...]}``, each rule
+naming one class or one match (methods, a path glob or both) and an effect.
+An HTTP call's class comes from its method alone.
+
 The managed secret guard is added to the compiled policy of a service whose
 manifest gives it rules, and no rule or temporary allow can remove it.
+
+Versioning: the CLI refuses, failing closed, a Connection whose policy has a
+``version`` above the one it supports, or holds a class, effect or rule kind
+it does not know, and tells the person to update the Phase CLI. It ignores
+unknown keys anywhere else in the session payload. So ``POLICY_VERSION`` stays
+1 until the Console adds something to a policy that an older CLI would have to
+enforce, and must be raised when it does.
 """
 
 from __future__ import annotations
@@ -22,7 +33,7 @@ POLICY_VERSION = 1
 ACCESS_POLICY_FEATURE = "access_policy"
 
 EFFECTS = ("allow", "ask", "block")
-USER_CLASSES = ("read", "create", "update", "delete", "admin")
+USER_CLASSES = ("read", "create", "update", "delete")
 # Calls that mint new credentials or assume another identity. Only the secret
 # guard names this class.
 CREDENTIAL_MINTING = "credential_minting"
@@ -31,10 +42,7 @@ HTTP_METHODS = frozenset(
 )
 
 MAX_RULES = 50
-MAX_OPERATION_CLASSES = 50
 MAX_PATH_LENGTH = 1024
-
-_OPERATION = re.compile(r"^[a-z0-9-]{1,64}:[A-Za-z0-9]{1,128}$")
 
 SECRET_GUARD_ID = "secret_guard"
 _SECRET_GUARD = {
@@ -43,6 +51,7 @@ _SECRET_GUARD = {
     "rules": [{"class": CREDENTIAL_MINTING, "effect": "block"}],
 }
 
+# Any other method is an update.
 _METHOD_CLASSES = {
     "GET": "read",
     "HEAD": "read",
@@ -61,7 +70,7 @@ _BRACKETED_GLOB_CHARACTER = re.compile(r"\[([*?\[])\]")
 
 
 class PolicyError(ConfigRegistryError):
-    """An access policy, operation class list or allow is invalid."""
+    """An access policy or allow is invalid."""
 
 
 def managed_policies(service_type: Any = None) -> list[dict[str, Any]]:
@@ -158,92 +167,18 @@ def _registry():
     return get_config_registry()
 
 
-def takes_operations(service_type: Any) -> bool:
-    """Whether a Connection of this service takes rules by named operation:
-    one whose manifest classes calls by action, such as AWS's
-    ``ec2:TerminateInstances``."""
+def _target(value, location):
+    """Exactly one of ``class`` or ``match``, as policy rules and allows use."""
 
-    return service_type in _registry().operation_service_types
-
-
-def is_operation(value: Any) -> bool:
-    """Whether a value is spelled as an operation: ``<service>:<Action>``,
-    the service in lower case, with no wildcards."""
-
-    return isinstance(value, str) and bool(_OPERATION.fullmatch(value))
-
-
-def same_operation(first: str, second: str) -> bool:
-    """Operations are compared without regard to case."""
-
-    return first.lower() == second.lower()
-
-
-def is_minting_operation(value: Any) -> bool:
-    """Whether an operation mints credentials or assumes another identity.
-
-    The proxy enforces the secret guards; this refuses rules or allows that could never apply.
-    """
-
-    return isinstance(value, str) and value.lower() in _registry().minting_operations
-
-
-def proxy_names_operation(value: str) -> bool:
-    """Whether the proxy can tell this action from its service's other calls.
-
-    It can when every request to the service names its action, or the manifest
-    gives the call's method and path. A request to any other service, S3 among
-    them, names none.
-    """
-
-    registry = _registry()
-    return (
-        value.partition(":")[0] in registry.named_action_services
-        or value.lower() in registry.named_rest_operations
-    )
-
-
-def validate_operation(value: Any, location: str) -> str:
-    """One exact operation a rule or an allow names, returned as it is stored."""
-
-    if not is_operation(value):
-        raise PolicyError(
-            f"{location}: expected one exact AWS action such as "
-            "ec2:TerminateInstances, without wildcards"
-        )
-    if is_minting_operation(value):
-        raise PolicyError(
-            f"{location}: {value} mints credentials, which belongs to the secret "
-            "guard; it is always on and cannot be changed"
-        )
-    return value
-
-
-def _target(value, location, operations):
-    """Exactly one of ``class``, ``match`` or ``operation``, as policy rules
-    and allows use. ``operations`` says whether the Connection takes the last."""
-
-    given = [
-        key for key in ("class", "match", "operation") if value.get(key) is not None
-    ]
+    given = [key for key in ("class", "match") if value.get(key) is not None]
     if len(given) != 1:
-        raise PolicyError(
-            f"{location}: expected exactly one of class, match or operation"
-        )
+        raise PolicyError(f"{location}: expected exactly one of class or match")
     if given == ["class"]:
         return {"class": _class(value["class"], f"{location}.class")}
-    if given == ["match"]:
-        return {"match": validate_match(value["match"], f"{location}.match")}
-    if not operations:
-        raise PolicyError(
-            f"{location}.operation: only an AWS Connection takes rules by AWS action"
-        )
-    return {
-        "operation": validate_operation(value["operation"], f"{location}.operation")
-    }
+    return {"match": validate_match(value["match"], f"{location}.match")}
 
 
-def validate_policy(policy: Any, *, operations: bool = False) -> dict[str, Any]:
+def validate_policy(policy: Any) -> dict[str, Any]:
     """Validate a policy and return it as it is stored.
 
     Absent, empty and allow-by-default-without-rules policies are all stored as ``{}``.
@@ -264,23 +199,13 @@ def validate_policy(policy: Any, *, operations: bool = False) -> dict[str, Any]:
     rules = []
     for index, raw in enumerate(raw_rules):
         location = f"policy.rules[{index}]"
-        _object(raw, {"class", "match", "operation", "effect"}, location)
+        _object(raw, {"class", "match", "effect"}, location)
         effect = raw.get("effect")
         if not isinstance(effect, str) or effect not in EFFECTS:
             raise PolicyError(
                 f"{location}.effect: expected one of {', '.join(EFFECTS)}"
             )
-        target = _target(raw, location, operations)
-        # A rule the proxy can never match would look enforced and stop nothing.
-        operation = target.get("operation")
-        if operation is not None and not proxy_names_operation(operation):
-            service = operation.partition(":")[0]
-            raise PolicyError(
-                f"{location}.operation: a rule cannot name {operation}, because "
-                f"a request to {service} does not say which action it is. Use a "
-                "rule by method and path, or a rule for a class of calls, instead"
-            )
-        rules.append({**target, "effect": raw["effect"]})
+        rules.append({**_target(raw, location), "effect": raw["effect"]})
     if default == "allow" and not rules:
         return {}
     return {"version": POLICY_VERSION, "default": default, "rules": rules}
@@ -306,36 +231,11 @@ def requires_client_feature(stored: Any) -> bool:
     )
 
 
-def validate_operation_classes(value: Any, location: str) -> list[dict[str, Any]]:
-    """A definition's overrides of how its calls are classified."""
+def validate_allow(value: Any, location: str = "allow") -> dict[str, Any]:
+    """What a temporary allow covers: one class, or one method and path match."""
 
-    if not isinstance(value, list) or len(value) > MAX_OPERATION_CLASSES:
-        raise PolicyError(
-            f"{location}: expected a list of at most {MAX_OPERATION_CLASSES} entries"
-        )
-    checked = []
-    for index, raw in enumerate(value):
-        entry_location = f"{location}[{index}]"
-        _object(raw, {"match", "class"}, entry_location)
-        if raw.get("match") is None or raw.get("class") is None:
-            raise PolicyError(f"{entry_location}: expected a match and a class")
-        checked.append(
-            {
-                "match": validate_match(raw["match"], f"{entry_location}.match"),
-                "class": _class(raw["class"], f"{entry_location}.class"),
-            }
-        )
-    return checked
-
-
-def validate_allow(
-    value: Any, location: str = "allow", *, operations: bool = False
-) -> dict[str, Any]:
-    """What a temporary allow covers: one class, one method and path match,
-    or, on a Connection that takes them, one AWS action."""
-
-    _object(value, {"class", "match", "operation"}, location)
-    return _target(value, location, operations)
+    _object(value, {"class", "match"}, location)
+    return _target(value, location)
 
 
 def _expiry(entry):
@@ -371,7 +271,7 @@ def compile_policy(
             "id": entry["id"],
             **{
                 key: deepcopy(entry[key])
-                for key in ("class", "match", "operation")
+                for key in ("class", "match")
                 if key in entry
             },
             "expires_at": entry["expiresAt"],
@@ -424,20 +324,9 @@ def _literal_path(pattern):
     return _BRACKETED_GLOB_CHARACTER.sub(r"\1", pattern)
 
 
-def _match_applies(match, method, path):
-    methods = match.get("methods")
-    if methods is not None and method not in methods:
-        return False
-    return "path" not in match or glob_match(match["path"], path)
+def classify_http_call(method: str) -> str:
+    """The class of an HTTP call, which its method alone decides."""
 
-
-def classify_http_call(operation_classes: Any, method: str, path: str) -> str:
-    """The class of an HTTP call: its service's first matching override, then
-    its method."""
-
-    for entry in operation_classes or []:
-        if _match_applies(entry["match"], method, path):
-            return entry["class"]
     return _METHOD_CLASSES.get(method, "update")
 
 
@@ -478,33 +367,24 @@ def _match_covers(rule_match, allow_match):
     )
 
 
-def _match_classes(match, operation_classes):
-    """The classes of the calls a match names, or None when the Console cannot
-    tell: it needs methods, one exact path and a service it classifies."""
+def _match_classes(match):
+    """The classes of the calls a match names, or None when it names no method
+    and so takes in every class."""
 
     methods = match.get("methods")
-    path = _literal_path(match["path"]) if "path" in match else None
-    if operation_classes is None or not methods or path is None:
-        return None
-    return {classify_http_call(operation_classes, method, path) for method in methods}
+    return {classify_http_call(method) for method in methods} if methods else None
 
 
-def _blocks_cover(blocks, allow, operation_classes):
+def _blocks_cover(blocks, allow):
     """Whether block rules take in everything an allow would let through."""
 
     blocked_classes = {rule["class"] for rule in blocks if "class" in rule}
     if "class" in allow:
         return allow["class"] in blocked_classes
-    if "operation" in allow:
-        return any(
-            "operation" in rule
-            and same_operation(rule["operation"], allow["operation"])
-            for rule in blocks
-        )
     match = allow["match"]
     if any("match" in rule and _match_covers(rule["match"], match) for rule in blocks):
         return True
-    classes = _match_classes(match, operation_classes)
+    classes = _match_classes(match)
     return classes is not None and classes <= blocked_classes
 
 
@@ -529,46 +409,36 @@ def _matches_overlap(rule, allow_match):
     return compare(rule_match["path"], literal)
 
 
-def _may_apply(rule, allow, operation_classes):
+def _may_apply(rule, allow):
     """Whether a rule could answer some call an allow covers.
 
     Only what the Console can tell apart is ruled out.
     """
 
-    if "operation" in rule:
-        return "operation" not in allow or same_operation(
-            rule["operation"], allow["operation"]
-        )
-    if "operation" in allow:
-        return True
     if "class" in rule:
         classes = (
-            {allow["class"]}
-            if "class" in allow
-            else _match_classes(allow["match"], operation_classes)
+            {allow["class"]} if "class" in allow else _match_classes(allow["match"])
         )
         return classes is None or rule["class"] in classes
     if "class" in allow:
-        classes = _match_classes(rule["match"], operation_classes)
+        classes = _match_classes(rule["match"])
         return classes is None or allow["class"] in classes
     return _matches_overlap(rule, allow["match"])
 
 
-def allow_is_blocked(stored: Any, allow: Mapping[str, Any], *, operation_classes=None):
+def allow_is_blocked(stored: Any, allow: Mapping[str, Any]) -> bool:
     """Whether the policy answers every call an allow covers with a block.
 
     A temporary allow turns an ask into an allow and never changes a block.
-    AWS actions are classified only by the proxy.
     """
 
     policy = full_policy(stored)
     rules = policy["rules"]
     blocks = [rule for rule in rules if rule["effect"] == "block"]
-    if _blocks_cover(blocks, allow, operation_classes):
+    if _blocks_cover(blocks, allow):
         return True
     # A call no rule answers gets the default, so a default of block stops
     # whatever no allow or ask rule could apply to.
     return policy["default"] == "block" and not any(
-        rule["effect"] != "block" and _may_apply(rule, allow, operation_classes)
-        for rule in rules
+        rule["effect"] != "block" and _may_apply(rule, allow) for rule in rules
     )

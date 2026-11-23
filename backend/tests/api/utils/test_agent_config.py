@@ -756,87 +756,17 @@ def test_load_rejects_a_when_absent_it_cannot_honour(tmp_path, filename, value, 
 # How a packaged service's calls are classified
 
 
-def test_graphql_endpoints_are_classed_as_updates_by_their_own_service():
-    classes = {
-        service_type: service["operation_classes"]
-        for service_type, service in REGISTRY.services.items()
-        if "operation_classes" in service
-    }
+def test_the_graphql_services_say_a_graphql_call_counts_as_a_create():
+    """A call's class comes from its method alone, so a GraphQL query is a
+    create like any POST; the Agent is told so."""
 
-    # Reads and writes share one endpoint on these three.
-    assert set(classes) == {"github", "gitlab", "railway"}
-    assert classes["github"] == [
-        {"match": {"methods": ["POST"], "path": "/graphql"}, "class": "update"},
-        {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"},
-        {"match": {"methods": ["POST"], "path": "/*/api/graphql"}, "class": "update"},
-    ]
-    assert classes["gitlab"] == [
-        {"match": {"methods": ["POST"], "path": "/api/graphql"}, "class": "update"},
-        {"match": {"methods": ["POST"], "path": "/*/api/graphql"}, "class": "update"},
-    ]
-    assert classes["railway"] == [
-        {"match": {"methods": ["POST"], "path": "/graphql/*"}, "class": "update"}
-    ]
-
-
-def test_packaged_operation_classes_are_stored_as_they_are_written(tmp_path):
-    root = _copied_registry(tmp_path)
-    classes = [
-        {"match": {"methods": ["POST"], "path": "/v1/search"}, "class": "read"},
-        {"match": {"path": "/v1/admin/*"}, "class": "admin"},
-    ]
-    _rewrite(
-        root, "vercel.json", lambda document: document.update({"operation_classes": classes})
-    )
-
-    loaded = ConfigRegistry.load(root)
-
-    assert loaded.get_service("vercel")["operation_classes"] == classes
-    assert "operation_classes" not in loaded.get_service("render")
-
-
-@pytest.mark.parametrize(
-    ("filename", "classes", "message"),
-    [
-        # Validated exactly as a custom definition's are.
-        ("vercel.json", {"class": "read"}, "expected a list"),
-        ("vercel.json", [{"class": "read"}], "a match and a class"),
-        (
-            "vercel.json",
-            [{"match": {"path": "/x"}, "class": "credential_minting"}],
-            "secret guard",
-        ),
-        ("vercel.json", [{"match": {"path": "/x"}, "class": "write"}], "expected one of read"),
-        ("vercel.json", [{"match": {"path": "x"}, "class": "read"}], "must begin with '/'"),
-        (
-            "vercel.json",
-            [{"match": {"methods": ["post"]}, "class": "read"}],
-            "upper-case",
-        ),
-        (
-            "vercel.json",
-            [{"match": {"path": "/x"}, "class": "read", "effect": "allow"}],
-            "unknown field",
-        ),
-        ("vercel.json", [{"match": {"path": "/x"}, "class": "read"}] * 51, "at most 50"),
-        # Only an HTTP call has a method and a path to classify.
-        (
-            "postgres.json",
-            [{"match": {"path": "/x"}, "class": "read"}],
-            "only valid for HTTP services",
-        ),
-    ],
-)
-def test_load_rejects_malformed_packaged_operation_classes(
-    tmp_path, filename, classes, message
-):
-    root = _copied_registry(tmp_path)
-    _rewrite(
-        root, filename, lambda document: document.update({"operation_classes": classes})
-    )
-
-    with pytest.raises(ConfigRegistryError, match=message):
-        ConfigRegistry.load(root)
+    for service_type in ("github", "gitlab", "railway"):
+        service = REGISTRY.get_service(service_type)
+        assert "operation_classes" not in service
+        assert (
+            "A GraphQL call is a POST, so this Connection's access rules count it "
+            "as a create whether it reads or writes." in service["context_template"]
+        )
 
 
 # Hosts a Connection takes from its credential

@@ -605,7 +605,7 @@ class AgentConnectionType(AppVisibilityFields, DjangoObjectType):
 class AgentWorkflowGrantType(AppVisibilityFields, DjangoObjectType):
     # Approved exceptions, for this Workflow only, to ``ask`` rules of the
     # Connection's access policy, that have not expired:
-    # [{id, class | match | operation, expiresAt, requestId}].
+    # [{id, class | match, expiresAt, requestId}].
     temporary_allows = GenericScalar(required=True)
     created_by = graphene.Field(OrganisationMemberType)
     # App Connections only, null otherwise: the app and environments as the
@@ -925,9 +925,8 @@ class AgentServiceTemplateType(graphene.ObjectType):
     environment_bindings = GenericScalar(required=True)
     decoy_format = GenericScalar(required=True)
     credential_providers = graphene.List(graphene.String, required=True)
-    # How an access policy classifies this service's calls where the method
-    # alone would mislead: [{match: {methods, path}, class}], first match
-    # wins. Empty when the service has none.
+    # Always empty: a call's class comes from its HTTP method alone. Kept so
+    # the schema stays as it is.
     operation_classes = GenericScalar(required=True)
 
 

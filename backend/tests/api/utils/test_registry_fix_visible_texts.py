@@ -43,10 +43,6 @@ def test_every_text_of_a_definition_an_agent_reads_is_listed():
                 {"type": "header", "name": "X-Api-Key", "field": "token"},
                 {"type": "query", "name": "api_key", "field": "token"},
             ],
-            operationClasses=[
-                {"match": {"methods": ["POST"]}, "class": "update"},
-                {"match": {"path": "/v1/search"}, "class": "read"},
-            ],
         )
     )
 
@@ -56,7 +52,6 @@ def test_every_text_of_a_definition_an_agent_reads_is_listed():
         ("host 1", "api.example.com"),
         ("the path of host 1", "/v1/*"),
         ("host 2", ".example.org"),
-        ("the path of call class 2", "/v1/search"),
     ]
 
 
@@ -90,15 +85,6 @@ def test_every_text_of_a_definition_an_agent_reads_is_listed():
             TOKEN,
             {"injections": [{"type": "query", "name": TOKEN, "field": "token"}]},
             "a query parameter name",
-        ),
-        (
-            TOKEN,
-            {
-                "operationClasses": [
-                    {"match": {"path": f"/hooks/{TOKEN}"}, "class": "read"}
-                ]
-            },
-            "the path of call class 1",
         ),
     ],
 )
