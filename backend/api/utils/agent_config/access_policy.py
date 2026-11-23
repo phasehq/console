@@ -330,6 +330,32 @@ def classify_http_call(method: str) -> str:
     return _METHOD_CLASSES.get(method, "update")
 
 
+def _takes_in_method(rule, method):
+    """Whether a rule answers every call by ``method``, whatever its path."""
+
+    if "class" in rule:
+        return rule["class"] == classify_http_call(method)
+    match = rule.get("match", {})
+    return "path" not in match and method in match.get("methods", ())
+
+
+def method_effects(stored: Any) -> dict[str, str]:
+    """What the policy does with a call by each common method, on a path no
+    rule names: the strongest effect of the rules that take the method in, as
+    the proxy decides, or else the default."""
+
+    policy = full_policy(stored)
+    effects = {}
+    for method in _METHOD_CLASSES:
+        found = [
+            rule["effect"]
+            for rule in policy["rules"]
+            if _takes_in_method(rule, method)
+        ]
+        effects[method] = max(found, key=EFFECTS.index) if found else policy["default"]
+    return effects
+
+
 def _loose_pattern(pattern):
     """A path glob without what a rule that stops a call leaves out of it."""
 

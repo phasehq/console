@@ -24,6 +24,8 @@ from api.utils.agent_access import (
 from api.utils.agent_config.access_policy import (
     ACCESS_POLICY_FEATURE,
     compile_policy,
+    full_policy,
+    method_effects,
     requires_client_feature,
 )
 from api.utils.agent_credentials import (
@@ -936,9 +938,13 @@ def compose_context(session, *, service_type=None):
             "Connection authorization: allowed by its active Workflow Grant. "
             "Upstream permissions are controlled by the configured credential."
         )
-        generated_sections.append(
+        section = (
             f"### {grant.connection.name}\n\n{authorization_line}\n\n{generated}"
         )
+        if service["protocol"] == "http":
+            # So the Agent knows up front which calls will need a member's approval.
+            section += f"\n\n{_http_access_line(grant.connection.policy)}"
+        generated_sections.append(section)
     if service_type is None:
         apps = app_secrets_section(session.workflow)
         if apps:
@@ -954,6 +960,22 @@ _EFFECT_WORDS = {
     "ask": "needs a member's approval",
     "block": "blocked",
 }
+_METHOD_EFFECT_WORDS = {"allow": "Allowed", "ask": "Ask first", "block": "Blocked"}
+
+
+def _http_access_line(stored_policy):
+    """What an HTTP Connection's rules do with each method, in one line."""
+
+    effects = method_effects(stored_policy)
+    parts = []
+    for effect, words in _METHOD_EFFECT_WORDS.items():
+        methods = [method for method, found in effects.items() if found == effect]
+        if methods:
+            parts.append(f"{words}: {', '.join(methods)}.")
+    rules = full_policy(stored_policy)["rules"]
+    if any("path" in rule.get("match", {}) for rule in rules):
+        parts.append("Some paths have rules of their own.")
+    return " ".join(parts)
 
 
 def _app_access_line(entry):

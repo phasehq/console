@@ -184,6 +184,39 @@ def test_a_non_allow_default_is_carried(space):
     assert (policy["default"], policy["rules"]) == ("ask", [])
 
 
+def test_the_context_says_what_the_rules_do_with_each_method(space):
+    def markdown():
+        return session_get(space.client, space.session, "context")["markdown"]
+
+    assert "Allowed: GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE." in markdown()
+
+    writes = ("create", "update", "delete")
+    _set_policy(
+        space,
+        {"version": 1, "rules": [{"class": name, "effect": "ask"} for name in writes]},
+    )
+    assert "Allowed: GET, HEAD, OPTIONS. Ask first: POST, PUT, PATCH, DELETE." in (
+        markdown()
+    )
+
+    _set_policy(
+        space,
+        {
+            "version": 1,
+            "default": "block",
+            "rules": [
+                {"class": "read", "effect": "allow"},
+                {"match": {"methods": ["DELETE"]}, "effect": "ask"},
+                {"match": {"methods": ["POST"], "path": "/repos/*"}, "effect": "allow"},
+            ],
+        },
+    )
+    assert (
+        "Allowed: GET, HEAD, OPTIONS. Ask first: DELETE. Blocked: POST, PUT, PATCH. "
+        "Some paths have rules of their own." in markdown()
+    )
+
+
 def test_one_policy_holds_every_workflow_granted_the_connection(space):
     """The rules are the Connection's; a temporary allow is one Workflow's."""
 

@@ -14,6 +14,7 @@ from api.utils.agent_config.access_policy import (
     full_policy,
     live_temporary_allows,
     managed_policies,
+    method_effects,
     requires_client_feature,
     validate_allow,
     validate_policy,
@@ -355,9 +356,62 @@ def test_a_list_or_object_where_a_name_belongs_is_refused_not_a_server_error(val
         validate_allow({"class": value})
 
 
+# What the Agent is told about each method
+
+
+METHODS = ("GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE")
+WRITES_ASK = [
+    {"class": name, "effect": "ask"} for name in ("create", "update", "delete")
+]
+
+
+@pytest.mark.parametrize(
+    "policy,expected",
+    [
+        ({}, dict.fromkeys(METHODS, "allow")),
+        (
+            _policy(default="allow", rules=WRITES_ASK),
+            {
+                "GET": "allow",
+                "HEAD": "allow",
+                "OPTIONS": "allow",
+                "POST": "ask",
+                "PUT": "ask",
+                "PATCH": "ask",
+                "DELETE": "ask",
+            },
+        ),
+        # A method rule counts like a class rule, the strongest effect wins,
+        # and a rule with a path is left out.
+        (
+            _policy(
+                default="block",
+                rules=[
+                    {"class": "read", "effect": "allow"},
+                    {"match": {"methods": ["HEAD", "PATCH"]}, "effect": "ask"},
+                    {"class": "update", "effect": "allow"},
+                    {"match": {"methods": ["PUT"], "path": "/x"}, "effect": "allow"},
+                ],
+            ),
+            {
+                "GET": "allow",
+                "HEAD": "ask",
+                "OPTIONS": "allow",
+                "POST": "block",
+                "PUT": "allow",
+                "PATCH": "ask",
+                "DELETE": "block",
+            },
+        ),
+    ],
+)
+def test_each_methods_effect_comes_from_the_rules_that_take_it_in(policy, expected):
+    assert method_effects(validate_policy(policy)) == expected
+
+
 def test_a_stored_policy_with_a_removed_rule_kind_is_still_read():
     """Rules by AWS action and the admin class are no longer written. One
-    stored before is read as it is."""
+    stored before is read as it is, and the summary for the Agent skips it."""
 
     stored = {
         "version": 1,
@@ -370,3 +424,4 @@ def test_a_stored_policy_with_a_removed_rule_kind_is_still_read():
 
     assert full_policy(stored)["rules"] == stored["rules"]
     assert compile_policy(stored, [], timezone.now())["rules"] == stored["rules"]
+    assert set(method_effects(stored).values()) == {"ask"}
