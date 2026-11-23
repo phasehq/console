@@ -83,8 +83,9 @@ const HOVER_BG = 'hover:bg-zinc-900/5 dark:hover:bg-white/5'
 const INACTIVE_STYLE =
   'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
 // The navigation borrows the docs' palette: the current page gets a faint highlight and bright text and,
-// in a sublist, an emerald marker on the guide line. Nothing but the text changes on hover
-const NAV_ACTIVE_BG = 'bg-zinc-800/[0.025] dark:bg-white/[0.025]'
+// in a sublist, an emerald marker on the guide line. Nothing but the text changes on hover.
+// The docs' 2.5% highlight was too faint on the light shell colour, so the light theme uses 5%
+const NAV_ACTIVE_BG = 'bg-zinc-800/5 dark:bg-white/[0.025]'
 const NAV_ACTIVE_TEXT = 'text-zinc-900 dark:text-white'
 const NAV_INACTIVE_TEXT =
   'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
