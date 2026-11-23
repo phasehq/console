@@ -8,11 +8,16 @@ import { MdLogout } from 'react-icons/md'
 import { handleSignout } from '@/apollo/client'
 import { Button } from './common/Button'
 import { Avatar } from './common/Avatar'
-import { FaSun, FaMoon, FaCog } from 'react-icons/fa'
+import { FaBuilding, FaMoon, FaPalette, FaSun, FaUserCircle } from 'react-icons/fa'
 import { ModeToggle } from './common/ModeToggle'
 import { organisationContext } from '@/contexts/organisationContext'
 import Link from 'next/link'
 import { RoleLabel } from './users/RoleLabel'
+
+const ROW_STYLE = 'flex h-8 w-full items-center gap-2 rounded-md px-2 text-xs transition ease'
+const ROW_TEXT = 'text-zinc-700 dark:text-zinc-300'
+const ROW_ACTIVE = 'bg-zinc-900/5 dark:bg-white/5'
+const ROW_ICON = 'size-3.5 shrink-0 text-neutral-500'
 
 export default function UserMenu() {
   const { data: session } = useSession()
@@ -40,85 +45,74 @@ export default function UserMenu() {
           leaveFrom="transform opacity-100 scale-100"
           leaveTo="transform opacity-0 scale-95"
         >
-          <Menu.Items className="absolute z-20 -right-2 top-12 mt-2 w-72 origin-bottom-left divide-y divide-neutral-500/20 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
-            {/* Account: the whole profile card links to account settings.
-                The gear is a passive affordance (a Button inside a Link is
-                invalid HTML); the Menu.Item `active` render prop covers
-                both hover and keyboard navigation. */}
-            <div className="p-2">
+          <Menu.Items className="absolute z-20 right-0 top-full mt-2 w-60 origin-top-right divide-y divide-neutral-500/20 rounded-md bg-neutral-200 dark:bg-neutral-800 shadow-lg ring-1 ring-inset ring-neutral-500/40 focus:outline-none">
+            <div className="flex items-center gap-1.5 px-3 py-2.5">
+              <Avatar user={session?.user} size="md" />
+              <div className="flex flex-col flex-1 min-w-0">
+                {/* The role wraps onto its own line rather than squeezing a long name */}
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                  <span className="min-w-0 truncate text-xs font-medium leading-5 text-zinc-900 dark:text-zinc-100">
+                    {session?.user?.name}
+                  </span>
+                  {activeOrganisation?.role && (
+                    <RoleLabel role={activeOrganisation.role} size="xs" />
+                  )}
+                </div>
+                <span className="text-neutral-500 text-2xs leading-4 truncate">
+                  {session?.user?.email}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-1">
               <Menu.Item>
                 {({ active }) => (
-                  <Link
-                    href="/account"
-                    title="Account settings"
-                    className={clsx(
-                      'flex items-start gap-2 p-2 rounded-md transition ease',
-                      active && 'bg-zinc-900/5 dark:bg-white/5'
-                    )}
-                  >
-                    <div className="py-1.5">
-                      <Avatar user={session?.user} size="md" />
-                    </div>
-                    <div className="flex flex-col flex-grow min-w-0">
-                      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                        {session?.user?.name}
-                      </span>
-                      <span className="text-neutral-500 text-2xs truncate">
-                        {session?.user?.email}
-                      </span>
-                    </div>
-                    <FaCog
-                      className={clsx(
-                        'size-3.5 shrink-0 text-neutral-500 transition-opacity',
-                        active ? 'opacity-100' : 'opacity-0'
-                      )}
-                    />
+                  <Link href="/account" className={clsx(ROW_STYLE, ROW_TEXT, active && ROW_ACTIVE)}>
+                    <FaUserCircle className={ROW_ICON} />
+                    Account settings
                   </Link>
                 )}
               </Menu.Item>
-            </div>
-
-            {/* Current organisation: the whole block links to the org
-                settings account tab — same pattern as the profile card. */}
-            {activeOrganisation && (
-              <div className="p-2">
+              {activeOrganisation && (
                 <Menu.Item>
                   {({ active }) => (
                     <Link
-                      href={`/${activeOrganisation.name}/settings?tab=account`}
-                      title="Organisation settings"
-                      className={clsx(
-                        'flex items-center gap-1 text-2xs p-2 rounded-md transition ease',
-                        active && 'bg-zinc-900/5 dark:bg-white/5'
-                      )}
+                      href={`/${activeOrganisation.name}/settings`}
+                      className={clsx(ROW_STYLE, ROW_TEXT, active && ROW_ACTIVE)}
                     >
-                      <RoleLabel role={activeOrganisation.role!} /> @{' '}
-                      <span className="text-zinc-900 dark:text-zinc-100 truncate">
-                        {activeOrganisation.name}
-                      </span>
-                      <FaCog
-                        className={clsx(
-                          'size-3.5 shrink-0 text-neutral-500 transition-opacity ml-auto',
-                          active ? 'opacity-100' : 'opacity-0'
-                        )}
-                      />
+                      <FaBuilding className={ROW_ICON} />
+                      Organisation settings
                     </Link>
                   )}
                 </Menu.Item>
+              )}
+              <div className={clsx(ROW_STYLE, ROW_TEXT)}>
+                <FaPalette className={ROW_ICON} />
+                <span className="flex-1">Theme</span>
+                <div className="flex items-center gap-2 text-neutral-500">
+                  <FaSun />
+                  <ModeToggle />
+                  <FaMoon />
+                </div>
               </div>
-            )}
+            </div>
 
-            {/* Theme + sign out on a single row */}
-            <div className="flex items-center justify-between gap-2 p-2">
-              <div className="flex items-center gap-2 text-neutral-500">
-                <FaSun />
-                <ModeToggle />
-                <FaMoon />
-              </div>
+            <div className="p-1">
               <Menu.Item>
-                <Button variant="danger" icon={MdLogout} onClick={() => handleSignout()}>
-                  Sign out
-                </Button>
+                {({ active }) => (
+                  <button
+                    type="button"
+                    onClick={() => handleSignout()}
+                    className={clsx(
+                      ROW_STYLE,
+                      'text-red-700 dark:text-red-400',
+                      active && 'bg-red-500/10'
+                    )}
+                  >
+                    <MdLogout className="size-3.5 shrink-0" />
+                    Sign out
+                  </button>
+                )}
               </Menu.Item>
             </div>
           </Menu.Items>

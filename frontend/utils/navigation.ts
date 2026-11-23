@@ -20,6 +20,31 @@ export type NavigationContext = {
   routeParam?: string | null // e.g., boxId, requestCode
 }
 
+export type SectionPage = {
+  name: string
+  link: string
+}
+
+// Sub-pages of the org-level sections, shared by the sidebar and each section's tab bar.
+export const ACCESS_PAGES: SectionPage[] = [
+  { name: 'Members', link: 'members' },
+  { name: 'Service Accounts', link: 'service-accounts' },
+  { name: 'Teams', link: 'teams' },
+  { name: 'Roles', link: 'roles' },
+  { name: 'Single Sign-On', link: 'sso' },
+  { name: 'SCIM', link: 'scim' },
+  { name: 'External Identities', link: 'identities' },
+  { name: 'Authentication', link: 'authentication' },
+  { name: 'Network', link: 'network' },
+]
+
+export const getIntegrationPages = (canReadLogStreams: boolean): SectionPage[] => [
+  { name: 'Syncs', link: 'syncs' },
+  { name: 'Dynamic Secrets', link: 'dynamic-secrets' },
+  ...(canReadLogStreams ? [{ name: 'Log Streams', link: 'log-streams' }] : []),
+  { name: 'Third-party credentials', link: 'credentials' },
+]
+
 export const generateBreadcrumbs = (ctx: NavigationContext): NavigationItem[] => {
   const { team, context, page, subPage, activeApp, route, routeParam } = ctx
 

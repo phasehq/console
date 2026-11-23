@@ -54,10 +54,36 @@ type CommandGroup = {
   icon: React.ReactNode
 }
 
+const OPEN_EVENT = 'command-palette:open'
+
+// Opens the palette from any trigger. The palette itself is mounted once, in the org layout
+export const openCommandPalette = () => window.dispatchEvent(new Event(OPEN_EVENT))
+
+// The modifier that opens the palette with K, for labelling a trigger. Empty until mounted
+export const useModifierKey = () => {
+  const [modifierKey, setModifierKey] = useState('')
+
+  useEffect(() => {
+    const detectPlatform = () => {
+      const userAgent = navigator.userAgent.toLowerCase()
+      if (userAgent.includes('mac')) return 'macOS'
+      if (userAgent.includes('iphone') || userAgent.includes('ipad') || userAgent.includes('ipod'))
+        return 'iOS'
+      if (userAgent.includes('win')) return 'Windows'
+      if (userAgent.includes('linux')) return 'Linux'
+      return 'Unknown'
+    }
+
+    const platform = detectPlatform()
+    setModifierKey(/^(mac|ios)/i.test(platform) ? '⌘' : 'Ctrl')
+  }, [])
+
+  return modifierKey
+}
+
 const CommandPalette: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [modifierKey, setModifierKey] = useState('')
   const router = useRouter()
   const { activeOrganisation, organisations } = useContext(organisationContext)
   const { theme, setTheme } = useContext(ThemeContext)
@@ -396,18 +422,10 @@ const CommandPalette: React.FC = () => {
   }, [query, flattenedCommands, secretCommands])
 
   useEffect(() => {
-    const detectPlatform = () => {
-      const userAgent = navigator.userAgent.toLowerCase()
-      if (userAgent.includes('mac')) return 'macOS'
-      if (userAgent.includes('iphone') || userAgent.includes('ipad') || userAgent.includes('ipod'))
-        return 'iOS'
-      if (userAgent.includes('win')) return 'Windows'
-      if (userAgent.includes('linux')) return 'Linux'
-      return 'Unknown'
-    }
+    const open = () => setIsOpen(true)
 
-    const platform = detectPlatform()
-    setModifierKey(/^(mac|ios)/i.test(platform) ? '⌘' : 'Ctrl')
+    window.addEventListener(OPEN_EVENT, open)
+    return () => window.removeEventListener(OPEN_EVENT, open)
   }, [])
 
   useEffect(() => {
@@ -462,20 +480,6 @@ const CommandPalette: React.FC = () => {
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        className="w-full max-w-xl h-8 flex items-center gap-2 rounded-full bg-white/80 dark:bg-zinc-800/80 backdrop-blur-sm pl-3 pr-2.5 text-xs text-zinc-500  ring-1 ring-zinc-900/10 dark:ring-white/10 ring-inset transition hover:ring-zinc-900/20 dark:hover:ring-white/20 ui-not-focus-visible:outline-none"
-      >
-        <div>
-          <FaSearch className="h-4 w-4 flex-shrink-0" />
-        </div>
-        <span className="flex-grow text-left truncate">Look up secrets...</span>
-        <kbd className="hidden md:block flex-shrink-0 text-2xs text-zinc-400 dark:text-zinc-500">
-          <kbd className="font-sans">{modifierKey}</kbd>
-          <kbd className="font-sans"> + K</kbd>
-        </kbd>
-      </button>
-
       <Transition.Root show={isOpen} as={Fragment} afterLeave={() => setQuery('')}>
         <Dialog
           onClose={setIsOpen}
@@ -516,6 +520,7 @@ const CommandPalette: React.FC = () => {
                   aria-hidden="true"
                 />
                 <Combobox.Input
+                  autoFocus
                   className="w-full custom caret-emerald-400 border-0 rounded-xl bg-transparent pl-12 pr-4 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-500 focus:ring-0"
                   placeholder="Type a command or search..."
                   onChange={(event) => debouncedSetQuery(event.target.value)}

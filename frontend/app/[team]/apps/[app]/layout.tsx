@@ -81,8 +81,8 @@ export default function AppLayout(props: {
   return (
     <EnvSelectionProvider appId={params.app}>
       <SecretsCacheProvider appId={params.app}>
-        {/* 48px matches the parent's navbar offset (mt-12), so the page fills the viewport exactly */}
-        <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col h-[calc(100dvh_-_48px_-_var(--mobile-tabbar-height))]">
+        {/* The page fills the shell's panel; only the box under the tabs scrolls */}
+        <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col h-full">
           {awaitingApp && (
             // The heading's own structure, switched off: nothing below moves when the name arrives
             <div
@@ -135,7 +135,7 @@ export default function AppLayout(props: {
 
           <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
             {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
-            <div className="w-full shrink-0 overflow-x-auto">
+            <div className="w-full shrink-0 overflow-x-auto scrollbar-hide">
               <Tab.List className="flex gap-0 sm:gap-2 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
                 {tabs.map((tab) => (
                   <Tab as={Fragment} key={tab.name}>

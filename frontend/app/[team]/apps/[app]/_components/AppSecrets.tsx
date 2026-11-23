@@ -108,7 +108,6 @@ import {
   arraysEqual,
 } from '@/utils/crypto'
 import { areTagsAreSame } from '@/utils/tags'
-import { formatTitle } from '@/utils/meta'
 import {
   exportToEnvFile,
   getSavedSort,
@@ -389,10 +388,6 @@ export const AppSecrets = ({
     skip: !organisation,
   })
   const appName: string | undefined = appDetail?.apps?.[0]?.name
-
-  useEffect(() => {
-    if (appName) document.title = formatTitle(`${appName} Secrets`)
-  }, [appName])
 
   // Server snapshot and editable copy, both holding every env. Seeded from the
   // decrypted cache so a remount paints rows straight away.
