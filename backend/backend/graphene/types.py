@@ -1,9 +1,11 @@
 from api.services import Providers, ServiceConfig
 from api.utils.syncing.auth import decrypt_credential_values, get_credentials
 from api.utils.organisation_deletion import deletion_scheduled_for
+from api.utils import resource_deletion
 from api.utils.access.permissions import (
     user_can_access_app,
     user_can_access_environment,
+    user_can_delete_app,
     user_has_permission,
 )
 from ee.integrations.secrets.dynamic.graphene.queries import resolve_dynamic_secrets
@@ -49,6 +51,7 @@ from api.models import (
     SCIMToken,
     SCIMEvent,
 )
+from django.db.models import Count
 from django.utils import timezone
 from api.utils.access.roles import OWNER_ROLE_KEY, get_default_role_template, prune_retired_permissions
 from graphql import GraphQLError
@@ -142,6 +145,8 @@ class OrganisationType(DjangoObjectType):
     role = graphene.Field(RoleType)
     member_id = graphene.ID()
     member_scim_managed = graphene.Boolean()
+    # Apps the caller is a direct member of. Team-only access is not included.
+    individual_app_ids = graphene.List(graphene.NonNull(graphene.ID))
     keyring = graphene.String()
     recovery = graphene.String()
     plan_detail = graphene.Field(OrganisationPlanType)
@@ -196,6 +201,10 @@ class OrganisationType(DjangoObjectType):
 
     def resolve_member_scim_managed(self, info):
         return OrganisationType._get_member(self, info).scimuser_set.exists()
+
+    def resolve_individual_app_ids(self, info):
+        member = OrganisationType._get_member(self, info)
+        return list(member.apps.filter(is_deleted=False).values_list("id", flat=True))
 
     def resolve_keyring(self, info):
         return OrganisationType._get_member(self, info).wrapped_keyring
@@ -258,7 +267,6 @@ class OrganisationMemberType(DjangoObjectType):
             "avatar_url",
             "role",
             "identity_key",
-            "wrapped_keyring",
             "created_at",
             "updated_at",
         )
@@ -350,7 +358,7 @@ class OrganisationMemberType(DjangoObjectType):
         global_policies = NetworkAccessPolicy.objects.filter(
             organisation=self.organisation, is_global=True
         )
-        account_policies = self.network_policies.all()
+        account_policies = self.network_policies.filter(organisation=self.organisation)
 
         return list(chain(account_policies, global_policies))
 
@@ -510,11 +518,16 @@ class SecretFolderType(DjangoObjectType):
         )
 
     def resolve_folder_count(self, info):
-        return SecretFolder.objects.filter(folder=self).count()
+        # Set where EnvironmentType.resolve_folders counted for its whole list at once
+        if hasattr(self, "_child_counts"):
+            return self._child_counts[0]
+        return SecretFolder.objects.filter(folder=self, deleted_at=None).count()
 
     def resolve_secret_count(self, info):
+        if hasattr(self, "_child_counts"):
+            return self._child_counts[1]
         return (
-            Secret.objects.filter(folder=self).count()
+            Secret.objects.filter(folder=self, deleted_at=None).count()
             + DynamicSecret.objects.filter(folder=self, deleted_at=None).count()
         )
 
@@ -729,6 +742,10 @@ class SecretType(DjangoObjectType):
 
     def resolve_override(self, info):
         if info.context.user:
+            # Set where EnvironmentType.resolve_secrets looked its whole list up at once
+            if hasattr(self, "_caller_override"):
+                return self._caller_override
+
             org = self.environment.app.organisation
             org_member = OrganisationMember.objects.get(
                 organisation=org, user=info.context.user, deleted_at=None
@@ -743,8 +760,36 @@ class SecretType(DjangoObjectType):
                 return None
 
 
+def _caller_overrides(environment, organisation, user):
+    """The caller's overrides in `environment` by secret id; None leaves each secret to look its own up."""
+    try:
+        org_member = OrganisationMember.objects.get(
+            organisation=organisation, user=user, deleted_at=None
+        )
+    except Exception:
+        return None
+
+    overrides = {}
+    for override in PersonalSecret.objects.filter(
+        user=org_member, secret__environment=environment
+    ):
+        # More than one for a secret reads as none, as the single lookup's failure does
+        overrides[override.secret_id] = (
+            None if override.secret_id in overrides else override
+        )
+    return overrides
+
+
+def _environment_pending_deletion(environment):
+    """EnvironmentType's resolvers trust whichever query returned the
+    environment, so those that give out its keys check this."""
+    return environment.deleted_at is not None or environment.app.deleted_at is not None
+
+
 class EnvironmentType(DjangoObjectType):
-    folders = graphene.NonNull(graphene.List(SecretFolderType))
+    folders = graphene.NonNull(
+        graphene.List(SecretFolderType), path=graphene.String(required=False)
+    )
     secrets = graphene.NonNull(
         graphene.List(SecretType), path=graphene.String(required=False)
     )
@@ -765,6 +810,7 @@ class EnvironmentType(DjangoObjectType):
             "name",
             "app",
             "env_type",
+            "color",
             "index",
             "identity_key",
             "wrapped_seed",
@@ -791,7 +837,19 @@ class EnvironmentType(DjangoObjectType):
         if path is not None:
             filter["path"] = path
 
-        secrets = list(Secret.objects.filter(**filter).order_by("-created_at"))
+        secrets = list(
+            Secret.objects.filter(**filter)
+            .prefetch_related("tags")
+            .order_by("-created_at")
+        )
+
+        # Polled for every secret of every environment: per-secret lookups are done once for the list
+        overrides = _caller_overrides(self, org, info.context.user)
+        for secret in secrets:
+            secret.environment = self
+            if overrides is not None:
+                secret._caller_override = overrides.get(secret.id)
+
         return secrets
 
     def resolve_dynamic_secrets(self, info, path=None):
@@ -802,23 +860,48 @@ class EnvironmentType(DjangoObjectType):
         if not user_can_access_environment(info.context.user.userId, self.id):
             raise GraphQLError("You don't have access to this environment")
 
-        filter = {"environment": self}
+        filter = {"environment": self, "deleted_at": None}
 
         if path:
             filter["path"] = path
 
-        return SecretFolder.objects.filter(**filter).order_by("created_at")
+        folders = list(SecretFolder.objects.filter(**filter).order_by("created_at"))
+
+        if folders:
+            # folderCount and secretCount: three queries for the list, not three per folder
+            subfolders, secrets, dynamic_secrets = (
+                dict(
+                    model.objects.filter(folder__in=folders, deleted_at=None)
+                    .values_list("folder_id")
+                    .annotate(count=Count("id"))
+                )
+                for model in (SecretFolder, Secret, DynamicSecret)
+            )
+            for folder in folders:
+                folder._child_counts = (
+                    subfolders.get(folder.id, 0),
+                    secrets.get(folder.id, 0) + dynamic_secrets.get(folder.id, 0),
+                )
+
+        return folders
 
     def resolve_folder_count(self, info):
-        return SecretFolder.objects.filter(environment=self).count()
+        if self.deleted_at is not None:
+            return None
+        return SecretFolder.objects.filter(environment=self, deleted_at=None).count()
 
     def resolve_secret_count(self, info):
+        if self.deleted_at is not None:
+            return None
         return (
             Secret.objects.filter(environment=self, deleted_at=None).count()
             + DynamicSecret.objects.filter(environment=self, deleted_at=None).count()
         )
 
     def resolve_wrapped_seed(self, info):
+        if _environment_pending_deletion(self):
+            return None
+
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self.app.organisation, deleted_at=None
         )
@@ -832,6 +915,9 @@ class EnvironmentType(DjangoObjectType):
             return None
 
     def resolve_wrapped_salt(self, info):
+        if _environment_pending_deletion(self):
+            return None
+
         org_member = OrganisationMember.objects.get(
             user=info.context.user, organisation=self.app.organisation, deleted_at=None
         )
@@ -845,6 +931,9 @@ class EnvironmentType(DjangoObjectType):
             return None
 
     def resolve_members(self, info):
+        if self.deleted_at is not None:
+            return []
+
         return [
             env_key.user
             for env_key in EnvironmentKey.objects.filter(
@@ -853,6 +942,9 @@ class EnvironmentType(DjangoObjectType):
         ]
 
     def resolve_syncs(self, info):
+        if self.deleted_at is not None:
+            return []
+
         user = info.context.user
 
         # Memoized per request: list queries resolve this for every environment.
@@ -984,6 +1076,63 @@ class AppMembershipType(DjangoObjectType):
         return getattr(self, "filtered_environments", [])
 
 
+class DeletedAppType(ObjectType):
+    """An app pending deletion: what listing and restoring it needs, and
+    nothing of its contents."""
+
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+    deleted_at = graphene.DateTime(required=True)
+    deletion_scheduled_for = graphene.DateTime(required=True)
+    # A credential that can't be revoked holds up the purge. It can be
+    # restored, even after the grace period.
+    deletion_delayed = graphene.Boolean(required=True)
+    # False once the grace period has ended and the purge may have begun.
+    can_restore = graphene.Boolean(required=True)
+    # Whether the caller may restore it or delete it now. Their role for the
+    # app can come from a team, so it differs from one app to the next.
+    viewer_can_delete = graphene.Boolean(required=True)
+
+    def resolve_deletion_scheduled_for(self, info):
+        return resource_deletion.deletion_scheduled_for(self)
+
+    def resolve_deletion_delayed(self, info):
+        return self.purge_blocked_at is not None
+
+    def resolve_can_restore(self, info):
+        return resource_deletion.can_restore(self)
+
+    def resolve_viewer_can_delete(self, info):
+        return user_can_delete_app(info.context.user, self)
+
+
+class DeletedEnvironmentType(ObjectType):
+    """An environment pending deletion: what listing and restoring it needs,
+    and nothing of its contents."""
+
+    id = graphene.ID(required=True)
+    name = graphene.String(required=True)
+    env_type = graphene.String(required=True)
+    # Its place among the app's environments, which it keeps while pending.
+    index = graphene.Int(required=True)
+    deleted_at = graphene.DateTime(required=True)
+    deletion_scheduled_for = graphene.DateTime(required=True)
+    # A credential that can't be revoked holds up the purge. It can be
+    # restored, even after the grace period.
+    deletion_delayed = graphene.Boolean(required=True)
+    # False once the grace period has ended and the purge may have begun.
+    can_restore = graphene.Boolean(required=True)
+
+    def resolve_deletion_scheduled_for(self, info):
+        return resource_deletion.deletion_scheduled_for(self)
+
+    def resolve_deletion_delayed(self, info):
+        return self.purge_blocked_at is not None
+
+    def resolve_can_restore(self, info):
+        return resource_deletion.can_restore(self)
+
+
 class ServiceAccountType(DjangoObjectType):
 
     server_side_key_management_enabled = graphene.Boolean()
@@ -993,6 +1142,7 @@ class ServiceAccountType(DjangoObjectType):
     network_policies = graphene.List(graphene.NonNull(lambda: NetworkAccessPolicyType))
     identities = graphene.List(graphene.NonNull(lambda: IdentityType))
     team = graphene.Field(lambda: TeamType)
+    access_beyond_caller = graphene.List(graphene.NonNull(graphene.String))
 
     class Meta:
         model = ServiceAccount
@@ -1012,6 +1162,24 @@ class ServiceAccountType(DjangoObjectType):
             self.server_wrapped_keyring is not None
             and self.server_wrapped_recovery is not None
         )
+
+    def resolve_access_beyond_caller(self, info):
+        """What the account holds beyond the caller: "permissions" (its role),
+        "environments", both, or nothing. When it is not empty the caller
+        can't create tokens for the account or attach identities to it; the
+        console uses it to say why up front."""
+        from api.utils.access.permissions import (
+            BEYOND_ENVIRONMENTS,
+            BEYOND_PERMISSIONS,
+            service_account_access_beyond,
+        )
+
+        org_member = OrganisationMember.objects.filter(
+            user=info.context.user, organisation=self.organisation, deleted_at=None
+        ).first()
+        if org_member is None:
+            return [BEYOND_PERMISSIONS, BEYOND_ENVIRONMENTS]
+        return service_account_access_beyond(self, org_member)
 
     def resolve_handlers(self, info):
         # Gate so non-team-members can't enumerate team-owned SA
@@ -1067,7 +1235,7 @@ class ServiceAccountType(DjangoObjectType):
         global_policies = NetworkAccessPolicy.objects.filter(
             organisation=self.organisation, is_global=True
         )
-        account_policies = self.network_policies.all()
+        account_policies = self.network_policies.filter(organisation=self.organisation)
 
         return list(chain(account_policies, global_policies))
 
@@ -1318,14 +1486,20 @@ class ActivatedPhaseLicenseType(DjangoObjectType):
 
 
 class NetworkAccessPolicyType(DjangoObjectType):
-    organisation_members = graphene.List(
-        graphene.NonNull(lambda: OrganisationMemberType)
-    )
-    service_accounts = graphene.List(graphene.NonNull(lambda: ServiceAccountType))
-
     class Meta:
         model = NetworkAccessPolicy
-        fields = "__all__"
+        # Listed explicitly: "__all__" also exports the reverse relations to
+        # the accounts a policy is attached to.
+        fields = (
+            "id",
+            "name",
+            "allowed_ips",
+            "is_global",
+            "created_at",
+            "created_by",
+            "updated_at",
+            "updated_by",
+        )
 
 
 class AWSValidationResultType(graphene.ObjectType):
@@ -1458,9 +1632,9 @@ class TeamType(DjangoObjectType):
     def resolve_apps(self, info):
         # Gate to apps the caller can access, including through teams.
         user_id = info.context.user.userId
-        app_ids = (
-            self.app_environments.values_list("app_id", flat=True).distinct()
-        )
+        # An app reached only through an environment pending deletion is
+        # still the team's: its members open it to restore that environment.
+        app_ids = self.app_environments.values_list("app_id", flat=True).distinct()
         return [
             app
             for app in App.objects.filter(id__in=app_ids, is_deleted=False)
@@ -1480,7 +1654,9 @@ class TeamType(DjangoObjectType):
         }
         return self.app_environments.select_related(
             "app", "environment"
-        ).filter(app_id__in=accessible_app_ids)
+        ).filter(
+            app_id__in=accessible_app_ids, environment__deleted_at__isnull=True
+        )
 
     def resolve_member_count(self, info):
         return self.memberships.exclude(

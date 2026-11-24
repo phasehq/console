@@ -31,7 +31,12 @@ def resolve_dynamic_secrets(
     root, info, secret_id=None, app_id=None, env_id=None, path=None, org_id=None
 ):
     user = info.context.user
-    filters = {"deleted_at": None}
+    # Dynamic secrets of an environment pending deletion are hidden with it.
+    filters = {
+        "deleted_at": None,
+        "environment__deleted_at": None,
+        "environment__app__deleted_at": None,
+    }
 
     if secret_id:
         filters["id"] = secret_id

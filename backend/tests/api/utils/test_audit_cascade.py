@@ -3,8 +3,9 @@
 Without these helpers, deleting an app or a team emitted only a single
 audit row for the parent — every cascaded env / SA / SA-token was
 hard-removed (or soft-deleted, for team-owned SAs) with no trace in the
-audit log. Each helper enumerates the children that are about to be
-cascade-killed and emits a per-resource D event before the cascade fires.
+audit log. Each helper emits a per-resource D event for the children the
+cascade takes: before it fires for a team, and in the transaction of an
+app's purge.
 """
 
 from unittest.mock import MagicMock, patch
@@ -36,7 +37,7 @@ def _make_token(token_id, name):
 # ════════════════════════════════════════════════════════════════════
 
 
-@patch("api.utils.audit_logging.log_audit_event")
+@patch("api.utils.audit_logging.record_audit_event")
 def test_audit_app_cascade_envs_emits_one_event_per_env(mock_log):
     from api.utils import audit_logging
 
@@ -52,16 +53,15 @@ def test_audit_app_cascade_envs_emits_one_event_per_env(mock_log):
         _make_env("env-prod", "Production"),
     ]
 
-    with patch("api.models.Environment") as MockEnv:
-        MockEnv.objects.filter.return_value = envs
-        audit_logging.audit_app_cascade_envs(
-            app,
-            actor_type="user",
-            actor_id="actor-1",
-            actor_metadata={"email": "a@b.com"},
-            ip_address="127.0.0.1",
-            user_agent="pytest",
-        )
+    audit_logging.audit_app_cascade_envs(
+        app,
+        envs,
+        actor_type="user",
+        actor_id="actor-1",
+        actor_metadata={"email": "a@b.com"},
+        ip_address="127.0.0.1",
+        user_agent="pytest",
+    )
 
     assert mock_log.call_count == 3
     emitted_env_ids = [c.kwargs["resource_id"] for c in mock_log.call_args_list]
@@ -76,20 +76,57 @@ def test_audit_app_cascade_envs_emits_one_event_per_env(mock_log):
         assert "Cascade-deleted" in call.kwargs["description"]
 
 
-@patch("api.utils.audit_logging.log_audit_event")
+@patch("api.utils.audit_logging.record_audit_event")
 def test_audit_app_cascade_envs_emits_nothing_when_no_envs(mock_log):
     from api.utils import audit_logging
 
     app = MagicMock()
     app.organisation = MagicMock()
 
-    with patch("api.models.Environment") as MockEnv:
-        MockEnv.objects.filter.return_value = []
-        audit_logging.audit_app_cascade_envs(
-            app, "user", "a-1", {}, "127.0.0.1", "pytest"
-        )
+    audit_logging.audit_app_cascade_envs(
+        app, [], "user", "a-1", {}, "127.0.0.1", "pytest"
+    )
 
     mock_log.assert_not_called()
+
+
+@patch("api.utils.audit_logging.AuditEvent")
+def test_audit_app_cascade_envs_raises_when_a_write_fails(mock_event):
+    """It runs in the purge's transaction: a swallowed database error there
+    would roll the delete back and report it as done."""
+    import pytest
+
+    from api.utils import audit_logging
+
+    mock_event.objects.create.side_effect = RuntimeError("audit table unavailable")
+    app = MagicMock()
+
+    with pytest.raises(RuntimeError):
+        audit_logging.audit_app_cascade_envs(
+            app, [_make_env("env-dev", "Development")], "user", "a-1", {}, None, ""
+        )
+
+
+@patch("api.utils.audit_logging.AuditEvent")
+def test_log_audit_event_still_never_raises(mock_event):
+    from api.utils import audit_logging
+
+    mock_event.objects.create.side_effect = RuntimeError("audit table unavailable")
+
+    audit_logging.log_audit_event(
+        organisation=MagicMock(),
+        event_type="D",
+        resource_type="app",
+        resource_id="app-1",
+        actor_type="user",
+        actor_id="a-1",
+    )
+
+    mock_event.objects.create.assert_called_once()
+    written = mock_event.objects.create.call_args.kwargs
+    assert written["resource_id"] == "app-1"
+    assert written["actor_metadata"] == {}
+    assert written["user_agent"] == ""
 
 
 # ════════════════════════════════════════════════════════════════════

@@ -104,6 +104,34 @@ class TestSecretIdCrossOrgOracle:
             with pytest.raises(exceptions.NotFound, match="Secret not found"):
                 PhaseTokenAuthentication().authenticate(request)
 
+    def test_secret_id_in_an_environment_pending_deletion_returns_404(self):
+        """The secret's environment is reached through the secret, not through
+        Environment.objects, so the lookup itself leaves out environments and
+        apps pending deletion. They read as gone, like any deleted one."""
+        caller_org = MagicMock(id="caller-org-id", deleted_at=None)
+
+        with _stub_caller_org(caller_org), patch.object(
+            RealSecret, "objects"
+        ) as MockSecretMgr, patch.object(
+            RealDynamicSecret, "objects"
+        ) as MockDynMgr:
+            MockSecretMgr.select_related.return_value.filter.return_value.get.side_effect = (
+                RealSecret.DoesNotExist
+            )
+            MockDynMgr.select_related.return_value.filter.return_value.get.side_effect = (
+                RealDynamicSecret.DoesNotExist
+            )
+
+            request = _build_request(headers={"Secret-Id": str(uuid.uuid4())})
+            with pytest.raises(exceptions.NotFound, match="Secret not found"):
+                PhaseTokenAuthentication().authenticate(request)
+
+        for manager in (MockSecretMgr, MockDynMgr):
+            scope = manager.select_related.return_value.filter.call_args.kwargs
+            assert scope["environment__deleted_at__isnull"] is True
+            assert scope["environment__app__deleted_at__isnull"] is True
+            assert scope["environment__app__organisation"] is caller_org
+
 
 # ════════════════════════════════════════════════════════════════════
 # URL kwargs take precedence over Secret-Id / Environment headers

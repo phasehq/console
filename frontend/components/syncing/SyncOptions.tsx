@@ -9,6 +9,7 @@ import { ReactNode } from 'react'
 import { ProviderIcon } from './ProviderIcon'
 import { useQuery } from '@apollo/client'
 import { ServiceType } from '@/apollo/graphql'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 
 interface Service {
   id: string
@@ -41,6 +42,11 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
   const { defaultOpen, appId } = props
 
   const { data } = useQuery(GetServiceList)
+
+  // Team-aware, and resolved once here rather than in each dialog.
+  const { hasPermission } = useAppPermissions(appId)
+  const userCanReadEnvs = hasPermission('Environments', 'read', true)
+  const userCanCreateIntegrations = hasPermission('Integrations', 'create', true)
 
   const syncOptions =
     data?.services.map((service: ServiceType) => ({
@@ -103,6 +109,8 @@ export const SyncOptions = (props: { defaultOpen: boolean; appId: string }) => {
                           appId={appId}
                           service={service.id}
                           button={<ServiceCard service={service} />}
+                          userCanReadEnvs={userCanReadEnvs}
+                          userCanCreateIntegrations={userCanCreateIntegrations}
                         />
                       </div>
                     ))}

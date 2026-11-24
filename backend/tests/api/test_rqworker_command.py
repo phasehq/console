@@ -1,17 +1,20 @@
 """The bundled worker command must run a worker for every queue jobs are sent
 to, or those jobs wait forever."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import django_rq
 
 from api.management.commands import rqworker
 
 
-def _start(command):
+def _start(command, init_session_purge=None):
     with patch.object(rqworker.multiprocessing, "Process") as process, patch.object(
         rqworker, "wait", side_effect=KeyboardInterrupt
-    ), patch.object(command, "bootstrap_log_stream_schedule"):
+    ), patch.object(command, "bootstrap_log_stream_schedule"), patch(
+        "api.tasks.sessions.init_expired_session_purge",
+        init_session_purge or MagicMock(),
+    ):
         command.handle(queue="default", num_workers=1)
     return process
 
@@ -38,8 +41,9 @@ def test_maintenance_worker_listens_on_the_maintenance_queue():
 
 
 def test_registers_the_org_deletion_sweep_at_startup():
-    """The sweep's schedule lives only in Redis. Registering it at startup
-    restores it after a Redis restart, instead of at the next migrate."""
+    """The sweep's schedule lives only in Redis. Workers register it when
+    they start: that restores it after a Redis restart, and a sweep that is
+    new in a release is not scheduled before a worker that knows it exists."""
     with patch(
         "api.tasks.organisation_deletion.init_organisation_deletion_sweeper"
     ) as init:
@@ -55,4 +59,42 @@ def test_a_failed_sweep_registration_does_not_stop_the_workers():
     ):
         process = _start(rqworker.Command())
 
+    assert process.return_value.start.called
+
+
+def test_registers_the_app_and_environment_deletion_sweep_at_startup():
+    with patch(
+        "api.tasks.resource_deletion.init_resource_deletion_sweeper"
+    ) as init:
+        _start(rqworker.Command())
+
+    init.assert_called_once_with()
+
+
+def test_a_failed_resource_sweep_registration_does_not_stop_the_workers():
+    with patch(
+        "api.tasks.resource_deletion.init_resource_deletion_sweeper",
+        side_effect=ConnectionError("Redis is down"),
+    ):
+        process = _start(rqworker.Command())
+
+    assert process.return_value.start.called
+
+
+def test_registers_the_expired_session_purge_at_startup():
+    init = MagicMock()
+    command = rqworker.Command()
+    with patch.object(command, "bootstrap_org_deletion_schedule"):
+        _start(command, init_session_purge=init)
+
+    init.assert_called_once_with()
+
+
+def test_a_failed_session_purge_registration_does_not_stop_the_workers():
+    init = MagicMock(side_effect=ConnectionError("Redis is down"))
+    command = rqworker.Command()
+    with patch.object(command, "bootstrap_org_deletion_schedule"):
+        process = _start(command, init_session_purge=init)
+
+    init.assert_called_once_with()
     assert process.return_value.start.called

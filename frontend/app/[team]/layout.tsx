@@ -1,7 +1,8 @@
 'use client'
 
 import '@/app/globals.css'
-import { NavBar } from '@/components/layout/Navbar'
+import { PageTitle } from '@/components/layout/PageTitle'
+import CommandPalette from '@/components/common/CommandPalette'
 import Sidebar from '@/components/layout/Sidebar'
 import { organisationContext } from '@/contexts/organisationContext'
 import { useUser } from '@/contexts/userContext'
@@ -126,26 +127,30 @@ export default function RootLayout(props: {
   }
 
   return (
+    // The navigation (the sidebar, or the tab bar below md) shares the shell colour with this
+    // wrapper, and the page fills the rest as a panel. There is no top bar
     <div
       className={clsx(
-        'w-full h-dvh overflow-hidden grid',
-        showNav &&
-          'md:divide-x md:divide-neutral-300 md:dark:divide-neutral-800 md:grid-cols-[max-content_1fr]'
+        'flex h-dvh w-full overflow-hidden',
+        showNav && 'bg-neutral-300/50 dark:bg-neutral-950/50'
       )}
     >
       {showUnlockDialog && <UnlockKeyringDialog organisation={activeOrganisation} />}
-      {showNav && <NavBar />}
-      {showNav && <Sidebar />}
-      <div className="grid h-dvh">
-        <div></div>
-        <div
-          className={clsx(
-            'overflow-auto',
-            showNav && 'mt-12 min-h-[calc(100dvh_-_48px)] pb-[var(--mobile-tabbar-height)]'
-          )}
-        >
-          {orgInSync && children}
-        </div>
+      {showNav && (
+        <>
+          <Sidebar />
+          <CommandPalette />
+          <PageTitle />
+        </>
+      )}
+      <div
+        className={clsx(
+          'min-w-0 flex-1 overflow-auto',
+          showNav &&
+            'mb-[var(--mobile-tabbar-height)] rounded-b-2xl border-b border-neutral-500/20 bg-neutral-200 dark:bg-neutral-900 md:rounded-none md:border-b-0 md:border-l'
+        )}
+      >
+        {orgInSync && children}
       </div>
     </div>
   )

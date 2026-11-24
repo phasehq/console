@@ -29,6 +29,7 @@ KWARG_MODEL_ALIASES = {
     "policy_id": "NetworkAccessPolicy",
     "credential_id": "ProviderCredentials",
     "sync_id": "EnvironmentSync",
+    "folder_id": "SecretFolder",
     "stream_id": "LogStream",
     "delivery_event_id": "LogStreamDeliveryEvent",
 }
@@ -102,8 +103,11 @@ def _resolve_via_model(model_name: str, id_value) -> str | None:
         return None
 
     try:
+        # Base manager: a row pending deletion still belongs to its org.
         org_id = (
-            Model.objects.filter(pk=id_value).values_list(path, flat=True).first()
+            Model._base_manager.filter(pk=id_value)
+            .values_list(path, flat=True)
+            .first()
         )
     except Exception:
         return None
@@ -162,7 +166,7 @@ def _orgs_by_pk(model_name: str, id_values) -> dict:
 
     Model = apps.get_model("api", model_name)
     try:
-        rows = Model.objects.filter(pk__in=id_values).values_list("pk", path)
+        rows = Model._base_manager.filter(pk__in=id_values).values_list("pk", path)
         return {str(pk): str(org_id) for pk, org_id in rows if org_id}
     except Exception:
         pass
@@ -171,7 +175,7 @@ def _orgs_by_pk(model_name: str, id_values) -> dict:
     found = {}
     for id_value in id_values:
         try:
-            rows = Model.objects.filter(pk=id_value).values_list(path, flat=True)
+            rows = Model._base_manager.filter(pk=id_value).values_list(path, flat=True)
             org_id = rows.first()
         except Exception:
             continue

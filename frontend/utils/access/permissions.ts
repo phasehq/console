@@ -409,3 +409,20 @@ export const updatePolicyResourcePermissions = (
 
  return updatedPolicy;
 };
+
+/**
+ * Describes what a service account holds beyond the current user, from the
+ * `accessBeyondCaller` field: "permissions", "environment access" or
+ * "permissions and environment access". Empty when nothing is beyond the user.
+ */
+export const describeAccessBeyondCaller = (beyond?: readonly (string | null)[] | null): string => {
+  const labels: Record<string, string> = {
+    permissions: 'permissions',
+    environments: 'environment access',
+  }
+  return (beyond ?? [])
+    .map((item) => (item ? labels[item] : undefined))
+    .filter(Boolean)
+    .join(' and ')
+}
+

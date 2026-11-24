@@ -330,10 +330,10 @@ def test_env_syncs_lists_syncs_with_access_and_permission(monkeypatch):
     )
 
 
-def _make_env(env_id, app_id):
+def _make_env(env_id, app_id, deleted_at=None):
     org = SimpleNamespace(id="org-1")
     app = SimpleNamespace(id=app_id, organisation=org)
-    return SimpleNamespace(id=env_id, app_id=app_id, app=app)
+    return SimpleNamespace(id=env_id, app_id=app_id, app=app, deleted_at=deleted_at)
 
 
 def _patch_environment_type(monkeypatch, *, key_env_ids=("env-1",), permission=True):
@@ -366,6 +366,19 @@ def test_environment_syncs_empty_without_environment_access(monkeypatch):
         user__user_id="actor-1", user__deleted_at=None, deleted_at=None
     )
     mocks.permission.assert_not_called()
+    mocks.sync_model.objects.filter.assert_not_called()
+
+
+def test_environment_syncs_empty_for_an_environment_pending_deletion(monkeypatch):
+    """Whichever query returned the environment, its syncs stay hidden."""
+    from django.utils import timezone
+
+    mocks = _patch_environment_type(monkeypatch)
+    env = _make_env("env-1", "app-1", deleted_at=timezone.now())
+
+    assert types.EnvironmentType.resolve_syncs(env, _make_info()) == []
+
+    mocks.key_model.objects.filter.assert_not_called()
     mocks.sync_model.objects.filter.assert_not_called()
 
 

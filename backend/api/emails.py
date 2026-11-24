@@ -4,6 +4,7 @@ from django.template.loader import render_to_string
 from datetime import datetime
 import os
 import logging
+from urllib.parse import quote, urlencode
 from api.utils.rest import encode_string_to_base64
 from api.models import OrganisationMember
 from django.utils import timezone
@@ -24,6 +25,21 @@ def _frontend_url():
     auth_password.py / sso.py.
     """
     return os.getenv("ALLOWED_ORIGINS", "").split(",")[0].strip()
+
+
+# The app's own pages in the frontend: a root folder of the same name is linked behind "~"
+_APP_PAGE_SEGMENTS = {"access", "environments", "logs", "settings", "syncing"}
+
+
+def _app_secrets_link(organisation, app_id, env_id, path="/"):
+    """Link to an app's secrets grid, narrowed to one environment and opened at a folder."""
+    names = [folder for folder in (path or "").split("/") if folder]
+    folders = "".join(f"/{quote(folder, safe='')}" for folder in names)
+    # "~" itself too, or it would read back as the escape
+    if names and (names[0] == "~" or names[0].lower() in _APP_PAGE_SEGMENTS):
+        folders = "/~" + folders
+    query = urlencode({"envs": env_id})
+    return f"{_frontend_url()}/{organisation}/apps/{app_id}{folders}?{query}"
 
 
 def get_user_display_name(user):
@@ -240,6 +256,78 @@ def send_organisation_deleted_email(email, name, organisation_name):
     )
 
 
+def send_app_deleted_email(email, name, app_name, organisation_name, requested_by):
+    """Sent after the purge job removes an app. `requested_by` names who
+    deleted it, when that is known."""
+    send_email(
+        f"{app_name} has been deleted",
+        [email],
+        "api/app_deleted.html",
+        {
+            "name": name,
+            "app": app_name,
+            "organisation": organisation_name,
+            "requested_by": requested_by,
+        },
+    )
+
+
+def send_environment_deleted_email(
+    email, name, environment_name, app_name, organisation_name, requested_by
+):
+    """Sent after the purge job removes an environment. `requested_by` names
+    who deleted it, when that is known."""
+    send_email(
+        f"{environment_name} in {app_name} has been deleted",
+        [email],
+        "api/environment_deleted.html",
+        {
+            "name": name,
+            "environment": environment_name,
+            "app": app_name,
+            "organisation": organisation_name,
+            "requested_by": requested_by,
+        },
+    )
+
+
+def send_app_deletion_delayed_email(
+    email, name, app_name, organisation_name, restorable
+):
+    """Sent the first time a credential that can't be revoked holds up the
+    purge. `restorable` is whether the app can still be restored."""
+    send_email(
+        f"Deletion of {app_name} is delayed",
+        [email],
+        "api/app_deletion_delayed.html",
+        {
+            "name": name,
+            "app": app_name,
+            "organisation": organisation_name,
+            "restorable": restorable,
+        },
+    )
+
+
+def send_environment_deletion_delayed_email(
+    email, name, environment_name, app_name, organisation_name, restorable
+):
+    """Sent the first time a credential that can't be revoked holds up the
+    purge. `restorable` is whether the environment can still be restored."""
+    send_email(
+        f"Deletion of {environment_name} in {app_name} is delayed",
+        [email],
+        "api/environment_deletion_delayed.html",
+        {
+            "name": name,
+            "environment": environment_name,
+            "app": app_name,
+            "organisation": organisation_name,
+            "restorable": restorable,
+        },
+    )
+
+
 def send_organisation_deletion_delayed_email(email, name, organisation_name):
     """Sent the first time a credential that can't be revoked holds up the purge."""
     send_email(
@@ -439,9 +527,8 @@ def send_rotation_unhealthy_email(rotating_secret_id):
         )
         return
 
-    env_link = (
-        f"{_frontend_url()}/{organisation}/apps/{rs.environment.app.id}"
-        f"/environments/{rs.environment.id}"
+    env_link = _app_secrets_link(
+        organisation, rs.environment.app.id, rs.environment.id, rs.path
     )
 
     subject_status = "failed" if rs.health == RotatingSecret.FAILED else "degraded"

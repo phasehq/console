@@ -1,3 +1,5 @@
+import { appSecretsUrl } from '@/utils/appLinks'
+
 // Secret reference parsing, autocomplete suggestions, and validation utilities.
 // Matches backend patterns in backend/api/utils/secrets.py
 
@@ -44,7 +46,12 @@ export type ReferenceValidationError = {
   envName: string
   reference: string
   error: string
+  /** Set when the referenced key exists but is staged for deletion */
+  deleted?: true
 }
+
+/** A key at one env and folder, as the editor's own copy has it */
+export type KeyState = 'present' | 'deleted' | 'missing'
 
 export type OrgApp = {
   id: string
@@ -73,6 +80,8 @@ export type ReferenceContext = {
   envFolderKeys: Record<string, Record<string, string[]>> // env name (lowercase) → { folder path → keys }
   orgApps: OrgApp[]
   deletedKeys: string[]
+  /** Looks a key up where a reference points; undefined for an env the caller holds no copy of */
+  keyStateAt?: (envId: string | undefined, path: string, key: string) => KeyState | undefined
 }
 
 // --- Segment colors (shared by highlight overlay and autocomplete dropdown) ---
@@ -635,10 +644,12 @@ export function getSuggestionUrl(
 ): string | null {
   const { teamSlug, appId, envId, envIds } = context
 
-  const buildEnvUrl = (targetAppId: string, targetEnvId: string, folderPath?: string) => {
-    const base = `/${teamSlug}/apps/${targetAppId}/environments/${targetEnvId}`
-    return folderPath ? `${base}/${folderPath}` : base
-  }
+  const buildEnvUrl = (
+    targetAppId: string,
+    targetEnvId: string,
+    folderPath?: string,
+    secretId?: string
+  ) => appSecretsUrl(teamSlug, targetAppId, { envId: targetEnvId, path: folderPath, secretId })
 
   switch (suggestion.type) {
     case 'app': {
@@ -709,8 +720,7 @@ export function getSuggestionUrl(
         const secretPath = extractPathFromInsert(suggestion.insertText, insertPrefix)
         const folderPath = secretPath === '/' ? undefined : secretPath.slice(1)
         const sid = app.secretIdLookup[secretIdKey(token.env, secretPath, suggestion.label)]
-        const url = buildEnvUrl(app.id, targetEnvId, folderPath)
-        return sid ? `${url}?secret=${sid}` : url
+        return buildEnvUrl(app.id, targetEnvId, folderPath, sid)
       }
       if (token.stage === 'cross-env-key' && token.env) {
         const targetEnvId = envIds[token.env.toLowerCase()]
@@ -719,8 +729,7 @@ export function getSuggestionUrl(
         const secretPath = extractPathFromInsert(suggestion.insertText, insertPrefix)
         const folderPath = secretPath === '/' ? undefined : secretPath.slice(1)
         const sid = context.secretIdLookup[secretIdKey(token.env, secretPath, suggestion.label)]
-        const url = buildEnvUrl(appId, targetEnvId, folderPath)
-        return sid ? `${url}?secret=${sid}` : url
+        return buildEnvUrl(appId, targetEnvId, folderPath, sid)
       }
       // Local key or folder-key — navigate to current env if available
       if (!envId) return null
@@ -730,8 +739,7 @@ export function getSuggestionUrl(
       // Determine env name from envId
       const envName = Object.entries(envIds).find(([, id]) => id === envId)?.[0] ?? ''
       const sid = context.secretIdLookup[secretIdKey(envName, secretPath, suggestion.label)]
-      const url = buildEnvUrl(appId, envId, folderPath)
-      return sid ? `${url}?secret=${sid}` : url
+      return buildEnvUrl(appId, envId, folderPath, sid)
     }
   }
 }
@@ -851,20 +859,29 @@ export function validateSecretReferences(
 
         switch (ref.type) {
           case 'local': {
-            const { key } = decomposePathAndKey(ref.pathAndKey)
-            if (!context.secretKeys.includes(key)) {
+            const { path, key } = decomposePathAndKey(ref.pathAndKey)
+            // Resolved at the folder the reference names (the root if none), in the value's own env
+            const state: KeyState =
+              context.keyStateAt?.(envEntry.env.id, path, key) ??
+              (!context.secretKeys.includes(key)
+                ? 'missing'
+                : context.deletedKeys.includes(key)
+                  ? 'deleted'
+                  : 'present')
+            if (state === 'missing') {
               errors.push({
                 secretKey: secret.key,
                 envName,
                 reference: ref.fullMatch,
                 error: `Referenced key "${key}" does not exist`,
               })
-            } else if (context.deletedKeys.includes(key)) {
+            } else if (state === 'deleted') {
               errors.push({
                 secretKey: secret.key,
                 envName,
                 reference: ref.fullMatch,
                 error: `Referenced key "${key}" is staged for deletion`,
+                deleted: true,
               })
             }
             break
@@ -879,14 +896,24 @@ export function validateSecretReferences(
                 error: `Referenced environment "${ref.env}" does not exist`,
               })
             } else {
-              const { key } = decomposePathAndKey(ref.pathAndKey)
-              const targetEnvKeys = context.envSecretKeys[ref.env!.toLowerCase()] ?? []
-              if (!targetEnvKeys.includes(key)) {
+              const { path, key } = decomposePathAndKey(ref.pathAndKey)
+              const targetEnv = ref.env!.toLowerCase()
+              const state = context.keyStateAt?.(context.envIds[targetEnv], path, key)
+              const targetEnvKeys = context.envSecretKeys[targetEnv] ?? []
+              if (state ? state === 'missing' : !targetEnvKeys.includes(key)) {
                 errors.push({
                   secretKey: secret.key,
                   envName,
                   reference: ref.fullMatch,
                   error: `Referenced key "${key}" does not exist in "${ref.env}"`,
+                })
+              } else if (state === 'deleted') {
+                errors.push({
+                  secretKey: secret.key,
+                  envName,
+                  reference: ref.fullMatch,
+                  error: `Referenced key "${key}" is staged for deletion in "${ref.env}"`,
+                  deleted: true,
                 })
               }
             }

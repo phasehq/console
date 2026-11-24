@@ -26,8 +26,9 @@ def _make_info(user):
     return info
 
 
-def _make_env_key_input(env_id, user_id="m1", wrapped_seed="ws", wrapped_salt="wsl",
-                       identity_key="ik"):
+def _make_env_key_input(
+    env_id, user_id="m1", wrapped_seed="ws", wrapped_salt="wsl", identity_key="ik"
+):
     k = MagicMock()
     k.env_id = env_id
     k.user_id = user_id
@@ -38,12 +39,18 @@ def _make_env_key_input(env_id, user_id="m1", wrapped_seed="ws", wrapped_salt="w
 
 
 @patch("backend.graphene.mutations.environment.log_audit_event")
-@patch("backend.graphene.mutations.environment.get_resolver_request_meta",
-       return_value=("127.0.0.1", "pytest"))
-@patch("backend.graphene.mutations.environment.get_actor_info_from_graphql",
-       return_value=("user", "actor-1", {}))
-@patch("backend.graphene.mutations.environment.get_member_display_name",
-       return_value="Test Member")
+@patch(
+    "backend.graphene.mutations.environment.get_resolver_request_meta",
+    return_value=("127.0.0.1", "pytest"),
+)
+@patch(
+    "backend.graphene.mutations.environment.get_actor_info_from_graphql",
+    return_value=("user", "actor-1", {}),
+)
+@patch(
+    "backend.graphene.mutations.environment.get_member_display_name",
+    return_value="Test Member",
+)
 @patch("backend.graphene.mutations.environment.Environment")
 @patch("backend.graphene.mutations.environment.timezone")
 @patch("backend.graphene.mutations.environment.transaction")
@@ -53,9 +60,22 @@ def _make_env_key_input(env_id, user_id="m1", wrapped_seed="ws", wrapped_salt="w
 @patch("backend.graphene.mutations.environment.App")
 @patch("backend.graphene.mutations.environment.user_can_access_app", return_value=True)
 @patch("backend.graphene.mutations.environment.user_has_permission", return_value=True)
+@patch("backend.graphene.mutations.environment.check_caller_can_grant_environments")
 def test_team_granted_keys_survive_direct_scope_edit(
-    _mock_perm, _mock_access, MockApp, MockOM, MockEnvKey, MockGrant, mock_tx, mock_tz,
-    MockEnv, _mock_display, _mock_actor, _mock_meta, _mock_audit,
+    _mock_grant_check,
+    _mock_perm,
+    _mock_access,
+    MockApp,
+    MockOM,
+    MockEnvKey,
+    MockGrant,
+    mock_tx,
+    mock_tz,
+    MockEnv,
+    _mock_display,
+    _mock_actor,
+    _mock_meta,
+    _mock_audit,
 ):
     """A key carrying both an individual grant and a team grant for the
     same member must keep the team grant (and itself) when the direct
@@ -80,7 +100,9 @@ def test_team_granted_keys_survive_direct_scope_edit(
         ("env-A", "Environment A"),
         ("env-B", "Environment B"),
     ]
-    MockEnv.objects.filter.side_effect = [valid_env_qs, audit_env_qs]
+    MockEnv.objects.filter.return_value = valid_env_qs
+    # all_objects: the audit also names an environment pending deletion.
+    MockEnv.all_objects.filter.return_value = audit_env_qs
 
     # Two existing keys for this member:
     # - K1 on env-A: individual + team grants
@@ -104,9 +126,9 @@ def test_team_granted_keys_survive_direct_scope_edit(
     soft_delete_qs = MagicMock()
 
     MockEnvKey.objects.filter.side_effect = [
-        audit_old_env_qs,   # (a)
-        old_keys_qs,        # (b)
-        soft_delete_qs,     # (c)
+        audit_old_env_qs,  # (a)
+        old_keys_qs,  # (b)
+        soft_delete_qs,  # (c)
     ]
 
     # `EnvironmentKeyGrant.objects.filter(...)` is also called three times:
@@ -150,16 +172,32 @@ def test_team_granted_keys_survive_direct_scope_edit(
     # 4. No new EnvironmentKey row was created for env-A — the mutation
     #    re-used the preserved row to avoid a uniqueness conflict.
     MockEnvKey.objects.create.assert_not_called()
+    # 5. The old scope is every key in the app, those for environments
+    #    pending deletion included: they can't be in the new scope, and
+    #    access dropped here must not come back with a restore.
+    assert MockEnvKey.objects.filter.call_args_list[0].kwargs == {
+        "environment__app": app,
+        "user": member,
+    }
+    removed = _mock_audit.call_args.kwargs["old_values"]["envs_removed"]
+    assert removed == ["Environment B"]
 
 
-@patch("backend.graphene.mutations.environment.role_has_global_access", return_value=True)
+@patch(
+    "backend.graphene.mutations.environment.role_has_global_access", return_value=True
+)
 @patch("backend.graphene.mutations.environment.EnvironmentKey")
 @patch("backend.graphene.mutations.environment.OrganisationMember")
 @patch("backend.graphene.mutations.environment.App")
 @patch("backend.graphene.mutations.environment.user_can_access_app", return_value=True)
 @patch("backend.graphene.mutations.environment.user_has_permission", return_value=True)
 def test_global_access_target_cannot_be_scoped(
-    _mock_perm, _mock_access, MockApp, MockOM, MockEnvKey, _mock_ga,
+    _mock_perm,
+    _mock_access,
+    MockApp,
+    MockOM,
+    MockEnvKey,
+    _mock_ga,
 ):
     """A member with a global-access role (Owner / Admin) has access to all
     apps and envs by definition — their env scope cannot be modified while
@@ -181,8 +219,10 @@ def test_global_access_target_cannot_be_scoped(
 
     with _pytest.raises(GraphQLError, match="global access role"):
         UpdateMemberEnvScopeMutation.mutate(
-            None, _make_info(user),
-            member_id="m1", app_id="app-1",
+            None,
+            _make_info(user),
+            member_id="m1",
+            app_id="app-1",
             env_keys=[_make_env_key_input("env-A")],
             member_type=MemberType.USER,
         )
