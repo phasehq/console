@@ -1,4 +1,7 @@
-FROM python:3.12.15-alpine3.24
+FROM python:3.12.16-alpine3.24
+
+# Apply Alpine security updates that are newer than the base image
+RUN apk upgrade --no-cache
 
 ADD requirements.txt /app/requirements.txt
 ADD constraints.txt /app/constraints.txt
