@@ -558,6 +558,12 @@ class SecretEventType(DjangoObjectType):
             "type",
         )
 
+    def resolve_key(self, info):
+        # Reads keep no copy of the secret, so show its current key
+        if not self.key and self.secret_id:
+            return self.secret.key
+        return self.key
+
     def resolve_value(self, info):
         # Use event's own `type` — `secret` is null for rotating-secret reads.
         if self.type == "sealed":
