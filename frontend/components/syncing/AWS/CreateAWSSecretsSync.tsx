@@ -21,6 +21,7 @@ import { LiaAws } from 'react-icons/lia'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Input } from '@/components/common/Input'
+import { SyncPathInput } from '@/components/syncing/SyncPathInput'
 
 export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -169,7 +170,7 @@ export const CreateAWSSecretsSync = (props: { appId: string; closeModal: () => v
                 </div>
               </RadioGroup>
 
-              <Input value={path} setValue={setPath} label="Path" />
+              <SyncPathInput appId={appId} env={phaseEnv} path={path} setPath={setPath} />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-8">
