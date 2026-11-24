@@ -195,7 +195,7 @@ def has_unpaid_subscriptions(organisation):
 
 
 # Most urgent first. incomplete: the first payment hasn't gone through.
-# paused: a trial ended without a payment method.
+# paused: a trial ended without a payment method, or failed payments paused it.
 _BILLING_ISSUE_STATUSES = ("unpaid", "past_due", "incomplete", "paused")
 
 # Webhooks clear an entry as soon as the customer's subscriptions change.

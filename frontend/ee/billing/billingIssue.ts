@@ -7,22 +7,23 @@ import { useContext } from 'react'
 
 export type BillingIssue = NonNullable<GetOrganisationBillingIssueQuery['organisationBillingIssue']>
 
+// Stripe resolves subscription status from all invoices, so either status can come from any
+// unpaid invoice, not only the latest, and the fix is the same: pay it
+const OVERDUE = {
+  title: 'Payment overdue',
+  detail: "An invoice for this organisation's subscription hasn't been paid.",
+}
+
 export const BILLING_ISSUE_MESSAGES: Record<BillingIssueEnum, { title: string; detail: string }> = {
-  [BillingIssueEnum.PastDue]: {
-    title: 'Payment failed',
-    detail: "The latest payment for this organisation's subscription didn't go through.",
-  },
-  [BillingIssueEnum.Unpaid]: {
-    title: 'Payment overdue',
-    detail: "This organisation's subscription has an unpaid invoice.",
-  },
+  [BillingIssueEnum.PastDue]: OVERDUE,
+  [BillingIssueEnum.Unpaid]: OVERDUE,
   [BillingIssueEnum.Incomplete]: {
     title: 'Payment incomplete',
     detail: "The first payment for this organisation's subscription hasn't gone through.",
   },
   [BillingIssueEnum.Paused]: {
     title: 'Subscription paused',
-    detail: "This organisation's subscription is paused because there's no payment method.",
+    detail: "This organisation's subscription is paused because a payment hasn't been made.",
   },
 }
 
