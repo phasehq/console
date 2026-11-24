@@ -25,7 +25,6 @@ import {
   AgentActionApproveDialog,
   AgentActionReview,
 } from '@/components/agents/AgentActionRequest'
-import { AgentSettingsDialog } from '@/components/agents/AgentSettingsDialog'
 import { HardenedRequestMarkdown } from '@/components/agents/HardenedRequestMarkdown'
 import { AgentRequestResolver } from '@/components/agents/AgentRequestResolver'
 import { AgentRequestStatusFilter } from '@/components/agents/AgentRequestStatusFilter'
@@ -218,32 +217,25 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
           Review and approve what is waiting on a member of your organisation.
         </p>
       </div>
-      {(hasControls || (canResolve && !!organisation?.id)) && (
+      {hasControls && (
         <div className="flex items-center gap-2">
-          {hasControls && (
-            <>
-              <AgentRequestStatusFilter
-                value={status}
-                onChange={(value) => {
-                  setStatus(value)
-                  setPages(1)
-                }}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                icon={FiRefreshCw}
-                title={refreshing ? 'Refreshing requests' : 'Refresh requests'}
-                isLoading={refreshing}
-                onClick={() => void handleRefresh()}
-              >
-                Refresh
-              </Button>
-            </>
-          )}
-          {canResolve && organisation?.id && (
-            <AgentSettingsDialog organisationId={organisation.id} />
-          )}
+          <AgentRequestStatusFilter
+            value={status}
+            onChange={(value) => {
+              setStatus(value)
+              setPages(1)
+            }}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            icon={FiRefreshCw}
+            title={refreshing ? 'Refreshing requests' : 'Refresh requests'}
+            isLoading={refreshing}
+            onClick={() => void handleRefresh()}
+          >
+            Refresh
+          </Button>
         </div>
       )}
     </div>

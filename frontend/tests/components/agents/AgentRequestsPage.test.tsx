@@ -9,9 +9,6 @@ jest.mock('@/graphql/queries/agents/getAgentRequests.gql', () => ({
 jest.mock('@/graphql/mutations/agents/manageAgentAssets.gql', () => ({
   ResolveAgentRequestOp: Symbol('ResolveAgentRequestOp'),
 }))
-jest.mock('@/components/agents/AgentSettingsDialog', () => ({
-  AgentSettingsDialog: () => <button type="button">Settings</button>,
-}))
 jest.mock('@apollo/client', () => ({
   ...jest.requireActual('@apollo/client'),
   useMutation: jest.fn(),
@@ -408,10 +405,8 @@ describe('Change request cards', () => {
 
     expect(container.textContent).toContain('No change requests')
     expect(container.querySelectorAll('article')).toHaveLength(0)
-    // No filter and no refresh in the empty state; Settings is the only control, for those who may.
-    expect(
-      Array.from(container.querySelectorAll('button')).map((item) => item.textContent)
-    ).toEqual(['Settings'])
+    // No filter and no refresh in the empty state.
+    expect(container.querySelectorAll('button')).toHaveLength(0)
     expect(container.querySelector('[data-filter]')).toBeNull()
   })
 
