@@ -39,8 +39,21 @@ CREDENTIAL_QUERY_CASES = [
     ("resolve_test_nomad_creds", {}, "hashicorp_nomad", ["test_nomad_creds"]),
     ("resolve_gitlab_projects", {}, "gitlab", ["list_gitlab_projects"]),
     ("resolve_gitlab_groups", {}, "gitlab", ["list_gitlab_groups"]),
+    (
+        "resolve_gitlab_environments",
+        {"project_id": "1"},
+        "gitlab",
+        ["list_gitlab_environments"],
+    ),
+    (
+        "resolve_gitlab_group_environment_scopes",
+        {"group_path": "phase"},
+        "gitlab",
+        ["list_gitlab_group_environment_scopes"],
+    ),
     ("resolve_railway_projects", {}, "railway", ["fetch_railway_projects"]),
     ("resolve_supabase_projects", {}, "supabase", ["list_supabase_projects"]),
+    ("resolve_coolify_applications", {}, "coolify", ["list_coolify_applications"]),
     ("resolve_render_services", {}, "render", ["list_render_services"]),
     ("resolve_render_envgroups", {}, "render", ["list_render_environment_groups"]),
     (
@@ -317,10 +330,10 @@ def test_env_syncs_lists_syncs_with_access_and_permission(monkeypatch):
     )
 
 
-def _make_env(env_id, app_id):
+def _make_env(env_id, app_id, deleted_at=None):
     org = SimpleNamespace(id="org-1")
     app = SimpleNamespace(id=app_id, organisation=org)
-    return SimpleNamespace(id=env_id, app_id=app_id, app=app)
+    return SimpleNamespace(id=env_id, app_id=app_id, app=app, deleted_at=deleted_at)
 
 
 def _patch_environment_type(monkeypatch, *, key_env_ids=("env-1",), permission=True):
@@ -353,6 +366,19 @@ def test_environment_syncs_empty_without_environment_access(monkeypatch):
         user__user_id="actor-1", user__deleted_at=None, deleted_at=None
     )
     mocks.permission.assert_not_called()
+    mocks.sync_model.objects.filter.assert_not_called()
+
+
+def test_environment_syncs_empty_for_an_environment_pending_deletion(monkeypatch):
+    """Whichever query returned the environment, its syncs stay hidden."""
+    from django.utils import timezone
+
+    mocks = _patch_environment_type(monkeypatch)
+    env = _make_env("env-1", "app-1", deleted_at=timezone.now())
+
+    assert types.EnvironmentType.resolve_syncs(env, _make_info()) == []
+
+    mocks.key_model.objects.filter.assert_not_called()
     mocks.sync_model.objects.filter.assert_not_called()
 
 

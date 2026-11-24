@@ -11,6 +11,8 @@ from rq.exceptions import NoSuchJobError
 
 from api.models import RotatingSecretCredential
 from api.tasks import organisation_deletion as jobs
+from api.tasks import purge
+from api.tasks import recurring
 from api.utils.organisation_deletion import GRACE_PERIOD
 
 
@@ -259,8 +261,8 @@ class TestSweep:
             raise NoSuchJobError()
 
         with _models(Organisation=organisation), patch.object(
-            jobs.django_rq, "get_queue", return_value=queue
-        ) as get_queue, patch.object(jobs.Job, "fetch", side_effect=fetch):
+            purge.django_rq, "get_queue", return_value=queue
+        ) as get_queue, patch.object(purge.Job, "fetch", side_effect=fetch):
             jobs.sweep_organisation_deletions()
 
         # Not "default": a long purge would hold up syncs.
@@ -275,24 +277,38 @@ class TestSweep:
             job_timeout=jobs.PURGE_JOB_TIMEOUT,
         )
 
-    def test_registration_replaces_the_schedule(self):
-        """Registration runs on every migrate and worker start, so it must
-        replace the schedule, never add a second one."""
+    def test_the_sweep_is_scheduled_hourly(self):
         scheduler = MagicMock()
+        scheduler.__contains__.return_value = False
         with patch.object(
-            jobs.django_rq, "get_scheduler", return_value=scheduler
-        ) as get_scheduler:
+            recurring.django_rq, "get_scheduler", return_value=scheduler
+        ):
             jobs.init_organisation_deletion_sweeper()
 
-        get_scheduler.assert_called_once_with("scheduled-jobs")
-        assert [name for name, _, _ in scheduler.mock_calls] == ["cancel", "schedule"]
-        scheduler.cancel.assert_called_once_with(jobs.SWEEP_JOB_ID)
         kwargs = scheduler.schedule.call_args.kwargs
         assert kwargs["id"] == jobs.SWEEP_JOB_ID
         assert kwargs["func"] == jobs.sweep_organisation_deletions
-        assert kwargs["interval"] == jobs.SWEEP_INTERVAL_SECONDS
-        assert kwargs["repeat"] is None
-        assert kwargs["result_ttl"] == -1
+        assert kwargs["interval"] == jobs.SWEEP_INTERVAL_SECONDS == 60 * 60
+        assert kwargs["queue_name"] == "scheduled-jobs"
+
+    def test_a_sweep_that_is_already_scheduled_keeps_its_time(self):
+        # Each worker start registers it: its next run must not move every
+        # time.
+        scheduler = MagicMock()
+        scheduler.__contains__.return_value = True
+        # As the releases before this one stored it.
+        scheduler.job_class.fetch.return_value = MagicMock(
+            func_name="api.tasks.organisation_deletion.sweep_organisation_deletions",
+            meta={"interval": 60 * 60},
+            origin="scheduled-jobs",
+        )
+        with patch.object(
+            recurring.django_rq, "get_scheduler", return_value=scheduler
+        ):
+            jobs.init_organisation_deletion_sweeper()
+
+        scheduler.schedule.assert_not_called()
+        scheduler.cancel.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -612,7 +628,7 @@ class TestScimManagedAccounts:
         ]
 
 
-class TestOrganisationCollector:
+class TestEventlessCollector:
     """The final cascade skips the event tables: their rows are already gone."""
 
     @pytest.mark.parametrize("through", [False, True], ids=["events", "tag-links"])
@@ -621,14 +637,14 @@ class TestOrganisationCollector:
 
         model = SecretEvent.tags.through if through else SecretEvent
         field = model._meta.get_field("secretevent" if through else "environment")
-        collector = jobs._OrganisationCollector(using="default")
+        collector = purge.EventlessCollector(using="default")
 
         assert collector.related_objects(model, [field], ["env-1"]).query.is_empty()
 
     def test_collects_other_models(self):
         from api.models import Secret
 
-        collector = jobs._OrganisationCollector(using="default")
+        collector = purge.EventlessCollector(using="default")
         related = collector.related_objects(
             Secret, [Secret._meta.get_field("environment")], ["env-1"]
         )
@@ -690,9 +706,11 @@ class TestRevokeRotatingSecretCredentials:
 
 
 class TestDeleteSecretEvents:
+    org = _org()
+
     def _run(self, finished):
         environment_model = MagicMock()
-        environment_model.objects.filter.return_value.values_list.return_value = [
+        environment_model.all_objects.filter.return_value.values_list.return_value = [
             "env-1",
             "env-2",
         ]
@@ -700,13 +718,13 @@ class TestDeleteSecretEvents:
         with _models(
             Environment=environment_model, SecretEvent=secret_event_model
         ), patch.object(
-            jobs, "delete_secret_events", side_effect=[(5, f) for f in finished]
+            purge, "delete_secret_events", side_effect=[(5, f) for f in finished]
         ) as delete:
-            result = jobs._delete_secret_events(_org())
-        return result, delete, secret_event_model
+            result = jobs._delete_secret_events(self.org)
+        return result, delete, secret_event_model, environment_model
 
     def test_deletes_each_environment_under_one_deadline(self):
-        result, delete, secret_event_model = self._run(finished=[True, True])
+        result, delete, secret_event_model, _ = self._run(finished=[True, True])
 
         assert result is True
         assert delete.call_count == 2
@@ -714,11 +732,21 @@ class TestDeleteSecretEvents:
         secret_event_model.objects.filter.assert_any_call(environment_id="env-2")
         options = [call.kwargs for call in delete.call_args_list]
         assert options[0]["deadline"] == options[1]["deadline"]
-        assert options[0]["batch_size"] == jobs.SECRET_EVENT_BATCH_SIZE
-        assert options[0]["sleep_ms"] == jobs.SECRET_EVENT_SLEEP_MS
+        assert options[0]["batch_size"] == purge.SECRET_EVENT_BATCH_SIZE
+        assert options[0]["sleep_ms"] == purge.SECRET_EVENT_SLEEP_MS
+
+    def test_includes_environments_pending_deletion(self):
+        # Environment.objects hides them, and the final cascade skips the
+        # event tables, so events left behind would fail the purge at commit.
+        _, _, _, environment_model = self._run(finished=[True, True])
+
+        environment_model.all_objects.filter.assert_called_once_with(
+            app__organisation=self.org
+        )
+        environment_model.objects.filter.assert_not_called()
 
     def test_stops_when_the_budget_runs_out(self):
-        result, delete, _ = self._run(finished=[False, True])
+        result, delete, _, _ = self._run(finished=[False, True])
 
         assert result is False
         delete.assert_called_once()

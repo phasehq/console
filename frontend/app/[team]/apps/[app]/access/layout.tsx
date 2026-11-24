@@ -55,7 +55,7 @@ export default function AccessLayout(props: {
 
       <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
         <div className="flex min-h-0 flex-col gap-3 md:grid md:grid-cols-[max-content_1fr] md:gap-4 lg:gap-6 md:h-full md:divide-x md:divide-neutral-500/40">
-          <Tab.List className="flex w-full shrink-0 gap-2 overflow-x-auto border-b border-neutral-500/20 pb-1 md:flex-col md:overflow-visible md:border-b-0 md:pb-0">
+          <Tab.List className="flex w-full shrink-0 gap-2 overflow-x-auto scrollbar-hide border-b border-neutral-500/20 pb-1 md:flex-col md:overflow-visible md:border-b-0 md:pb-0">
             {tabs.map((tab) => (
               <Tab as={Fragment} key={tab.name}>
                 {({ selected }) => (

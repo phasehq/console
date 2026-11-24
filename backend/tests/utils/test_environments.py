@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch, PropertyMock
 
 from nacl.bindings import crypto_kx_seed_keypair
 
+from api.utils.resource_deletion import NAME_IN_USE, NAME_PENDING_DELETION
 from api.utils.environments import (
     _ed25519_pk_to_curve25519,
     _generate_env_salt,
@@ -243,6 +244,13 @@ def test_get_ssk_service_accounts_for_app():
 
 
 class TestCreateEnvironment:
+    @pytest.fixture(autouse=True)
+    def name_is_free(self):
+        with patch(
+            "api.utils.environments.environment_name_conflict", return_value=None
+        ) as conflict:
+            yield conflict
+
     @patch("api.utils.environments.transaction")
     @patch("api.utils.environments.ServerEnvironmentKey")
     @patch("api.utils.environments.EnvironmentKey")
@@ -300,8 +308,7 @@ class TestCreateEnvironment:
         app.organisation = MagicMock()
 
         mock_env_instance = MagicMock()
-        mock_env_model.objects.filter.return_value.exists.return_value = False
-        mock_env_model.objects.filter.return_value.aggregate.return_value = {
+        mock_env_model.all_objects.filter.return_value.aggregate.return_value = {
             "index__max": 2
         }
         mock_env_model.objects.create.return_value = mock_env_instance
@@ -339,13 +346,26 @@ class TestCreateEnvironment:
         with pytest.raises(ValueError, match="invalid"):
             create_environment(app, "has space!")
 
+    @pytest.mark.parametrize(
+        "conflict, message",
+        [
+            (NAME_IN_USE, "already exists"),
+            # The name stays reserved, so restoring that environment can't collide.
+            (NAME_PENDING_DELETION, "scheduled for deletion"),
+        ],
+    )
     @patch("api.utils.environments.Environment")
-    def test_rejects_duplicate_name(self, mock_env_model):
-        mock_env_model.objects.filter.return_value.exists.return_value = True
+    def test_rejects_duplicate_name(
+        self, mock_env_model, name_is_free, conflict, message
+    ):
+        name_is_free.return_value = conflict
 
         app = MagicMock()
-        with pytest.raises(ValueError, match="already exists"):
+        with pytest.raises(ValueError, match=message):
             create_environment(app, "staging")
+
+        name_is_free.assert_called_once_with(app, "staging")
+        mock_env_model.objects.create.assert_not_called()
 
     @patch("api.utils.environments.Environment")
     @patch("api.utils.environments.get_global_access_members")
@@ -367,8 +387,7 @@ class TestCreateEnvironment:
         mock_keypair.return_value = ("pub", "priv")
         mock_wrap_server.return_value = ("ws", "wsa", "pk")
         mock_get_members.return_value = []
-        mock_env_model.objects.filter.return_value.exists.return_value = False
-        mock_env_model.objects.filter.return_value.aggregate.return_value = {
+        mock_env_model.all_objects.filter.return_value.aggregate.return_value = {
             "index__max": None
         }
 
@@ -423,8 +442,7 @@ class TestCreateEnvironment:
         mock_wrap_sa.return_value = ("sa_ws", "sa_wsa")
 
         mock_env_instance = MagicMock()
-        mock_env_model.objects.filter.return_value.exists.return_value = False
-        mock_env_model.objects.filter.return_value.aggregate.return_value = {
+        mock_env_model.all_objects.filter.return_value.aggregate.return_value = {
             "index__max": None
         }
         mock_env_model.objects.create.return_value = mock_env_instance
@@ -488,8 +506,7 @@ class TestCreateEnvironment:
         ]
 
         mock_env_instance = MagicMock()
-        mock_env_model.objects.filter.return_value.exists.return_value = False
-        mock_env_model.objects.filter.return_value.aggregate.return_value = {
+        mock_env_model.all_objects.filter.return_value.aggregate.return_value = {
             "index__max": None
         }
         mock_env_model.objects.create.return_value = mock_env_instance
@@ -544,8 +561,7 @@ class TestCreateEnvironment:
         mock_wrap_user.return_value = ("owner_ws", "owner_wsa")
 
         mock_env_instance = MagicMock()
-        mock_env_model.objects.filter.return_value.exists.return_value = False
-        mock_env_model.objects.filter.return_value.aggregate.return_value = {
+        mock_env_model.all_objects.filter.return_value.aggregate.return_value = {
             "index__max": None
         }
         mock_env_model.objects.create.return_value = mock_env_instance
@@ -611,8 +627,7 @@ class TestCreateEnvironment:
         mock_wrap_key.return_value = ("sa_ws", "sa_wsa")
 
         mock_env_instance = MagicMock()
-        mock_env_model.objects.filter.return_value.exists.return_value = False
-        mock_env_model.objects.filter.return_value.aggregate.return_value = {
+        mock_env_model.all_objects.filter.return_value.aggregate.return_value = {
             "index__max": None
         }
         mock_env_model.objects.create.return_value = mock_env_instance
@@ -668,7 +683,6 @@ class TestCreateEnvironment:
         app = MagicMock()
 
         for env_type, expected_index in [("dev", 0), ("staging", 1), ("prod", 2)]:
-            mock_env_model.objects.filter.return_value.exists.return_value = False
             mock_env_model.objects.create.return_value = MagicMock()
 
             create_environment(app, f"env-{env_type}", env_type)

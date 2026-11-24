@@ -10,6 +10,7 @@ import { GetTeams } from '@/graphql/queries/teams/getTeams.gql'
 import { AddTeamAppsOp } from '@/graphql/mutations/teams/addTeamApps.gql'
 import { UpdateTeamAppEnvironmentsOp } from '@/graphql/mutations/teams/updateTeamAppEnvironments.gql'
 import { RemoveTeamAppOp } from '@/graphql/mutations/teams/removeTeamApp.gql'
+import { teamAppAccessChanges, TeamEnvScopes } from '@/utils/access/teamApps'
 import { useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef, useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
@@ -41,15 +42,27 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
   const loading = addLoading || updateLoading || removeLoading
 
   const dialogRef = useRef<{ closeModal: () => void }>(null)
-  const [selectedEnvs, setSelectedEnvs] = useState<Record<string, Set<string>>>({})
+  const [selectedEnvs, setSelectedEnvs] = useState<TeamEnvScopes>({})
   const [searchQuery, setSearchQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
 
-  // Build the initial state from existing team app-environment assignments
-  const existingAppIds = new Set(team.apps?.map((a) => a!.id) || [])
+  // Build the initial state from existing team app-environment assignments.
+  // Not from team.apps: that also has an app the team reaches only through an
+  // environment scheduled for deletion, which has nothing to edit here.
+  const existingAppIds = new Set(
+    ((team.appEnvironments || []) as TeamAppEnvironmentType[])
+      .map((tae) => tae?.app?.id)
+      .filter(Boolean)
+  )
 
-  const getInitialEnvs = (): Record<string, Set<string>> => {
-    const initial: Record<string, Set<string>> = {}
+  // Every app the team has, even one with no environment to show here. Saving
+  // replaces such an app's scope instead of adding to it.
+  const assignedAppIds = new Set(
+    (team.apps || []).map((app) => app?.id).filter((id): id is string => !!id)
+  )
+
+  const getInitialEnvs = (): TeamEnvScopes => {
+    const initial: TeamEnvScopes = {}
     for (const tae of (team.appEnvironments || []) as TeamAppEnvironmentType[]) {
       if (!tae?.app?.id || !tae?.environment?.id) continue
       if (!initial[tae.app.id]) initial[tae.app.id] = new Set()
@@ -110,41 +123,12 @@ export const AddTeamAppsDialog = ({ team }: { team: TeamType }) => {
     })
   }
 
-  // Compute what changed vs the initial state
-  const computeChanges = () => {
-    const initial = getInitialEnvs()
-    const toAdd: { appId: string; envIds: string[] }[] = []
-    const toUpdate: { appId: string; envIds: string[] }[] = []
-    const toRemove: string[] = []
-
-    // Check apps in selectedEnvs
-    for (const [appId, envIds] of Object.entries(selectedEnvs)) {
-      if (!initial[appId]) {
-        // New app
-        toAdd.push({ appId, envIds: Array.from(envIds) })
-      } else {
-        // Existing app — check if envs changed
-        const initialSet = initial[appId]
-        const changed =
-          envIds.size !== initialSet.size ||
-          [...envIds].some((id) => !initialSet.has(id))
-        if (changed) {
-          toUpdate.push({ appId, envIds: Array.from(envIds) })
-        }
-      }
-    }
-
-    // Check for removed apps (in initial but not in selectedEnvs)
-    for (const appId of Object.keys(initial)) {
-      if (!selectedEnvs[appId]) {
-        toRemove.push(appId)
-      }
-    }
-
-    return { toAdd, toUpdate, toRemove }
-  }
-
-  const { toAdd, toUpdate, toRemove } = computeChanges()
+  // What changed against the initial state
+  const { toAdd, toUpdate, toRemove } = teamAppAccessChanges(
+    getInitialEnvs(),
+    selectedEnvs,
+    assignedAppIds
+  )
   const hasChanges = toAdd.length > 0 || toUpdate.length > 0 || toRemove.length > 0
 
   const handleSubmit = async () => {

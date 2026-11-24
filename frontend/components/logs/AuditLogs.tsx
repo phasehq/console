@@ -37,6 +37,7 @@ import { EmptyState } from '../common/EmptyState'
 import { Combobox, RadioGroup } from '@headlessui/react'
 import { Avatar } from '../common/Avatar'
 import Link from 'next/link'
+import { appSecretsUrl } from '@/utils/appLinks'
 
 const LOGS_START_DATE = 1682904457000
 const DAY = 24 * 60 * 60 * 1000
@@ -134,7 +135,7 @@ const getResourceLink = (
 
   if (rt === ApiAuditEventResourceTypeChoices.App) return `/${team}/apps/${id}`
   if (rt === ApiAuditEventResourceTypeChoices.Env && resourceMeta?.app_id)
-    return `/${team}/apps/${resourceMeta.app_id}/environments/${id}`
+    return appSecretsUrl(team, resourceMeta.app_id, { envId: id })
   if (rt === ApiAuditEventResourceTypeChoices.Role) return `/${team}/access/roles`
   if (rt === ApiAuditEventResourceTypeChoices.Org) return `/${team}/settings?tab=organisation`
   if (rt === ApiAuditEventResourceTypeChoices.Sa) return `/${team}/access/service-accounts/${id}`
@@ -151,7 +152,7 @@ const getResourceLink = (
     resourceMeta?.app_id &&
     resourceMeta?.environment_id
   )
-    return `/${team}/apps/${resourceMeta.app_id}/environments/${resourceMeta.environment_id}`
+    return appSecretsUrl(team, resourceMeta.app_id, { envId: resourceMeta.environment_id })
   if (rt === ApiAuditEventResourceTypeChoices.Stream)
     return `/${team}/integrations/log-streams`
 

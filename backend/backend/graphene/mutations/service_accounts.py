@@ -22,6 +22,7 @@ from api.utils.service_accounts import (
 )
 from api.utils.access.permissions import (
     _check_sa_permission,
+    _check_sa_token_ceiling,
     role_assignment_error,
     role_has_global_access,
     role_has_permission,
@@ -204,12 +205,9 @@ class CreateServiceAccountMutation(graphene.Mutation):
                     .values_list("app_id", flat=True)
                     .distinct()
                 )
-                for app_id in app_ids:
-                    app = App.objects.get(id=app_id)
-                    if app.sse_enabled:
-                        provision_team_environment_keys(
-                            team, app, members=[membership]
-                        )
+                # A filter, not a get per ID: apps pending deletion are left out.
+                for app in App.objects.filter(id__in=app_ids, sse_enabled=True):
+                    provision_team_environment_keys(team, app, members=[membership])
 
         if settings.APP_HOST == "cloud":
             from ee.billing.stripe import update_stripe_subscription_seats
@@ -371,6 +369,25 @@ class UpdateServiceAccountMutation(graphene.Mutation):
 
         _check_sa_permission(user, service_account, "update", "ServiceAccounts")
 
+        identities = None
+        if identity_ids is not None:
+            identities = Identity.objects.filter(
+                id__in=identity_ids,
+                organisation=service_account.organisation,
+                deleted_at=None,
+            )
+            attached_ids = set(
+                service_account.identities.filter(deleted_at=None).values_list(
+                    "id", flat=True
+                )
+            )
+            # An attached identity can obtain tokens for this account, so
+            # adding one needs what creating a token needs. Removing is free.
+            if {identity.id for identity in identities} - attached_ids:
+                _check_sa_token_ceiling(
+                    user, service_account, "attach identities to it"
+                )
+
         role = Role.objects.get(id=role_id, organisation=service_account.organisation)
 
         if role_has_global_access(role):
@@ -397,12 +414,7 @@ class UpdateServiceAccountMutation(graphene.Mutation):
 
         service_account.name = name
         service_account.role = role
-        if identity_ids is not None:
-            identities = Identity.objects.filter(
-                id__in=identity_ids,
-                organisation=service_account.organisation,
-                deleted_at=None,
-            )
+        if identities is not None:
             service_account.identities.set(identities)
         service_account.save()
 
@@ -554,6 +566,7 @@ class CreateServiceAccountTokenMutation(graphene.Mutation):
         )
 
         _check_sa_permission(user, service_account, "create", "ServiceAccountTokens")
+        _check_sa_token_ceiling(user, service_account)
 
         # Proves the caller holds the SA keyring; one generic error so probes learn nothing
         message = f"{token}:{identity_key}:{wrapped_key_share}".encode("utf-8")
@@ -686,6 +699,7 @@ class CreateServerSideServiceAccountTokenMutation(graphene.Mutation):
         )
 
         _check_sa_permission(user, service_account, "create", "ServiceAccountTokens")
+        _check_sa_token_ceiling(user, service_account)
 
         if not service_account.server_wrapped_keyring:
             raise GraphQLError(

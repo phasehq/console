@@ -17,6 +17,7 @@ from api.utils.access.permissions import (
     role_assignment_error,
     role_has_global_access,
     user_can_access_app,
+    user_can_access_environment,
     user_has_permission,
     user_is_org_member,
     user_is_team_member,
@@ -59,6 +60,17 @@ def _check_override_ceiling(org_member, role):
     assignment_error = role_assignment_error([org_member.role], role)
     if assignment_error:
         raise GraphQLError(assignment_error)
+
+
+def _check_env_grant_access(user, org_member, app, env_ids):
+    """The server wraps team env keys, so callers may only grant envs they hold."""
+    if role_has_global_access(org_member.role):
+        return
+    for env_id in env_ids:
+        if not user_can_access_environment(user.userId, env_id):
+            raise GraphQLError(
+                f"You don't have access to one or more environments in app '{app.name}'"
+            )
 
 
 class CreateTeamMutation(graphene.Mutation):
@@ -489,10 +501,9 @@ class AddTeamMembersMutation(graphene.Mutation):
                 .values_list("app_id", flat=True)
                 .distinct()
             )
-            for app_id in app_ids:
-                app = App.objects.get(id=app_id)
-                if app.sse_enabled:
-                    provision_team_environment_keys(team, app, members=new_memberships)
+            # A filter, not a get per ID: apps pending deletion are left out.
+            for app in App.objects.filter(id__in=app_ids, sse_enabled=True):
+                provision_team_environment_keys(team, app, members=new_memberships)
 
         if added_detail:
             actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
@@ -622,6 +633,8 @@ class AddTeamAppsMutation(graphene.Mutation):
 
         _check_team_membership(user, team)
 
+        org_member = _get_org_member(user, org)
+
         apps_added = []
         for app_env in app_envs:
             app = App.objects.get(id=app_env.app_id, organisation=org)
@@ -645,9 +658,16 @@ class AddTeamAppsMutation(graphene.Mutation):
                     "Team-based access requires SSE."
                 )
 
+            environments = [
+                Environment.objects.get(id=env_id, app=app)
+                for env_id in app_env.env_ids
+            ]
+            _check_env_grant_access(
+                user, org_member, app, [env.id for env in environments]
+            )
+
             env_names = []
-            for env_id in app_env.env_ids:
-                env = Environment.objects.get(id=env_id, app=app)
+            for env in environments:
                 TeamAppEnvironment.objects.get_or_create(
                     team=team, app=app, environment=env
                 )
@@ -804,7 +824,9 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
         if not app.sse_enabled:
             raise GraphQLError("Team-based access requires server-side encryption.")
 
-        # Determine which environments to add/remove
+        # Determine which environments to add/remove. Those pending deletion
+        # count as current: they can't be in the new scope, and access
+        # dropped here must not come back with a restore.
         current_env_ids = set(
             TeamAppEnvironment.objects.filter(team=team, app=app).values_list(
                 "environment_id", flat=True
@@ -822,18 +844,20 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
         if invalid:
             raise GraphQLError("Some environment IDs do not belong to this app")
 
+        _check_env_grant_access(user, _get_org_member(user, org), app, valid_env_ids)
+
         to_remove = current_env_ids - new_env_ids
         to_add = new_env_ids - current_env_ids
 
         old_env_names = sorted(
-            Environment.objects.filter(id__in=current_env_ids).values_list(
+            Environment.all_objects.filter(id__in=current_env_ids).values_list(
                 "name", flat=True
             )
         )
 
         # Remove environments no longer in scope
         if to_remove:
-            envs_to_remove = Environment.objects.filter(id__in=to_remove)
+            envs_to_remove = Environment.all_objects.filter(id__in=to_remove)
             revoke_team_environment_keys(team, app=app, environments=envs_to_remove)
             TeamAppEnvironment.objects.filter(
                 team=team, app=app, environment_id__in=to_remove

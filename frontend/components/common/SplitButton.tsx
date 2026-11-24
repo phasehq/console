@@ -4,6 +4,7 @@ import { Fragment, type ReactNode } from 'react'
 import Spinner from './Spinner'
 import { FaChevronDown } from 'react-icons/fa'
 import { Menu, Transition } from '@headlessui/react'
+import { MENU_SURFACE } from './menuStyles'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant: string
@@ -49,7 +50,9 @@ const variantStyles: Record<string, string> = {
 }
 
 export function SplitButton(buttonProps: ButtonProps) {
-  let { variant, classString, children, arrow, isLoading, menuContent } = buttonProps
+  // Only native button attributes reach the DOM
+  const { variant, classString, children, arrow, isLoading, menuContent, ...nativeProps } =
+    buttonProps
   const Component = 'button'
 
   const computedLeftButtonClassName = clsx(
@@ -82,7 +85,7 @@ export function SplitButton(buttonProps: ButtonProps) {
   return (
     <div className="flex">
       <button
-        {...buttonProps}
+        {...nativeProps}
         className={computedLeftButtonClassName}
         disabled={buttonProps.disabled || isLoading}
       >
@@ -103,19 +106,23 @@ export function SplitButton(buttonProps: ButtonProps) {
               </button>
             </Menu.Button>
             <Transition
+              as={Fragment}
               enter="transition duration-100 ease-out"
               enterFrom="transform scale-95 opacity-0"
               enterTo="transform scale-100 opacity-100"
               leave="transition duration-75 ease-out"
               leaveFrom="transform scale-100 opacity-100"
               leaveTo="transform scale-95 opacity-0"
-              as="div"
-              className="absolute z-20 right-0 origin-bottom-right top-10"
             >
-              <Menu.Items as={Fragment}>
-                <div className="p-2 ring-1 ring-inset ring-neutral-500/40 bg-zinc-200 dark:bg-zinc-800 rounded-md z-20 shadow-xl">
-                  <Menu.Item>{menuContent}</Menu.Item>
-                </div>
+              {/* Anchored, so it floats over a scrolling parent and flips up where there is no room below */}
+              <Menu.Items
+                anchor={{ to: 'bottom end', gap: 12, padding: 16 }}
+                className={clsx(
+                  'z-50 origin-top-right rounded-md p-1.5 focus:outline-none',
+                  MENU_SURFACE
+                )}
+              >
+                <Menu.Item>{menuContent}</Menu.Item>
               </Menu.Items>
             </Transition>
           </>

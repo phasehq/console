@@ -591,7 +591,7 @@ class TestServiceAccountTokensTeamScoping:
         sa.team.deleted_at = None
         return sa
 
-    @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=False)
+    @patch("api.views.service_accounts._can_access_service_account", return_value=False)
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
@@ -614,7 +614,7 @@ class TestServiceAccountTokensTeamScoping:
         # Body must not reveal the SA's existence.
         assert "not found" in response.data["error"].lower()
 
-    @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=False)
+    @patch("api.views.service_accounts._can_access_service_account", return_value=False)
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
@@ -636,7 +636,7 @@ class TestServiceAccountTokensTeamScoping:
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert "not found" in response.data["error"].lower()
 
-    @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=False)
+    @patch("api.views.service_accounts._can_access_service_account", return_value=False)
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
@@ -698,16 +698,16 @@ class TestServiceAccountTokensTeamScoping:
 
 
 # ════════════════════════════════════════════════════════════════════
-# PublicServiceAccountTokensView — caller-scope (P1-2)
+# PublicServiceAccountTokensView — caller ceiling
 #
-# `ServiceAccountTokens:create` is an org-level permission, but minting
-# a token for an SA inherits that SA's access. A non-global Manager (or
-# any SA) must NOT be able to mint a bearer for a sibling SA they don't
-# otherwise control — otherwise it's a lateral-takeover primitive.
+# `ServiceAccountTokens:create` is an org-level permission, but a token
+# carries the service account's own role and environment access. A caller
+# may only create one for an account that holds nothing the caller does
+# not. Deleting a token is not subject to this.
 # ════════════════════════════════════════════════════════════════════
 
 
-class TestServiceAccountTokensCallerScope:
+class TestServiceAccountTokensCallerCeiling:
 
     @pytest.fixture(autouse=True)
     def setup(self, settings):
@@ -715,57 +715,125 @@ class TestServiceAccountTokensCallerScope:
         self.post_view = PublicServiceAccountTokensView.as_view()
         self.delete_view = PublicServiceAccountTokenDetailView.as_view()
 
-    @patch("api.views.service_accounts.role_has_global_access", return_value=False)
-    @patch("api.views.service_accounts.ServiceAccount")
-    @patch("api.views.service_accounts.user_has_permission", return_value=True)
-    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
-    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
-    def test_sa_cannot_mint_token_for_unrelated_org_sa(
-        self, _ip, _throttle, _perm, mock_sa_model, _no_global
-    ):
-        # Target: org-level SA owned by no team.
-        target = _make_service_account(org=self.org, name="victim-sa")
+    def _target(self, mock_sa_model):
+        target = _make_service_account(org=self.org, name="target-sa")
         target.team = None
         mock_sa_model.objects.get.return_value = target
+        return target
 
+    def _create(self, target, auth_type, role_name="Manager"):
         request = _build_list_request(
             "post",
             f"/public/v1/service-accounts/{target.id}/tokens/",
             self.org,
-            data={"name": "lateral-take"},
-            auth_type="ServiceAccount",
+            data={"name": "new-token"},
+            auth_type=auth_type,
+            role_name=role_name,
         )
-        with patch("api.views.service_accounts._mint_sa_token") as mint:
-            response = self.post_view(request, sa_id=str(target.id))
+        return request, self.post_view(request, sa_id=str(target.id))
 
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+    def _create_and_mint(self, target, auth_type):
+        minted = Mock(id=uuid.uuid4(), created_at="2026-01-01T00:00:00Z", expires_at=None)
+        minted.name = "new-token"
+        with patch(
+            "api.views.service_accounts._mint_sa_token",
+            return_value=(minted, "full", "bearer"),
+        ) as mint, patch("api.views.service_accounts.log_audit_event"):
+            request, response = self._create(target, auth_type)
+        return request, response, mint
+
+    @pytest.mark.parametrize("auth_type", ["User", "ServiceAccount"])
+    @pytest.mark.parametrize("beyond, reason", [
+        (["permissions"], "has permissions beyond your own"),
+        (["environments"], "has environment access beyond your own"),
+        (
+            ["permissions", "environments"],
+            "has permissions and environment access beyond your own",
+        ),
+    ])
+    @patch("api.views.service_accounts.service_account_access_beyond")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_create_token_for_account_above_the_caller_returns_403(
+        self, _ip, _throttle, _perm, mock_sa_model, ceiling, beyond, reason, auth_type
+    ):
+        target = self._target(mock_sa_model)
+        ceiling.return_value = beyond
+
+        with patch("api.views.service_accounts._mint_sa_token") as mint:
+            _, response = self._create(target, auth_type)
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert reason in response.data["error"]
+        assert response.data["error"].endswith("you can't create tokens for it")
         mint.assert_not_called()
 
-    @patch("api.views.service_accounts.role_has_global_access", return_value=False)
+    @patch("api.views.service_accounts.service_account_access_beyond", return_value=[])
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
-    def test_non_global_user_cannot_mint_token_for_org_sa(
-        self, _ip, _throttle, _perm, mock_sa_model, _no_global
+    def test_non_global_user_creates_token_for_account_within_their_access(
+        self, _ip, _throttle, _perm, mock_sa_model, ceiling
     ):
-        target = _make_service_account(org=self.org, name="victim-sa")
-        target.team = None
-        mock_sa_model.objects.get.return_value = target
+        target = self._target(mock_sa_model)
 
-        request = _build_list_request(
-            "post",
-            f"/public/v1/service-accounts/{target.id}/tokens/",
+        request, response, mint = self._create_and_mint(target, "User")
+
+        assert response.status_code == status.HTTP_201_CREATED
+        mint.assert_called_once()
+        ceiling.assert_called_once_with(target, request.auth["org_member"])
+
+    @patch("api.views.service_accounts.service_account_access_beyond", return_value=[])
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_service_account_caller_is_compared_as_a_service_account(
+        self, _ip, _throttle, _perm, mock_sa_model, ceiling
+    ):
+        target = self._target(mock_sa_model)
+
+        request, response, _ = self._create_and_mint(target, "ServiceAccount")
+
+        assert response.status_code == status.HTTP_201_CREATED
+        ceiling.assert_called_once_with(
+            target, request.auth["service_account"], actor_is_service_account=True
+        )
+
+    @patch(
+        "api.views.service_accounts.service_account_access_beyond",
+        return_value=["permissions", "environments"],
+    )
+    @patch("api.views.service_accounts.ServiceAccountToken")
+    @patch("api.views.service_accounts.ServiceAccount")
+    @patch("api.views.service_accounts.user_has_permission", return_value=True)
+    @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
+    def test_delete_token_is_not_subject_to_the_ceiling(
+        self, _ip, _throttle, _perm, mock_sa_model, mock_token_model, ceiling
+    ):
+        target = self._target(mock_sa_model)
+        token = Mock(id=uuid.uuid4(), expires_at=None, deleted_at=None)
+        token.name = "old-token"
+        mock_token_model.objects.get.return_value = token
+
+        request = _build_detail_request(
+            "delete",
+            f"/public/v1/service-accounts/{target.id}/tokens/{token.id}/",
             self.org,
-            data={"name": "manager-lateral"},
-            auth_type="User",
             role_name="Manager",
         )
-        with patch("api.views.service_accounts._mint_sa_token") as mint:
-            response = self.post_view(request, sa_id=str(target.id))
+        with patch("api.views.service_accounts.log_audit_event"):
+            response = self.delete_view(
+                request, sa_id=str(target.id), token_id=str(token.id)
+            )
 
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        mint.assert_not_called()
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        token.save.assert_called_once()
+        ceiling.assert_not_called()
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -1088,14 +1156,13 @@ class TestServiceAccountTokensAuditForensics:
         nv = audit.call_args.kwargs["new_values"]
         assert nv == {"name": "forever", "expires_at": None}
 
-    @patch("api.views.service_accounts._caller_can_manage_sa_tokens", return_value=True)
     @patch("api.views.service_accounts.ServiceAccountToken")
     @patch("api.views.service_accounts.ServiceAccount")
     @patch("api.views.service_accounts.user_has_permission", return_value=True)
     @patch("api.views.service_accounts.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.service_accounts.IsIPAllowed.has_permission", return_value=True)
     def test_delete_token_audit_carries_name_and_expires_at(
-        self, _ip, _throttle, _perm, mock_sa_model, mock_token_model, _scope
+        self, _ip, _throttle, _perm, mock_sa_model, mock_token_model
     ):
         import datetime as _dt
         sa = self._wire_target_sa(mock_sa_model)
@@ -1524,3 +1591,123 @@ class TestServiceAccountRoleAssignmentCeiling:
         assert response.status_code == status.HTTP_200_OK
         assert sa.role is weak_role
         sa.save.assert_called_once()
+
+
+# ════════════════════════════════════════════════════════════════════
+# Tests for PublicServiceAccountAccessView — access pending deletion
+# ════════════════════════════════════════════════════════════════════
+
+
+class TestServiceAccountAccessPendingDeletion:
+    """PUT replaces the whole access list. `sa.apps` hides an app pending
+    deletion; left alone, the account's access would come back with a
+    restore."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.org = _make_org()
+        self.view = PublicServiceAccountAccessView.as_view()
+        self.sa = _make_service_account(org=self.org)
+        VIEWS = "api.views.service_accounts"
+        patches = {
+            "ip": patch(f"{VIEWS}.IsIPAllowed.has_permission", return_value=True),
+            "throttle": patch(
+                f"{VIEWS}.PlanBasedRateThrottle.allow_request", return_value=True
+            ),
+            "permission": patch(f"{VIEWS}.user_has_permission", return_value=True),
+            "can_access": patch(
+                f"{VIEWS}._can_access_service_account", return_value=True
+            ),
+            "ServiceAccount": patch(f"{VIEWS}.ServiceAccount"),
+            "App": patch(f"{VIEWS}.App"),
+            "Environment": patch(f"{VIEWS}.Environment"),
+            "EnvironmentKey": patch(f"{VIEWS}.EnvironmentKey"),
+            "EnvironmentKeyGrant": patch(f"{VIEWS}.EnvironmentKeyGrant"),
+            "transaction": patch(f"{VIEWS}.transaction"),
+            "unwrap": patch(
+                f"{VIEWS}.unwrap_server_managed_sa_keyring",
+                return_value={"publicKey": "aa" * 32},
+            ),
+            "keypair": patch(
+                f"{VIEWS}.get_server_keypair", return_value=(b"\x00" * 32, b"\x01" * 32)
+            ),
+            "curve": patch(
+                f"{VIEWS}._ed25519_pk_to_curve25519", return_value=b"\x02" * 32
+            ),
+            "revoke": patch(f"{VIEWS}.revoke_individual_environment_keys"),
+            "audit": patch(f"{VIEWS}.log_audit_event"),
+            "actor": patch(f"{VIEWS}.get_actor_info", return_value=("user", "id", {})),
+            "meta": patch(
+                f"{VIEWS}.get_resolver_request_meta", return_value=("127.0.0.1", "ua")
+            ),
+            "serialize": patch(f"{VIEWS}._serialize_sa_detail", return_value={}),
+        }
+        self.m = {name: p.start() for name, p in patches.items()}
+        accounts = self.m["ServiceAccount"].objects.select_related.return_value
+        accounts.get.return_value = self.sa
+        yield
+        for p in patches.values():
+            p.stop()
+
+    def _put(self, apps):
+        request = _build_detail_request(
+            "put",
+            f"/public/v1/service-accounts/{self.sa.id}/access/",
+            self.org,
+            data={"apps": apps},
+        )
+        return self.view(request, sa_id=str(self.sa.id))
+
+    def _app(self):
+        app = Mock(id=str(uuid.uuid4()), sse_enabled=True, organisation=self.org)
+        app.name = "billing"
+        return app
+
+    def test_revokes_an_app_pending_deletion(self):
+        pending_app = self._app()
+        self.m["App"].all_objects.filter.return_value = [pending_app]
+
+        response = self._put([])
+
+        assert response.status_code == status.HTTP_200_OK
+        self.m["App"].all_objects.filter.assert_any_call(
+            service_accounts=self.sa, is_deleted=False
+        )
+        memberships = self.sa.apps.through.objects.filter
+        memberships.assert_called_once_with(
+            serviceaccount=self.sa, app_id__in={pending_app.id}
+        )
+        memberships.return_value.delete.assert_called_once_with()
+        # remove() would skip it: the related manager hides it too.
+        self.sa.apps.remove.assert_not_called()
+        self.m["revoke"].assert_called_once_with(self.sa, app=pending_app)
+        revoked = self.m["audit"].call_args.kwargs["old_values"]["apps_revoked"]
+        assert [app["id"] for app in revoked] == [pending_app.id]
+
+    def test_revokes_an_environment_pending_deletion(self):
+        app = self._app()
+        env_id, pending_env_id = str(uuid.uuid4()), str(uuid.uuid4())
+        self.m["App"].objects.get.return_value = app
+        self.m["App"].all_objects.filter.return_value = [app]
+        self.m["Environment"].objects.filter.return_value.values_list.return_value = [
+            env_id
+        ]
+        # The account holds keys for both; only the live one is still wanted.
+        self.m["EnvironmentKey"].objects.filter.return_value = [
+            Mock(environment_id=env_id),
+            Mock(environment_id=pending_env_id),
+        ]
+
+        response = self._put([{"id": app.id, "environments": [env_id]}])
+
+        assert response.status_code == status.HTTP_200_OK
+        # The account's current keys are not narrowed to live environments.
+        self.m["EnvironmentKey"].objects.filter.assert_called_once_with(
+            service_account=self.sa, environment__app_id=app.id, deleted_at=None
+        )
+        # all_objects: Environment.objects can't see the one being revoked.
+        all_environments = self.m["Environment"].all_objects.filter
+        all_environments.assert_any_call(id__in={pending_env_id})
+        self.m["revoke"].assert_called_once_with(
+            self.sa, environments=all_environments.return_value
+        )

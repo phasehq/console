@@ -1,0 +1,3 @@
+query GetGitLabGroupEnvironmentScopes($credentialId: ID!, $groupPath: String!) {
+  gitlabGroupEnvironmentScopes(credentialId: $credentialId, groupPath: $groupPath)
+}
