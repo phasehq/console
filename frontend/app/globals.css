@@ -6,6 +6,8 @@
    layout paddings and viewport-height calcs can reference it unconditionally */
 :root {
   --mobile-tabbar-height: calc(3.5rem + env(safe-area-inset-bottom));
+  /* Height of the fixed bottom banner (e.g. billing issues); set while one shows */
+  --bottom-banner-height: 0px;
 }
 
 @media (min-width: 768px) {
@@ -58,6 +60,8 @@
   --toastify-color-error: #ef4444!important;
   --toastify-color-light: #f4f4f5!important;
   --toastify-color-dark: #27272a!important;
+  /* Stack toasts above the bottom banner */
+  --toastify-toast-bottom: calc(max(var(--toastify-toast-offset), env(safe-area-inset-bottom)) + var(--bottom-banner-height))!important;
 }
 
 @media (prefers-color-scheme: dark) {
