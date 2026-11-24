@@ -1,7 +1,7 @@
 import { ApiOrganisationPlanChoices } from '@/apollo/graphql'
 import clsx from 'clsx'
 
-export const PlanLabel = (props: { plan: ApiOrganisationPlanChoices }) => {
+export const PlanLabel = (props: { plan: ApiOrganisationPlanChoices; size?: 'sm' | 'md' }) => {
   const planStyle = () => {
     if (props.plan === ApiOrganisationPlanChoices.Fr)
       return 'ring-neutral-500/40 bg-neutral-500/40 text-zinc-900 dark:bg-zinc-800 dark:text-neutral-500'
@@ -20,7 +20,8 @@ export const PlanLabel = (props: { plan: ApiOrganisationPlanChoices }) => {
   return (
     <span
       className={clsx(
-        'px-2 py-0.5 rounded-md uppercase text-2xs font-semibold font-mono tracking-wide',
+        'rounded-md uppercase font-semibold font-mono tracking-wide',
+        props.size === 'sm' ? 'px-1.5 py-px text-3xs' : 'px-2 py-0.5 text-2xs',
         planStyle()
       )}
     >

@@ -246,6 +246,7 @@ from .graphene.mutations.environment import (
     DeleteUserTokenMutation,
     ReadSecretMutation,
     RenameEnvironmentMutation,
+    UpdateSecretFolderMutation,
     RestoreEnvironmentMutation,
     UpdateEnvironmentOrderMutation,
     UpdateMemberEnvScopeMutation,
@@ -1601,6 +1602,7 @@ class Mutation(graphene.ObjectType):
 
 
     create_secret_folder = CreateSecretFolderMutation.Field()
+    update_secret_folder = UpdateSecretFolderMutation.Field()
     delete_secret_folder = DeleteSecretFolderMutation.Field()
 
     create_secret_tag = CreateSecretTagMutation.Field()
