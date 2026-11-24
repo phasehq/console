@@ -23,11 +23,7 @@ import {
   FaGithub,
   FaSearch,
 } from 'react-icons/fa'
-import {
-  TbLayoutSidebarLeftCollapseFilled,
-  TbLayoutSidebarLeftExpandFilled,
-  TbSelector,
-} from 'react-icons/tb'
+import { TbSelector } from 'react-icons/tb'
 import { MdLogout } from 'react-icons/md'
 import { IconType } from 'react-icons'
 import { useQuery } from '@apollo/client'
@@ -89,7 +85,7 @@ const TOOLTIP_STYLE =
 const SLIDE_MS = 300
 // Applied only while that runs, so the sidebar never animates on load or while it is resized
 const SLIDE =
-  'transition-[width,height,grid-template-columns,opacity] duration-300 ease-in-out motion-reduce:transition-none'
+  'transition-[width,height,grid-template-columns,opacity,transform] duration-300 ease-in-out motion-reduce:transition-none'
 
 // Fades its child in and out as the sidebar expands and collapses
 const Fade = ({ show, children }: { show: boolean; children: React.ReactElement }) => (
@@ -327,7 +323,6 @@ const SidebarFooterMenu = ({
   name,
   icon,
   active = false,
-  align,
   collapsed,
   animating,
   children,
@@ -335,14 +330,11 @@ const SidebarFooterMenu = ({
   name: string
   icon: React.ReactNode
   active?: boolean
-  align: 'left' | 'right'
   collapsed: boolean
   animating: boolean
   children: (close: () => void) => React.ReactNode
 }) => (
-  <Popover
-    className={clsx('group/item absolute', align === 'left' ? 'left-0 top-0' : 'bottom-0 right-0')}
-  >
+  <Popover className="group/item absolute right-0 top-0">
     {({ open }) => (
       <>
         {/* Headless focuses the button on click, which browsers draw as a keyboard focus ring */}
@@ -378,10 +370,7 @@ const SidebarFooterMenu = ({
               'absolute z-20 divide-y divide-neutral-500/20 rounded-md bg-neutral-200 shadow-2xl ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-neutral-800',
               collapsed
                 ? 'bottom-0 left-full ml-4 w-56 origin-bottom-left'
-                : [
-                    'bottom-full mb-1',
-                    align === 'left' ? 'left-0 origin-bottom-left' : 'right-0 origin-bottom-right',
-                  ]
+                : 'bottom-full right-0 mb-1 origin-bottom-right'
             )}
           >
             {({ close }) => <>{children(close)}</>}
@@ -415,7 +404,6 @@ const HelpMenu = (props: FooterMenuProps) => {
           )}
         </span>
       }
-      align="right"
       {...props}
     >
       {(close) => (
@@ -627,15 +615,28 @@ const SidebarSearchButton = ({ collapsed, animating }: FooterMenuProps) => {
   )
 }
 
+// Tabler's layout-sidebar-left-collapse (filled), with its chevron as a path of its own so it can turn
+const SidebarToggleIcon = ({ collapsed, animating }: FooterMenuProps) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="size-[18px] shrink-0">
+    <path d="M18 3a3 3 0 0 1 2.995 2.824l.005 .176v12a3 3 0 0 1 -2.824 2.995l-.176 .005h-12a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-12a3 3 0 0 1 2.824 -2.995l.176 -.005h12zm0 2h-9v14h9a1 1 0 0 0 .993 -.883l.007 -.117v-12a1 1 0 0 0 -.883 -.993l-.117 -.007z" />
+    <path
+      className={clsx(
+        'origin-center [transform-box:fill-box]',
+        animating && SLIDE,
+        collapsed && 'rotate-180'
+      )}
+      d="M15.707 9.293a1 1 0 0 1 .083 1.32l-.083 .094l-1.292 1.293l1.292 1.293a1 1 0 0 1 .083 1.32l-.083 .094a1 1 0 0 1 -1.32 .083l-.094 -.083l-2 -2a1 1 0 0 1 -.083 -1.32l.083 -.094l2 -2a1 1 0 0 1 1.414 0z"
+    />
+  </svg>
+)
+
 const SidebarCollapseToggle = ({
   collapsed,
   animating,
   onToggle,
 }: FooterMenuProps & { onToggle: () => void }) => {
-  const Icon = collapsed ? TbLayoutSidebarLeftExpandFilled : TbLayoutSidebarLeftCollapseFilled
-
   return (
-    <div className="group/item absolute left-0 top-0 flex">
+    <div className="group/item absolute bottom-0 left-0 flex">
       <button
         type="button"
         onClick={onToggle}
@@ -648,7 +649,7 @@ const SidebarCollapseToggle = ({
         )}
       >
         <span className={FOOTER_ICON_SLOT}>
-          <Icon className="size-[18px] shrink-0" />
+          <SidebarToggleIcon collapsed={collapsed} animating={animating} />
         </span>
         <FooterLabel show={!collapsed} animating={animating}>
           Collapse
@@ -1035,7 +1036,7 @@ const Sidebar = () => {
         </nav>
 
         <div className="shrink-0 border-t border-neutral-500/20 px-3 py-2">
-          {/* The toggle is pinned top left and Help bottom right, so the row turns into a column as this box narrows and grows */}
+          {/* The toggle is pinned bottom left, so it stays under the pointer. Help rises above it on the rail */}
           <div
             className={clsx(
               'relative',
