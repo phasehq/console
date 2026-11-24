@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "service_type": "railway",
+  "display_name": "Railway",
+  "provider": "railway",
+  "protocol": "http",
+  "hosts": [
+    {"match": "exact", "value": "backboard.railway.app", "port": 443, "path": "/graphql/*"},
+    {"match": "exact", "value": "backboard.railway.com", "port": 443, "path": "/graphql/*"}
+  ],
+  "host_rules_mode": "fixed",
+  "config_schema": [],
+  "injection": {
+    "action": "set_header",
+    "name": "Authorization",
+    "value_format": "Bearer {value}",
+    "value_from": {"source": "credential", "field": "token"},
+    "when_absent": "attach"
+  },
+  "fields": {"token": {"class": "secret"}},
+  "decoy_format": {"token": "{rand:hex:36}"},
+  "environment_bindings": [
+    {"name": "RAILWAY_API_TOKEN", "action": "set", "source": "decoy", "source_field": "token", "sensitive": true}
+  ],
+  "credential_providers": ["railway"],
+  "client_matchers": [{"kind": "executable", "values": ["railway"]}],
+  "context_template": "The Railway API through the Phase proxy. RAILWAY_API_TOKEN holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached. A GraphQL call is a POST, so this Connection's access rules count it as a create whether it reads or writes.",
+  "credential_environment": [
+    "RAILWAY_API_TOKEN"
+  ],
+  "credential_fields": {
+    "token": "api_token"
+  }
+}

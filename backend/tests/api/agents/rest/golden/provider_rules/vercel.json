@@ -1,0 +1,14 @@
+{
+  "credential_environment": [
+    "VERCEL_TOKEN"
+  ],
+  "secret_guard": {
+    "paths": [
+      {
+        "method": "POST",
+        "pattern": "/v3/user/tokens",
+        "operation": "Vercel access token"
+      }
+    ]
+  }
+}

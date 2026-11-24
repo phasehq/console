@@ -1,0 +1,25 @@
+query GetAppAgentAccess($appId: ID!) {
+  appAgentAccess(appId: $appId) {
+    id
+    agent {
+      id
+      name
+    }
+    workflow {
+      id
+      name
+    }
+    connection {
+      id
+      name
+    }
+    environments {
+      id
+      name
+      envType
+    }
+    hiddenEnvironmentCount
+    access
+    expiresAt
+  }
+}

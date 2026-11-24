@@ -11,6 +11,8 @@ def _event(
     service_token_id=None,
     service_account_id=None,
     service_account_token_id=None,
+    agent_id=None,
+    agent_token_id=None,
     secret_id="sec-1",
     rotating_secret_id=None,
 ):
@@ -19,6 +21,8 @@ def _event(
     event.service_token_id = service_token_id
     event.service_account_id = service_account_id
     event.service_account_token_id = service_account_token_id
+    event.agent_id = agent_id
+    event.agent_token_id = agent_token_id
     event.secret_id = secret_id
     event.secret.rotating_secret_id = rotating_secret_id
     return event
@@ -45,6 +49,12 @@ class ActorDeletedResolverTest(unittest.TestCase):
 
     def test_sa_token_actor_present(self):
         self.assertFalse(_resolve(_event(service_account_token_id="sat-1")))
+
+    def test_agent_actor_present(self):
+        self.assertFalse(_resolve(_event(agent_id="agent-1")))
+
+    def test_agent_token_actor_present(self):
+        self.assertFalse(_resolve(_event(agent_token_id="agent-token-1")))
 
     def test_synthetic_rotating_read_is_engine(self):
         # No secret at all — synthetic rotating-secret read events

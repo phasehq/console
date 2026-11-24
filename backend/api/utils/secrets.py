@@ -28,6 +28,12 @@ CROSS_APP_ENV_PATTERN = re.compile(r"\$\{(?!\{)([^{}]+?)::([^{}]+?)\.([^{}]+?)\}
 CROSS_ENV_PATTERN = re.compile(r"\$\{(?!\{)(?![^{}]*::)([^{}.]+?)\.([^{}]+?)\}")
 LOCAL_REF_PATTERN = re.compile(r"\$\{(?!\{)([^{}.]+?)\}")
 
+# One ${...} with no brace inside: every reference the three patterns above
+# find is one of these. Unlike them it cannot backtrack, so it is safe on a
+# value an Agent supplies. `_classify_reference` then reads the text between
+# the braces the way those patterns do.
+_REFERENCE_BODY_PATTERN = re.compile(r"\$\{([^{}]+)\}")
+
 # Upper bound on how deep nested secret references are resolved. Cycles are
 # already broken by the per-branch `_visited` set in decrypt_secret_value; this
 # is an additional guard against pathologically deep (but acyclic) chains.
@@ -291,7 +297,13 @@ def check_environment_access(account, environment, require_resolved_references):
     if not account:
         return True
 
-    if isinstance(account, ServiceAccount):
+    from api.utils.agent_app_access import AgentSecretsReader
+
+    if isinstance(account, AgentSecretsReader):
+        # An Agent reaches only what its Workflow may read right now.
+        has_access = account.can_read_environment(environment.id)
+        error_msg = "This Agent doesn't have permission to read secrets in one or more referenced environments."
+    elif isinstance(account, ServiceAccount):
         has_access = service_account_can_access_environment(account.id, environment.id)
         error_msg = "This service account doesn't have permission to read secrets in one or more referenced environments."
     else:
@@ -350,6 +362,30 @@ def resolve_secret_value(
     )
 
 
+def _classify_reference(body):
+    """
+    Read the text between a reference's braces as CROSS_APP_ENV_PATTERN,
+    CROSS_ENV_PATTERN and LOCAL_REF_PATTERN do.
+
+    Returns ("app", app, env, key), ("env", env, key) or ("local", key), or
+    None when the text is not a reference.
+    """
+    if "." not in body:
+        return ("local", body)
+    separator = body.find("::", 1)
+    if separator != -1:
+        dot = body.find(".", separator + 3)
+        if dot != -1 and dot + 1 < len(body):
+            return ("app", body[:separator], body[separator + 2 : dot], body[dot + 1 :])
+        return None
+    if "::" in body:
+        return None
+    dot = body.find(".")
+    if 0 < dot < len(body) - 1:
+        return ("env", body[:dot], body[dot + 1 :])
+    return None
+
+
 def decrypt_secret_value(
     secret,
     require_resolved_references=False,
@@ -365,6 +401,10 @@ def decrypt_secret_value(
     references is fully resolved before being substituted in. Reference cycles
     (e.g. A -> B -> A) are detected via the per-branch _visited set and chains
     deeper than MAX_REFERENCE_DEPTH are rejected, so resolution always terminates.
+
+    A secret's references are read from its own text, once. What a reference
+    resolves to is put in place and never read again, so text that only looks
+    like a reference once it has been substituted stays text.
 
     Args:
         secret (Secret): The secret instance to decrypt.
@@ -414,146 +454,225 @@ def decrypt_secret_value(
     # Decrypt secret value
     value = decrypt_asymmetric(secret.value, env_privkey, env_pubkey)
 
+    # Find every reference in the secret's own text, once.
+    references = {"app": [], "env": [], "local": []}
+    for body in _REFERENCE_BODY_PATTERN.findall(value):
+        reference = _classify_reference(body)
+        if reference is not None:
+            references[reference[0]].append((body, *reference[1:]))
+
+    # What each reference resolved to, or why it did not, by the text between
+    # its braces: a reference that occurs twice is resolved once.
+    resolved, problems = {}, {}
+
+    def substituted():
+        # One substitution over the text as written. A reference that did not
+        # resolve stays as written, and nothing put in is read again.
+        return _REFERENCE_BODY_PATTERN.sub(
+            lambda match: resolved.get(match.group(1), match.group(0)), value
+        )
+
     # Resolve cross-app and cross-env references
-    cross_app_env_matches = re.findall(CROSS_APP_ENV_PATTERN, value)
     unresolved_references = []
 
-    for ref_app, ref_env, ref_key in cross_app_env_matches:
-        try:
-            path, key_name = decompose_path_and_key(ref_key)
+    for body, ref_app, ref_env, ref_key in references["app"]:
+        if body in resolved:
+            continue
+        if body not in problems:
+            try:
+                path, key_name = decompose_path_and_key(ref_key)
 
-            referenced_app = App.objects.get(
-                name__iexact=ref_app, organisation=secret.environment.app.organisation
-            )
+                referenced_app = App.objects.get(
+                    name__iexact=ref_app,
+                    organisation=secret.environment.app.organisation,
+                )
 
-            referenced_environment = Environment.objects.get(
-                name__iexact=ref_env, app=referenced_app
-            )
+                referenced_environment = Environment.objects.get(
+                    name__iexact=ref_env, app=referenced_app
+                )
 
-            if not check_environment_access(
-                account, referenced_environment, require_resolved_references
-            ):
-                return value
+                if not check_environment_access(
+                    account, referenced_environment, require_resolved_references
+                ):
+                    return substituted()
 
-            ref_crypto_context = get_or_compute_crypto_context(
-                referenced_environment, context_cache
-            )
+                ref_crypto_context = get_or_compute_crypto_context(
+                    referenced_environment, context_cache
+                )
 
-            referenced_secret_value = resolve_secret_value(
-                referenced_environment,
-                path,
-                key_name,
-                crypto_context=ref_crypto_context,
-                require_resolved_references=require_resolved_references,
-                account=account,
-                context_cache=context_cache,
-                _visited=_visited,
-            )
-
-            value = value.replace(
-                f"${{{ref_app}::{ref_env}.{ref_key}}}", referenced_secret_value
-            )
-        except App.DoesNotExist:
-            unresolved_references.append(
-                f"The referenced app '{ref_app}' does not exist"
-            )
-        except App.MultipleObjectsReturned:
-            unresolved_references.append(
-                f"Could not resolve a cross-app reference because two or more apps named '{ref_app}' exist!"
-            )
-        except ServerEnvironmentKey.DoesNotExist:
-            unresolved_references.append(
-                f"The referenced app '{ref_app}' does not have SSE (Server-Side Encryption) enabled."
-            )
-        except Environment.DoesNotExist:
-            unresolved_references.append(
-                f"The referenced environment '{ref_env}' does not exist"
-            )
-        except Secret.DoesNotExist:
-            unresolved_references.append(
-                f"The referenced secret does not exist in '{ref_app}::{ref_env}' at the requested path"
-            )
-        except Exception as ex:
-            unresolved_references.append(str(ex))
+                resolved[body] = resolve_secret_value(
+                    referenced_environment,
+                    path,
+                    key_name,
+                    crypto_context=ref_crypto_context,
+                    require_resolved_references=require_resolved_references,
+                    account=account,
+                    context_cache=context_cache,
+                    _visited=_visited,
+                )
+                continue
+            except App.DoesNotExist:
+                problems[body] = f"The referenced app '{ref_app}' does not exist"
+            except App.MultipleObjectsReturned:
+                problems[body] = (
+                    f"Could not resolve a cross-app reference because two or more apps named '{ref_app}' exist!"
+                )
+            except ServerEnvironmentKey.DoesNotExist:
+                problems[body] = (
+                    f"The referenced app '{ref_app}' does not have SSE (Server-Side Encryption) enabled."
+                )
+            except Environment.DoesNotExist:
+                problems[body] = (
+                    f"The referenced environment '{ref_env}' does not exist"
+                )
+            except Secret.DoesNotExist:
+                problems[body] = (
+                    f"The referenced secret does not exist in '{ref_app}::{ref_env}' at the requested path"
+                )
+            except Exception as ex:
+                problems[body] = str(ex)
+        unresolved_references.append(problems[body])
 
     # Resolve cross-env references (same app)
-    cross_env_matches = re.findall(CROSS_ENV_PATTERN, value)
+    for body, ref_env, ref_key in references["env"]:
+        if body in resolved:
+            continue
+        if body not in problems:
+            try:
+                path, key_name = decompose_path_and_key(ref_key)
 
-    for ref_env, ref_key in cross_env_matches:
-        try:
-            path, key_name = decompose_path_and_key(ref_key)
+                referenced_environment = Environment.objects.get(
+                    name__iexact=ref_env, app=secret.environment.app
+                )
 
-            referenced_environment = Environment.objects.get(
-                name__iexact=ref_env, app=secret.environment.app
-            )
+                if not check_environment_access(
+                    account, referenced_environment, require_resolved_references
+                ):
+                    return substituted()
 
-            if not check_environment_access(
-                account, referenced_environment, require_resolved_references
-            ):
-                return value
+                ref_crypto_context = get_or_compute_crypto_context(
+                    referenced_environment, context_cache
+                )
 
-            ref_crypto_context = get_or_compute_crypto_context(
-                referenced_environment, context_cache
-            )
-
-            referenced_secret_value = resolve_secret_value(
-                referenced_environment,
-                path,
-                key_name,
-                crypto_context=ref_crypto_context,
-                require_resolved_references=require_resolved_references,
-                account=account,
-                context_cache=context_cache,
-                _visited=_visited,
-            )
-
-            value = value.replace(f"${{{ref_env}.{ref_key}}}", referenced_secret_value)
-        except Environment.DoesNotExist:
-            unresolved_references.append(
-                f"The referenced environment '{ref_env}' does not exist"
-            )
-        except Secret.DoesNotExist:
-            unresolved_references.append(
-                f"The referenced secret does not exist in '{ref_env}' at the requested path"
-            )
-        except Exception as ex:
-            unresolved_references.append(str(ex))
+                resolved[body] = resolve_secret_value(
+                    referenced_environment,
+                    path,
+                    key_name,
+                    crypto_context=ref_crypto_context,
+                    require_resolved_references=require_resolved_references,
+                    account=account,
+                    context_cache=context_cache,
+                    _visited=_visited,
+                )
+                continue
+            except Environment.DoesNotExist:
+                problems[body] = (
+                    f"The referenced environment '{ref_env}' does not exist"
+                )
+            except Secret.DoesNotExist:
+                problems[body] = (
+                    f"The referenced secret does not exist in '{ref_env}' at the requested path"
+                )
+            except Exception as ex:
+                problems[body] = str(ex)
+        unresolved_references.append(problems[body])
 
     if require_resolved_references and unresolved_references:
         raise SecretReferenceException("\n".join(unresolved_references))
 
     # Resolve local references
-    local_ref_matches = re.findall(LOCAL_REF_PATTERN, value)
     unresolved_local_references = []
 
-    for ref_key in local_ref_matches:
-        try:
-            path, key_name = decompose_path_and_key(ref_key)
+    for body, ref_key in references["local"]:
+        if body in resolved:
+            continue
+        if body not in problems:
+            try:
+                path, key_name = decompose_path_and_key(ref_key)
 
-            referenced_secret_value = resolve_secret_value(
-                secret.environment,
-                path,
-                key_name,
-                crypto_context=current_env_crypto_context,
-                require_resolved_references=require_resolved_references,
-                account=account,
-                context_cache=context_cache,
-                _visited=_visited,
-            )
-
-            value = value.replace(
-                f"${{{ref_key}}}",
-                referenced_secret_value,
-            )
-        except:
-            unresolved_local_references.append(
-                f"The referenced key {ref_key} does not exist in the {secret.environment.name} environment."
-            )
+                resolved[body] = resolve_secret_value(
+                    secret.environment,
+                    path,
+                    key_name,
+                    crypto_context=current_env_crypto_context,
+                    require_resolved_references=require_resolved_references,
+                    account=account,
+                    context_cache=context_cache,
+                    _visited=_visited,
+                )
+                continue
+            except:
+                problems[body] = (
+                    f"The referenced key {ref_key} does not exist in the {secret.environment.name} environment."
+                )
+        unresolved_local_references.append(problems[body])
 
     if require_resolved_references and unresolved_local_references:
         raise SecretReferenceException("\n".join(unresolved_local_references))
 
-    return value
+    return substituted()
+
+
+def split_references(value):
+    """
+    Return the references in a plaintext value, in time linear in its length.
+
+    Returns ([(app, env)], [env], has_local_reference).
+    """
+    cross_app, cross_env, has_local = [], [], False
+    for body in _REFERENCE_BODY_PATTERN.findall(value):
+        reference = _classify_reference(body)
+        if reference is None:
+            continue
+        if reference[0] == "app":
+            cross_app.append((reference[1], reference[2]))
+        elif reference[0] == "env":
+            cross_env.append(reference[1])
+        else:
+            has_local = True
+    return cross_app, cross_env, has_local
+
+
+def reference_target_environments(value, environment):
+    """
+    Return the environment each reference in a plaintext value points at.
+
+    An ambiguous reference (no match, or more than one) gives None.
+    """
+    Environment = apps.get_model("api", "Environment")
+    App = apps.get_model("api", "App")
+
+    targets = []
+    cross_app, cross_env, has_local = split_references(value)
+
+    for ref_app, ref_env in cross_app:
+        try:
+            referenced_app = App.objects.get(
+                name__iexact=ref_app, organisation=environment.app.organisation
+            )
+            targets.append(
+                Environment.objects.get(name__iexact=ref_env, app=referenced_app)
+            )
+        except (
+            App.DoesNotExist,
+            App.MultipleObjectsReturned,
+            Environment.DoesNotExist,
+            Environment.MultipleObjectsReturned,
+        ):
+            targets.append(None)
+
+    for ref_env in cross_env:
+        try:
+            targets.append(
+                Environment.objects.get(name__iexact=ref_env, app=environment.app)
+            )
+        except (Environment.DoesNotExist, Environment.MultipleObjectsReturned):
+            targets.append(None)
+
+    if has_local:
+        targets.append(environment)
+
+    return targets
 
 
 def get_referenced_environment_ids(source_env_id, name_ctx):

@@ -352,6 +352,7 @@ class TestDeleteAccountMutation:
             created_by=None
         )
         assert mock_nap.objects.filter.return_value.update.call_count == 2
+        membership.retire_agent_access.assert_called_once_with()
         # Audit tombstone per org
         mock_audit.assert_called_once_with(
             organisation=membership.organisation,

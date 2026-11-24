@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "service_type": "render",
+  "display_name": "Render",
+  "provider": "render",
+  "protocol": "http",
+  "hosts": [
+    {"match": "exact", "value": "api.render.com", "port": 443, "path": "/v1/*"}
+  ],
+  "host_rules_mode": "fixed",
+  "config_schema": [],
+  "injection": {
+    "action": "set_header",
+    "name": "Authorization",
+    "value_format": "Bearer {value}",
+    "value_from": {"source": "credential", "field": "token"},
+    "when_absent": "attach"
+  },
+  "fields": {"token": {"class": "secret"}},
+  "decoy_format": {"token": "rnd_{rand:alnum:28}"},
+  "environment_bindings": [
+    {"name": "RENDER_API_KEY", "action": "set", "source": "decoy", "source_field": "token", "sensitive": true}
+  ],
+  "credential_providers": ["render"],
+  "client_matchers": [{"kind": "executable", "values": ["render"]}],
+  "context_template": "The Render API through the Phase proxy. RENDER_API_KEY holds a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached.",
+  "credential_environment": [
+    "RENDER_API_KEY"
+  ],
+  "credential_fields": {
+    "token": "api_key"
+  }
+}

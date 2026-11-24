@@ -1,0 +1,101 @@
+fragment AgentRequestReviewerFields on AgentRequestReviewerType {
+  id
+  createdAt
+  member {
+    id
+    fullName
+    email
+    avatarUrl
+  }
+  requestedBy {
+    id
+    fullName
+    email
+  }
+}
+
+fragment AgentRequestFields on AgentRequestType {
+  id
+  kind
+  title
+  progress
+  revision
+  serviceType
+  credentialProvider
+  credentialName
+  markdown
+  status
+  resolutionNote
+  expiresAt
+  resolvedAt
+  resolvedBy {
+    id
+    fullName
+    email
+    avatarUrl
+  }
+  reviewers {
+    ...AgentRequestReviewerFields
+  }
+  createdAt
+  action
+  appliedAction
+  approval
+  actionReview
+  appRestricted
+  hiddenEnvironmentCount
+  durationSeconds
+  access
+  agent {
+    id
+    name
+    harnessType
+  }
+  workflow {
+    id
+    name
+  }
+  connection {
+    id
+    name
+    serviceType
+    definition
+    encryptionPublicKey
+    authentication {
+      id
+      name
+      revision
+      provider {
+        id
+        name
+      }
+    }
+  }
+  credential {
+    id
+    name
+    revision
+    provider {
+      id
+      name
+    }
+  }
+}
+
+query GetAgentRequests(
+  $organisationId: ID!
+  $status: String
+  $requestId: ID
+  $limit: Int
+  $scope: String
+) {
+  agentRequests(
+    organisationId: $organisationId
+    status: $status
+    requestId: $requestId
+    limit: $limit
+    scope: $scope
+  ) {
+    ...AgentRequestFields
+  }
+}

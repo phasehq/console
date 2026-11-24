@@ -1,0 +1,366 @@
+mutation CreateAgentConnectionOp(
+  $organisationId: ID!
+  $name: String!
+  $serviceType: String!
+  $authenticationId: ID!
+  $config: GenericScalar
+) {
+  createAgentConnection(
+    organisationId: $organisationId
+    name: $name
+    serviceType: $serviceType
+    authenticationId: $authenticationId
+    config: $config
+  ) {
+    connection {
+      id
+      name
+      serviceType
+      state
+      config
+      authentication {
+        id
+        name
+        revision
+        provider {
+          id
+          name
+        }
+      }
+    }
+  }
+}
+
+mutation UpdateAgentConnectionOp(
+  $connectionId: ID!
+  $name: String
+  $authenticationId: ID
+  $config: GenericScalar
+) {
+  updateAgentConnection(
+    connectionId: $connectionId
+    name: $name
+    authenticationId: $authenticationId
+    config: $config
+  ) {
+    connection {
+      id
+      name
+      serviceType
+      state
+      config
+      authentication {
+        id
+        name
+        revision
+        provider {
+          id
+          name
+        }
+      }
+      hostRulesVersion
+      hostRulesApprovedVersion
+      hostRulesAuthoredBy {
+        id
+        username
+      }
+      hostRulesApprovedBy {
+        id
+        username
+      }
+      updatedAt
+    }
+  }
+}
+
+mutation ApproveAgentConnectionHostRulesOp($connectionId: ID!, $expectedVersion: String!) {
+  approveAgentConnectionHostRules(connectionId: $connectionId, expectedVersion: $expectedVersion) {
+    connection {
+      id
+      hostRulesVersion
+      hostRulesApprovedVersion
+      hostRulesApprovedBy {
+        id
+        username
+      }
+    }
+  }
+}
+
+mutation AllowAgentConnectionHostOp(
+  $eventIngestSeq: ID!
+  $connectionId: ID!
+  $expectedVersion: String!
+) {
+  allowAgentConnectionHost(
+    eventIngestSeq: $eventIngestSeq
+    connectionId: $connectionId
+    expectedVersion: $expectedVersion
+  ) {
+    connection {
+      id
+      config
+      hostRulesVersion
+      hostRulesApprovedVersion
+      hostRulesAuthoredBy {
+        id
+        username
+      }
+      hostRulesApprovedBy {
+        id
+        username
+      }
+      updatedAt
+    }
+    hostRule
+    approvalRequired
+  }
+}
+
+mutation DeleteAgentConnectionOp($connectionId: ID!) {
+  deleteAgentConnection(connectionId: $connectionId) {
+    ok
+  }
+}
+
+mutation FulfillAgentRequestOp(
+  $requestId: ID!
+  $expectedRevision: String!
+  $credentialId: ID!
+  $expectedCredentialRevision: String!
+  $resolutionNote: String
+  $durationSeconds: Int
+  $untilRevoked: Boolean
+) {
+  fulfillAgentRequest(
+    requestId: $requestId
+    expectedRevision: $expectedRevision
+    credentialId: $credentialId
+    expectedCredentialRevision: $expectedCredentialRevision
+    resolutionNote: $resolutionNote
+    durationSeconds: $durationSeconds
+    untilRevoked: $untilRevoked
+  ) {
+    request {
+      id
+      status
+      revision
+      resolution
+      resolutionNote
+      resolvedAt
+      credential {
+        id
+        name
+        revision
+        provider {
+          id
+          name
+        }
+      }
+    }
+    connection {
+      id
+      name
+      serviceType
+      state
+    }
+    grant {
+      id
+    }
+    runtimeAction
+  }
+}
+
+mutation ResolveAgentRequestOp(
+  $requestId: ID!
+  $expectedRevision: String!
+  $approved: Boolean!
+  $resolutionNote: String
+) {
+  resolveAgentRequest(
+    requestId: $requestId
+    expectedRevision: $expectedRevision
+    approved: $approved
+    resolutionNote: $resolutionNote
+  ) {
+    request {
+      id
+      status
+      revision
+      resolutionNote
+      resolvedAt
+    }
+  }
+}
+
+mutation CreateCustomAgentConnectionOp(
+  $organisationId: ID!
+  $name: String!
+  $definition: GenericScalar!
+  $encryptionPublicKey: String!
+  $sealedValue: String!
+  $serverWrappedKey: String!
+) {
+  createCustomAgentConnection(
+    organisationId: $organisationId
+    name: $name
+    definition: $definition
+    encryptionPublicKey: $encryptionPublicKey
+    sealedValue: $sealedValue
+    serverWrappedKey: $serverWrappedKey
+  ) {
+    connection {
+      id
+      name
+      serviceType
+      state
+      config
+      definition
+      encryptionPublicKey
+      valueRevision
+      valueUpdatedAt
+      valueUpdatedBy {
+        id
+        fullName
+        email
+      }
+      updatedAt
+    }
+  }
+}
+
+mutation UpdateCustomAgentConnectionOp(
+  $connectionId: ID!
+  $name: String
+  $definition: GenericScalar
+  $sealedValue: String
+) {
+  updateCustomAgentConnection(
+    connectionId: $connectionId
+    name: $name
+    definition: $definition
+    sealedValue: $sealedValue
+  ) {
+    connection {
+      id
+      name
+      serviceType
+      state
+      config
+      definition
+      encryptionPublicKey
+      valueRevision
+      valueUpdatedAt
+      valueUpdatedBy {
+        id
+        fullName
+        email
+      }
+      updatedAt
+    }
+  }
+}
+
+mutation ApproveAgentRequestActionOp(
+  $requestId: ID!
+  $expectedRevision: String!
+  $action: GenericScalar
+  $inputs: GenericScalar
+  $resolutionNote: String
+  $durationSeconds: Int
+  $untilRevoked: Boolean
+) {
+  approveAgentRequestAction(
+    requestId: $requestId
+    expectedRevision: $expectedRevision
+    action: $action
+    inputs: $inputs
+    resolutionNote: $resolutionNote
+    durationSeconds: $durationSeconds
+    untilRevoked: $untilRevoked
+  ) {
+    request {
+      id
+      status
+      revision
+      resolutionNote
+      resolvedAt
+      appliedAction
+      approval
+      access
+      connection {
+        id
+        name
+      }
+    }
+    runtimeAction
+  }
+}
+
+mutation SetAgentConnectionPolicyOp($connectionId: ID!, $policy: GenericScalar) {
+  setAgentConnectionPolicy(connectionId: $connectionId, policy: $policy) {
+    connection {
+      id
+      takesPolicy
+      policy
+      managedPolicies
+      updatedAt
+    }
+  }
+}
+
+mutation CreateAgentAppConnectionOp(
+  $organisationId: ID!
+  $name: String!
+  $appId: ID!
+  $environmentIds: [ID!]!
+) {
+  createAgentAppConnection(
+    organisationId: $organisationId
+    name: $name
+    appId: $appId
+    environmentIds: $environmentIds
+  ) {
+    connection {
+      id
+      name
+      serviceType
+      state
+      policy
+      app {
+        id
+        name
+        sseEnabled
+      }
+      environments {
+        id
+        name
+        envType
+      }
+      appRestricted
+      hiddenEnvironmentCount
+      updatedAt
+    }
+  }
+}
+
+mutation UpdateAgentAppConnectionOp($connectionId: ID!, $name: String, $environmentIds: [ID!]) {
+  updateAgentAppConnection(
+    connectionId: $connectionId
+    name: $name
+    environmentIds: $environmentIds
+  ) {
+    connection {
+      id
+      name
+      environments {
+        id
+        name
+        envType
+      }
+      appRestricted
+      hiddenEnvironmentCount
+      updatedAt
+    }
+  }
+}

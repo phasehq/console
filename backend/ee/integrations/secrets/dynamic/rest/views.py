@@ -1,4 +1,4 @@
-from api.auth import PhaseTokenAuthentication
+from api.auth import SecretsAPIAuthentication
 from api.models import (
     DynamicSecret,
     DynamicSecretLease,
@@ -36,6 +36,10 @@ from ee.integrations.secrets.dynamic.utils import (
     renew_dynamic_secret_lease,
 )
 from rest_framework.views import APIView
+from api.views.agents.app_secrets import (
+    AgentSecretsMixin,
+    refuse_agent_dynamic_secrets,
+)
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
@@ -49,8 +53,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class DynamicSecretsView(APIView):
-    authentication_classes = [PhaseTokenAuthentication]
+class DynamicSecretsView(AgentSecretsMixin, APIView):
+    # Takes an Agent token only to refuse it with a reason.
+    authentication_classes = [SecretsAPIAuthentication]
     permission_classes = [IsAuthenticated, IsIPAllowed]
     throttle_classes = [PlanBasedRateThrottle]
     renderer_classes = [
@@ -59,6 +64,7 @@ class DynamicSecretsView(APIView):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
+        refuse_agent_dynamic_secrets(request)
 
         # Determine the action based on the request method
         action = METHOD_TO_ACTION.get(request.method)
@@ -196,14 +202,16 @@ class DynamicSecretsView(APIView):
         )
 
 
-class DynamicSecretLeaseView(APIView):
-    authentication_classes = [PhaseTokenAuthentication]
+class DynamicSecretLeaseView(AgentSecretsMixin, APIView):
+    # Takes an Agent token only to refuse it with a reason.
+    authentication_classes = [SecretsAPIAuthentication]
     permission_classes = [IsAuthenticated, IsIPAllowed]
     throttle_classes = [PlanBasedRateThrottle]
     renderer_classes = [CamelCaseJSONRenderer]
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
+        refuse_agent_dynamic_secrets(request)
         get_request_principal(request)
 
     def _get_account_and_org(self, request):

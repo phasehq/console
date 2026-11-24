@@ -1,0 +1,266 @@
+{
+  "schemaVersion": 1,
+  "service_type": "aws",
+  "display_name": "Amazon Web Services",
+  "provider": "aws",
+  "protocol": "http",
+  "hosts": [
+    {"match": "suffix", "value": ".amazonaws.com"}
+  ],
+  "host_rules_mode": "optional_override",
+  "config_schema": [
+    {"id": "hosts", "input_type": "host_rules"},
+    {"id": "region", "input_type": "string"}
+  ],
+  "injection": {
+    "action": "aws_sigv4",
+    "value_from": {
+      "source": "credential",
+      "fields": {"access_key_id": "access_key_id", "secret_access_key": "secret_access_key", "session_token": "session_token"}
+    },
+    "service_from": "host",
+    "region_from": "host"
+  },
+  "fields": {
+    "access_key_id": {"class": "identifier"},
+    "secret_access_key": {"class": "secret"},
+    "session_token": {"class": "secret"}
+  },
+  "decoy_format": {
+    "access_key_id": "{aws_access_key_id}",
+    "secret_access_key": "PHX{rand:base64:37}",
+    "session_token": "phx_aws_session_{rand:alnum:32}"
+  },
+  "environment_bindings": [
+    {"name": "AWS_ACCESS_KEY_ID", "action": "set", "source": "identifier", "source_field": "access_key_id"},
+    {"name": "AWS_SECRET_ACCESS_KEY", "action": "set", "source": "decoy", "source_field": "secret_access_key", "sensitive": true},
+    {"name": "AWS_REGION", "action": "set", "source": "connection_config", "source_field": "region"},
+    {"name": "AWS_DEFAULT_REGION", "action": "set", "source": "connection_config", "source_field": "region"},
+    {"name": "AWS_SESSION_TOKEN", "action": "set", "source": "decoy", "source_field": "session_token", "sensitive": true},
+    {"name": "AWS_SECURITY_TOKEN", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_PROFILE", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_DEFAULT_PROFILE", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_ROLE_ARN", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_ROLE_SESSION_NAME", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_WEB_IDENTITY_TOKEN_FILE", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_CONTAINER_CREDENTIALS_FULL_URI", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_CONTAINER_AUTHORIZATION_TOKEN", "action": "unset", "source": "runtime", "source_field": "secret_access_key"},
+    {"name": "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE", "action": "unset", "source": "runtime", "source_field": "secret_access_key"}
+  ],
+  "credential_providers": ["aws", "aws_assume_role"],
+  "client_matchers": [{"kind": "executable", "values": ["aws"]}],
+  "context_template": "AWS through the Phase proxy. The proxy re-signs requests with the live key.",
+  "credential_environment": [
+    "AWS_ACCESS_KEY_ID",
+    "AWS_CONFIG_FILE",
+    "AWS_CONTAINER_AUTHORIZATION_TOKEN",
+    "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE",
+    "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+    "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+    "AWS_CREDENTIAL_EXPIRATION",
+    "AWS_DEFAULT_PROFILE",
+    "AWS_PROFILE",
+    "AWS_ROLE_ARN",
+    "AWS_ROLE_SESSION_NAME",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SECURITY_TOKEN",
+    "AWS_SESSION_TOKEN",
+    "AWS_SHARED_CREDENTIALS_FILE",
+    "AWS_WEB_IDENTITY_TOKEN_FILE"
+  ],
+  "secret_guard": {
+    "operations": {
+      "cognito-identity": [
+        "GetCredentialsForIdentity",
+        "GetOpenIdToken",
+        "GetOpenIdTokenForDeveloperIdentity"
+      ],
+      "ec2": [
+        "CreateKeyPair"
+      ],
+      "ecr": [
+        "GetAuthorizationToken"
+      ],
+      "ecr-public": [
+        "GetAuthorizationToken"
+      ],
+      "elasticmapreduce": [
+        "GetClusterSessionCredentials"
+      ],
+      "gamelift": [
+        "GetComputeAuthToken"
+      ],
+      "iam": [
+        "CreateAccessKey",
+        "CreateLoginProfile",
+        "UpdateLoginProfile",
+        "CreateServiceSpecificCredential",
+        "ResetServiceSpecificCredential",
+        "UploadSSHPublicKey",
+        "UploadSigningCertificate"
+      ],
+      "lightsail": [
+        "GetInstanceAccessDetails",
+        "CreateKeyPair",
+        "DownloadDefaultKeyPair",
+        "CreateBucketAccessKey"
+      ],
+      "redshift": [
+        "GetClusterCredentials",
+        "GetClusterCredentialsWithIAM"
+      ],
+      "redshift-serverless": [
+        "GetCredentials"
+      ],
+      "sts": [
+        "AssumeRole",
+        "AssumeRoleWithSAML",
+        "AssumeRoleWithWebIdentity",
+        "AssumeRoot",
+        "GetFederationToken",
+        "GetSessionToken",
+        "GetWebIdentityToken"
+      ]
+    },
+    "paths": [
+      {
+        "method": "POST",
+        "pattern": "/v1/authorization-token",
+        "operation": "codeartifact:GetAuthorizationToken",
+        "services": [
+          "codeartifact"
+        ]
+      },
+      {
+        "method": "GET",
+        "pattern": "/*",
+        "query": "session",
+        "operation": "s3express:CreateSession",
+        "services": [
+          "s3express"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/keys-and-certificate",
+        "operation": "iot:CreateKeysAndCertificate",
+        "services": [
+          "iot",
+          "execute-api"
+        ],
+        "host_label": "iot"
+      },
+      {
+        "method": "POST",
+        "pattern": "/provisioning-templates/*/provisioning-claim",
+        "operation": "iot:CreateProvisioningClaim",
+        "services": [
+          "iot",
+          "execute-api"
+        ],
+        "host_label": "iot"
+      },
+      {
+        "method": "POST",
+        "pattern": "/certificates",
+        "operation": "iot:CreateCertificateFromCsr",
+        "services": [
+          "iot",
+          "execute-api"
+        ],
+        "host_label": "iot"
+      },
+      {
+        "method": "POST",
+        "pattern": "/apikeys",
+        "operation": "apigateway:CreateApiKey",
+        "services": [
+          "apigateway"
+        ]
+      },
+      {
+        "method": "GET",
+        "pattern": "/apikeys",
+        "query": "includeValues",
+        "operation": "apigateway:GetApiKeys with the key values",
+        "services": [
+          "apigateway"
+        ]
+      },
+      {
+        "method": "GET",
+        "pattern": "/apikeys/*",
+        "query": "includeValue",
+        "operation": "apigateway:GetApiKey with the key value",
+        "services": [
+          "apigateway"
+        ]
+      },
+      {
+        "method": "GET",
+        "pattern": "/v1/apis/*/apikeys",
+        "operation": "appsync:ListApiKeys",
+        "services": [
+          "appsync"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/v1/apis/*/apikeys",
+        "operation": "appsync:CreateApiKey",
+        "services": [
+          "appsync"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/v1/apis/*/apikeys/*",
+        "operation": "appsync:UpdateApiKey",
+        "services": [
+          "appsync"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/clitoken/*",
+        "operation": "airflow:CreateCliToken",
+        "services": [
+          "airflow"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/webtoken/*",
+        "operation": "airflow:CreateWebLoginToken",
+        "services": [
+          "airflow"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/workspaces/*/apikeys",
+        "operation": "grafana:CreateWorkspaceApiKey",
+        "services": [
+          "grafana"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/workspaces/*/serviceaccounts/*/tokens",
+        "operation": "grafana:CreateWorkspaceServiceAccountToken",
+        "services": [
+          "grafana"
+        ]
+      },
+      {
+        "method": "POST",
+        "pattern": "/virtualclusters/*/endpoints/*/credentials",
+        "operation": "emr-containers:GetManagedEndpointSessionCredentials",
+        "services": [
+          "emr-containers"
+        ]
+      }
+    ]
+  }
+}

@@ -44,6 +44,7 @@ type Query {
   awsStsEndpoints: [JSONString]
   identityProviders: [IdentityProviderType]
   savedCredentials(orgId: ID): [ProviderCredentialsType]
+  providerCredential(credentialId: ID!): ProviderCredentialsType
   syncs(orgId: ID, appId: ID, envId: ID): [EnvironmentSyncType]
   envSyncs(envId: ID): [EnvironmentSyncType]
   cloudflarePagesProjects(credentialId: ID): [CloudFlarePagesType]
@@ -86,6 +87,19 @@ type Query {
   logStreamDeliveries(streamId: ID!, limit: Int, offset: Int, status: String): LogStreamDeliveryHistoryType
   logStreamProviders: [LogStreamProviderType]
   logStreamSources: [LogStreamSourceType]
+  agents(organisationId: ID!, agentId: ID): [AgentType]
+  agentWorkflows(organisationId: ID!, agentId: ID, workflowId: ID): [AgentWorkflowType]
+  agentMemberships(organisationId: ID!, agentId: ID!, membershipId: ID, memberId: ID): [AgentMembershipType]
+  agentConnections(organisationId: ID!, connectionId: ID): [AgentConnectionType]
+  agentRequests(organisationId: ID!, requestId: ID, agentId: ID, workflowId: ID, status: String, limit: Int, scope: String): [AgentRequestType]
+  agentRequestReviewerCandidates(organisationId: ID!, requestId: ID!): [OrganisationMemberType!]!
+  agentRequestQueue(organisationId: ID!, limit: Int): AgentRequestQueueType!
+  agentSessions(organisationId: ID!, agentId: ID, workflowId: ID, activeOnly: Boolean = false): [AgentSessionType]
+  agentEvents(organisationId: ID!, cursor: String, before: String, order: String, limit: Int = 100, agentId: ID, workflowId: ID, sessionUid: String, proxyDecision: String, eventType: String, provider: String, start: DateTime, end: DateTime): AgentEventPageType
+  agentServiceTemplates(organisationId: ID!, serviceType: String): [AgentServiceTemplateType]
+  agentConnectionPresets(organisationId: ID!, presetId: ID): [AgentConnectionPresetType!]!
+  agentSettings(organisationId: ID!): AgentSettingsType!
+  appAgentAccess(appId: ID!): [AppAgentAccessType!]!
 }
 
 type OrganisationType {
@@ -151,9 +165,12 @@ type OrganisationPlanType {
   maxUsers: Int
   maxApps: Int
   maxEnvsPerApp: Int
+  maxAgents: Int
+  maxWorkflowsPerAgent: Int
   seatLimit: Int
   seatsUsed: SeatsUsed
   appCount: Int
+  agentCount: Int
 }
 
 type SeatsUsed {
@@ -311,6 +328,7 @@ type SecretEventType {
   ipAddress: String
   userAgent: String
   actorDeleted: Boolean
+  agent: SecretEventAgentType
 }
 
 """
@@ -489,6 +507,24 @@ enum ApiSecretEventEventTypeChoices {
   D
 }
 
+"""
+The Agent that made a secrets call, with the Workflow and token it
+used. Names only: nothing here reaches the Agent's credentials.
+"""
+type SecretEventAgentType {
+  id: ID!
+  name: String!
+  harnessType: String!
+  deleted: Boolean!
+  workflow: SecretEventAgentRefType
+  token: SecretEventAgentRefType
+}
+
+type SecretEventAgentRefType {
+  id: ID!
+  name: String!
+}
+
 type PersonalSecretType {
   id: String!
   secret: SecretType!
@@ -525,9 +561,12 @@ type ProviderCredentialsType {
   name: String!
   provider: ProviderType
   credentials: JSONString
+  revision: UUID!
   createdAt: DateTime
   updatedAt: DateTime!
   syncCount: Int
+  agentConnectionCount: Int
+  sealedCredentials: [String!]
 }
 
 type ProviderType {
@@ -535,10 +574,16 @@ type ProviderType {
   name: String!
   expectedCredentials: [String!]!
   optionalCredentials: [String!]!
-  nonSensitiveCredentials: [String!]
-  endpointCredentials: [String!]
+  nonSensitiveCredentials: [String!]!
+  endpointCredentials: [String!]!
   authScheme: String
 }
+
+"""
+Leverages the internal Python implementation of UUID (uuid.UUID) to provide native UUID objects
+in fields, resolvers and input.
+"""
+scalar UUID
 
 """An enumeration."""
 enum ApiDynamicSecretProviderChoices {
@@ -969,6 +1014,7 @@ type SecretLogsResponseType {
 enum MemberType {
   USER
   SERVICE
+  AGENT
 }
 
 type AuditLogsResponseType {
@@ -1052,6 +1098,15 @@ enum ApiAuditEventResourceTypeChoices {
 
   """LogStream"""
   STREAM
+
+  """Agent"""
+  AGENT
+
+  """AgentConnection"""
+  AGENT_CONN
+
+  """AgentRequest"""
+  AGENT_REQUEST
 
   """Organisation"""
   ORG
@@ -1658,6 +1713,337 @@ type LogStreamSourceType {
   description: String!
 }
 
+type AgentType {
+  id: String!
+  organisation: OrganisationType!
+  name: String!
+  harnessType: ApiAgentHarnessTypeChoices!
+  status: ApiAgentStatusChoices!
+  lastSeenAt: DateTime
+  createdBy: OrganisationMemberType
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  workflows: [AgentWorkflowType]!
+  memberships: [AgentMembershipType]!
+  tokens: [AgentTokenType]!
+  sessions: [AgentSessionType]!
+  canManageMembers: Boolean!
+  viewerWorkflowIds: [ID!]!
+  tokenCount: Int!
+  workflowCount: Int!
+  sessionCount: Int!
+  activeSessionCount: Int!
+}
+
+"""An enumeration."""
+enum ApiAgentHarnessTypeChoices {
+  """Claude Code"""
+  CLAUDE_CODE
+
+  """Codex"""
+  CODEX
+
+  """Cursor"""
+  CURSOR
+
+  """OpenCode"""
+  OPENCODE
+
+  """Other"""
+  OTHER
+}
+
+"""An enumeration."""
+enum ApiAgentStatusChoices {
+  """Active"""
+  ACTIVE
+
+  """Disabled"""
+  DISABLED
+}
+
+type AgentWorkflowType {
+  id: String!
+  organisation: OrganisationType!
+  agent: AgentType!
+  name: String!
+  contextMarkdown: String!
+  contextUpdatedAt: DateTime
+  contextUpdatedBy: OrganisationMemberType
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  grants: [AgentWorkflowGrantType!]!
+  expiredConnections: GenericScalar!
+}
+
+type AgentWorkflowGrantType {
+  id: String!
+  workflow: AgentWorkflowType!
+  connection: AgentConnectionType!
+  createdBy: OrganisationMemberType
+  expiresAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  app: AgentConnectionAppType
+  environments: [AgentConnectionEnvironmentType!]!
+  appRestricted: Boolean!
+  hiddenEnvironmentCount: Int!
+  temporaryAllows: GenericScalar!
+  access: GenericScalar
+}
+
+type AgentConnectionType {
+  id: String!
+  organisation: OrganisationType!
+  name: String!
+  serviceType: String!
+  config: GenericScalar!
+  authentication: ProviderCredentialsType
+  state: ApiAgentConnectionStateChoices!
+  hostRulesAuthoredBy: OrganisationMemberType
+  hostRulesApprovedBy: OrganisationMemberType
+  hostRulesVersion: String!
+  hostRulesApprovedVersion: String!
+  valueUpdatedAt: DateTime
+  valueUpdatedBy: OrganisationMemberType
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  app: AgentConnectionAppType
+  environments: [AgentConnectionEnvironmentType!]!
+  appRestricted: Boolean!
+  hiddenEnvironmentCount: Int!
+  definition: GenericScalar
+  encryptionPublicKey: String
+  keyVersion: Int
+  valueRevision: Int
+  takesPolicy: Boolean!
+  policy: GenericScalar!
+  managedPolicies: GenericScalar!
+}
+
+"""An enumeration."""
+enum ApiAgentConnectionStateChoices {
+  """Pending credentials"""
+  PENDING_CREDENTIALS
+
+  """Active"""
+  ACTIVE
+
+  """Disabled"""
+  DISABLED
+}
+
+"""The app an app Connection covers."""
+type AgentConnectionAppType {
+  id: ID!
+  name: String!
+  sseEnabled: Boolean!
+}
+
+"""One environment an app Connection covers."""
+type AgentConnectionEnvironmentType {
+  id: ID!
+  name: String!
+  envType: String!
+}
+
+type AgentMembershipType {
+  id: String!
+  agent: AgentType!
+  member: OrganisationMemberType!
+  assignedBy: OrganisationMemberType
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  workflows: [AgentWorkflowType!]!
+}
+
+type AgentTokenType {
+  id: String!
+  workflow: AgentWorkflowType!
+  name: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  deletedAt: DateTime
+  expiresAt: DateTime
+  lastUsedAt: DateTime
+}
+
+type AgentSessionType {
+  workflow: AgentWorkflowType!
+  sessionUid: String!
+  expiresAt: DateTime!
+  maxExpiresAt: DateTime
+  revokedAt: DateTime
+
+  """"""
+  configGeneration: BigInt!
+  clientInfo: GenericScalar
+  harnessLabel: String!
+  createdAt: DateTime!
+  lastSeenAt: DateTime!
+  id: String!
+  agent: AgentType!
+}
+
+type AgentRequestType {
+  id: String!
+  workflow: AgentWorkflowType!
+  connection: AgentConnectionType
+  grant: AgentWorkflowGrantType
+  kind: String!
+  credential: ProviderCredentialsType
+  title: String!
+  markdown: String!
+  durationSeconds: Int
+  serviceType: String
+  credentialProvider: String
+  credentialName: String!
+  status: String!
+  resolutionNote: String!
+  resolvedBy: OrganisationMemberType
+  resolvedAt: DateTime
+  expiresAt: DateTime
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  agent: AgentType!
+  reviewers: [AgentRequestReviewerType!]!
+  appRestricted: Boolean!
+  hiddenEnvironmentCount: Int!
+  progress: GenericScalar!
+  resolution: GenericScalar!
+  revision: String!
+  action: GenericScalar
+  appliedAction: GenericScalar
+  approval: GenericScalar
+  actionReview: GenericScalar
+  access: GenericScalar
+}
+
+"""A member asked to review a change request."""
+type AgentRequestReviewerType {
+  id: String!
+  member: OrganisationMemberType!
+  requestedBy: OrganisationMemberType
+  createdAt: DateTime!
+}
+
+type AgentRequestQueueType {
+  requests: [AgentRequestType!]!
+  pendingCount: Int!
+}
+
+type AgentEventPageType {
+  events: [AgentEventType]!
+  nextCursor: String
+  hasMore: Boolean!
+}
+
+type AgentEventType {
+  ingestSeq: ID!
+  eventId: String!
+  organisation: OrganisationType!
+  agent: AgentType
+  workflow: AgentWorkflowType
+  connection: AgentConnectionType
+  session: AgentSessionType
+  proxyCreatedAt: DateTime!
+  ingestedAt: DateTime!
+  eventType: String!
+  protocol: String!
+  method: String!
+  host: String!
+  port: Int
+  path: String!
+  provider: String!
+  statusCode: Int
+  proxyDecision: ApiAgentEventProxyDecisionChoices!
+  outcome: String!
+  latencyMs: Int
+  credentialAction: String!
+
+  """"""
+  bytesIn: BigInt!
+
+  """"""
+  bytesOut: BigInt!
+  reason: String!
+  detail: GenericScalar!
+}
+
+"""An enumeration."""
+enum ApiAgentEventProxyDecisionChoices {
+  """Allow"""
+  ALLOW
+
+  """Block"""
+  BLOCK
+
+  """Ask"""
+  ASK
+
+  """Authentication denied"""
+  AUTH_DENY
+
+  """Error"""
+  ERROR
+}
+
+type AgentServiceTemplateType {
+  serviceType: String!
+  displayName: String!
+  protocol: String!
+  provider: String
+  proxyOnly: Boolean!
+  hosts: GenericScalar!
+  hostRulesMode: String!
+  configSchema: GenericScalar!
+  injection: GenericScalar!
+  fields: GenericScalar!
+  environmentBindings: GenericScalar!
+  decoyFormat: GenericScalar!
+  credentialProviders: [String]!
+}
+
+"""A provider preset that pre-fills the custom HTTP Connection form."""
+type AgentConnectionPresetType {
+  id: ID!
+  name: String!
+  description: String!
+  docsUrl: String!
+  category: String!
+  hosts: GenericScalar!
+  hostsEditable: Boolean!
+  labels: GenericScalar!
+  definition: GenericScalar!
+}
+
+"""Organisation-wide Agent settings, with the bounds a change must keep."""
+type AgentSettingsType {
+  maxRequestDurationSeconds: Int!
+  defaultRequestDurationSeconds: Int!
+  minDurationSeconds: Int!
+  maxDurationSeconds: Int!
+  updatedAt: DateTime
+  updatedBy: OrganisationMemberType
+}
+
+"""One Agent Workflow's access to an app, through one app Connection."""
+type AppAgentAccessType {
+  id: ID!
+  agent: AgentResourceRefType!
+  workflow: AgentResourceRefType!
+  connection: AgentResourceRefType!
+  environments: [AgentConnectionEnvironmentType!]!
+  hiddenEnvironmentCount: Int!
+  access: GenericScalar!
+  expiresAt: DateTime
+}
+
+type AgentResourceRefType {
+  id: ID!
+  name: String!
+}
+
 type Mutation {
   createOrganisation(id: ID!, identityKey: String!, name: String!, wrappedKeyring: String!, wrappedRecovery: String!): CreateOrganisationMutation
   bulkInviteOrganisationMembers(invites: [InviteInput]!, orgId: ID!): BulkInviteOrganisationMembersMutation
@@ -1858,7 +2244,7 @@ type Mutation {
   toggleSyncActive(syncId: ID): ToggleSyncActive
   updateSyncAuthentication(credentialId: ID, syncId: ID): UpdateSyncAuthentication
   createProviderCredentials(credentials: JSONString, name: String, orgId: ID, provider: String): CreateProviderCredentials
-  updateProviderCredentials(credentialId: ID, credentials: JSONString, name: String): UpdateProviderCredentials
+  updateProviderCredentials(credentialId: ID!, credentials: JSONString!, expectedRevision: String!, name: String!): UpdateProviderCredentials
   deleteProviderCredentials(credentialId: ID): DeleteProviderCredentials
   createCloudflarePagesSync(credentialId: ID, deploymentId: ID, envId: ID, path: String, projectEnv: String, projectName: String): CreateCloudflarePagesSync
   createCloudflareWorkersSync(credentialId: ID, envId: ID, path: String, workerName: String): CreateCloudflareWorkersSync
@@ -1947,6 +2333,100 @@ type Mutation {
   deleteLogStream(streamId: ID!): DeleteLogStreamMutation
   testLogStreamConnection(credentialId: ID!, gzip: Boolean, organisationId: ID!, provider: String!, service: String, tags: String): TestLogStreamConnectionMutation
   retryLogStreamDelivery(deliveryEventId: ID!): RetryLogStreamDeliveryMutation
+  createAgent(defaultWorkflowName: String, harnessType: String!, name: String!, organisationId: ID!): CreateAgentMutation
+  updateAgent(agentId: ID!, harnessType: String, name: String, status: String): UpdateAgentMutation
+  deleteAgent(agentId: ID!): DeleteAgentMutation
+  assignAgentMember(agentId: ID!, memberId: ID!, workflowIds: [ID!]!): AssignAgentMemberMutation
+  updateAgentMemberWorkflows(membershipId: ID!, workflowIds: [ID!]!): UpdateAgentMemberWorkflowsMutation
+  removeAgentMember(membershipId: ID!): RemoveAgentMemberMutation
+  createAgentWorkflow(agentId: ID!, name: String!): CreateAgentWorkflowMutation
+  updateAgentWorkflow(name: String, workflowId: ID!): UpdateAgentWorkflowMutation
+  deleteAgentWorkflow(workflowId: ID!): DeleteAgentWorkflowMutation
+  createAgentConnection(authenticationId: ID!, config: GenericScalar, name: String!, organisationId: ID!, serviceType: String!): CreateAgentConnectionMutation
+  updateAgentConnection(authenticationId: ID, config: GenericScalar, connectionId: ID!, name: String): UpdateAgentConnectionMutation
+
+  """
+  Create a Connection for an HTTP service Phase has no integration for.
+  
+  The browser seals the secret to a new keypair, so it never arrives in the clear.
+  """
+  createCustomAgentConnection(definition: GenericScalar!, encryptionPublicKey: String!, name: String!, organisationId: ID!, sealedValue: String!, serverWrappedKey: String!): CreateCustomAgentConnectionMutation
+
+  """
+  Create a Connection to an app's secrets, for some of its environments.
+  
+  The member must reach the app and every environment, and hold the ``Secrets`` permissions.
+  """
+  createAgentAppConnection(appId: ID!, environmentIds: [ID!]!, name: String!, organisationId: ID!, policy: GenericScalar): CreateAgentAppConnectionMutation
+
+  """
+  Rename an app Connection or change the environments it covers.
+  
+  Each granted Workflow is held to the new environments from its next call.
+  """
+  updateAgentAppConnection(connectionId: ID!, environmentIds: [ID!], name: String): UpdateAgentAppConnectionMutation
+
+  """
+  Rename a custom Connection, change its definition, replace its secret, or any of these.
+  
+  A changed host or secret field set needs a new ``sealedValue``. The secret is never read back.
+  """
+  updateCustomAgentConnection(connectionId: ID!, definition: GenericScalar, name: String, sealedValue: String): UpdateCustomAgentConnectionMutation
+  allowAgentConnectionHost(connectionId: ID!, eventIngestSeq: ID!, expectedVersion: String!): AllowAgentConnectionHostMutation
+  approveAgentConnectionHostRules(connectionId: ID!, expectedVersion: String!): ApproveAgentConnectionHostRulesMutation
+  deleteAgentConnection(connectionId: ID!): DeleteAgentConnectionMutation
+
+  """
+  Give a Workflow a Connection, or change the grant it already has.
+  
+  A given ``expiresAt`` replaces the grant's expiry; an explicit null removes it.
+  """
+  grantAgentWorkflow(connectionId: ID!, expiresAt: String, workflowId: ID!): GrantAgentWorkflowMutation
+  revokeAgentWorkflowGrant(grantId: ID!): RevokeAgentWorkflowGrantMutation
+
+  """
+  Set the access policy of an HTTP Connection.
+  
+  ``policy`` is ``{version: 1, default, rules}``; null or an empty object clears it.
+  """
+  setAgentConnectionPolicy(connectionId: ID!, policy: GenericScalar): SetAgentConnectionPolicyMutation
+
+  """
+  End one temporary allow of a grant early.
+  
+  An id that is not among the grant's live allows is reported as not found.
+  """
+  removeAgentWorkflowGrantAllow(allowId: ID!, grantId: ID!): RemoveAgentWorkflowGrantAllowMutation
+
+  """Replace the markdown context an Agent reads for a Workflow."""
+  setAgentWorkflowContext(markdown: String!, workflowId: ID!): SetAgentWorkflowContextMutation
+
+  """
+  Change the organisation's Agent settings. Needs ``update`` on AgentRequests.
+  
+  Durations must be 300 to 2592000 seconds, with the default not above the maximum.
+  """
+  updateAgentSettings(defaultRequestDurationSeconds: Int, maxRequestDurationSeconds: Int, organisationId: ID!): UpdateAgentSettingsMutation
+  mintAgentToken(agentId: ID!, expiresAt: String, name: String!, workflowId: ID!): MintAgentTokenMutation
+  revokeAgentToken(tokenId: ID!): RevokeAgentTokenMutation
+  resolveAgentRequest(approved: Boolean!, expectedRevision: String!, requestId: ID!, resolutionNote: String): ResolveAgentRequestMutation
+
+  """
+  Choose who is asked to review a pending change request.
+  
+  Anyone who can read the request may ask, and each member asked must be able to approve it.
+  Asking only puts the request in front of them: anyone else who may approve it still can.
+  """
+  setAgentRequestReviewers(memberIds: [ID!]!, requestId: ID!): SetAgentRequestReviewersMutation
+  fulfillAgentRequest(credentialId: ID!, durationSeconds: Int, expectedCredentialRevision: String!, expectedRevision: String!, requestId: ID!, resolutionNote: String, untilRevoked: Boolean): FulfillAgentRequestMutation
+
+  """
+  Approve a request that carries a typed action, and carry the action out.
+  
+  ``inputs`` is never stored, for example a secret sealed in the reviewer's browser.
+  """
+  approveAgentRequestAction(action: GenericScalar, durationSeconds: Int, expectedRevision: String!, inputs: GenericScalar, requestId: ID!, resolutionNote: String, untilRevoked: Boolean): ApproveAgentRequestActionMutation
+  revokeAgentSession(sessionUid: String!): RevokeAgentSessionMutation
 }
 
 type CreateOrganisationMutation {
@@ -2770,4 +3250,193 @@ type TestLogStreamConnectionMutation {
 
 type RetryLogStreamDeliveryMutation {
   ok: Boolean
+}
+
+type CreateAgentMutation {
+  agent: AgentType!
+  defaultWorkflow: AgentWorkflowType!
+}
+
+type UpdateAgentMutation {
+  agent: AgentType!
+}
+
+type DeleteAgentMutation {
+  ok: Boolean!
+}
+
+type AssignAgentMemberMutation {
+  membership: AgentMembershipType!
+}
+
+type UpdateAgentMemberWorkflowsMutation {
+  membership: AgentMembershipType!
+}
+
+type RemoveAgentMemberMutation {
+  ok: Boolean!
+}
+
+type CreateAgentWorkflowMutation {
+  workflow: AgentWorkflowType!
+}
+
+type UpdateAgentWorkflowMutation {
+  workflow: AgentWorkflowType!
+}
+
+type DeleteAgentWorkflowMutation {
+  ok: Boolean!
+}
+
+type CreateAgentConnectionMutation {
+  connection: AgentConnectionType!
+}
+
+type UpdateAgentConnectionMutation {
+  connection: AgentConnectionType!
+}
+
+"""
+Create a Connection for an HTTP service Phase has no integration for.
+
+The browser seals the secret to a new keypair, so it never arrives in the clear.
+"""
+type CreateCustomAgentConnectionMutation {
+  connection: AgentConnectionType!
+}
+
+"""
+Create a Connection to an app's secrets, for some of its environments.
+
+The member must reach the app and every environment, and hold the ``Secrets`` permissions.
+"""
+type CreateAgentAppConnectionMutation {
+  connection: AgentConnectionType!
+}
+
+"""
+Rename an app Connection or change the environments it covers.
+
+Each granted Workflow is held to the new environments from its next call.
+"""
+type UpdateAgentAppConnectionMutation {
+  connection: AgentConnectionType!
+}
+
+"""
+Rename a custom Connection, change its definition, replace its secret, or any of these.
+
+A changed host or secret field set needs a new ``sealedValue``. The secret is never read back.
+"""
+type UpdateCustomAgentConnectionMutation {
+  connection: AgentConnectionType!
+}
+
+type AllowAgentConnectionHostMutation {
+  connection: AgentConnectionType!
+  hostRule: GenericScalar!
+  approvalRequired: Boolean!
+}
+
+type ApproveAgentConnectionHostRulesMutation {
+  connection: AgentConnectionType!
+}
+
+type DeleteAgentConnectionMutation {
+  ok: Boolean!
+}
+
+"""
+Give a Workflow a Connection, or change the grant it already has.
+
+A given ``expiresAt`` replaces the grant's expiry; an explicit null removes it.
+"""
+type GrantAgentWorkflowMutation {
+  grant: AgentWorkflowGrantType!
+}
+
+type RevokeAgentWorkflowGrantMutation {
+  ok: Boolean!
+}
+
+"""
+Set the access policy of an HTTP Connection.
+
+``policy`` is ``{version: 1, default, rules}``; null or an empty object clears it.
+"""
+type SetAgentConnectionPolicyMutation {
+  connection: AgentConnectionType!
+}
+
+"""
+End one temporary allow of a grant early.
+
+An id that is not among the grant's live allows is reported as not found.
+"""
+type RemoveAgentWorkflowGrantAllowMutation {
+  grant: AgentWorkflowGrantType!
+}
+
+"""Replace the markdown context an Agent reads for a Workflow."""
+type SetAgentWorkflowContextMutation {
+  workflow: AgentWorkflowType!
+}
+
+"""
+Change the organisation's Agent settings. Needs ``update`` on AgentRequests.
+
+Durations must be 300 to 2592000 seconds, with the default not above the maximum.
+"""
+type UpdateAgentSettingsMutation {
+  settings: AgentSettingsType!
+}
+
+type MintAgentTokenMutation {
+  minted: MintedAgentTokenType!
+}
+
+type MintedAgentTokenType {
+  token: AgentTokenType!
+  fullToken: String!
+  bearerToken: String!
+}
+
+type RevokeAgentTokenMutation {
+  token: AgentTokenType!
+}
+
+type ResolveAgentRequestMutation {
+  request: AgentRequestType!
+}
+
+"""
+Choose who is asked to review a pending change request.
+
+Anyone who can read the request may ask, and each member asked must be able to approve it.
+Asking only puts the request in front of them: anyone else who may approve it still can.
+"""
+type SetAgentRequestReviewersMutation {
+  request: AgentRequestType!
+}
+
+type FulfillAgentRequestMutation {
+  request: AgentRequestType!
+  connection: AgentConnectionType!
+  grant: AgentWorkflowGrantType!
+  runtimeAction: String!
+}
+
+"""
+Approve a request that carries a typed action, and carry the action out.
+
+``inputs`` is never stored, for example a secret sealed in the reviewer's browser.
+"""
+type ApproveAgentRequestActionMutation {
+  request: AgentRequestType!
+  runtimeAction: String!
+}
+
+type RevokeAgentSessionMutation {
+  session: AgentSessionType!
 }

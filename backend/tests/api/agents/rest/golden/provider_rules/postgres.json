@@ -1,0 +1,11 @@
+{
+  "credential_environment": [
+    "DATABASE_URL",
+    "PGPASSFILE",
+    "PGPASSWORD",
+    "PGSERVICE",
+    "PGSERVICEFILE",
+    "POSTGRESQL_URL",
+    "POSTGRES_URL"
+  ]
+}

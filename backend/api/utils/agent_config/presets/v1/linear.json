@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "linear",
+  "name": "Linear",
+  "description": "The Linear GraphQL API with a personal API key.",
+  "docsUrl": "https://linear.app/developers/graphql",
+  "category": "project-management",
+  "hostsEditable": false,
+  "labels": {
+    "token": "Personal API key"
+  },
+  "definition": {
+    "specVersion": 1,
+    "hosts": [
+      {
+        "match": "exact",
+        "value": "api.linear.app",
+        "port": 443,
+        "path": "/graphql"
+      }
+    ],
+    "fields": [
+      {
+        "name": "token",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        },
+        "env": "LINEAR_API_KEY",
+        "decoyPrefix": "lin_api_"
+      }
+    ],
+    "injections": [
+      {
+        "type": "header",
+        "name": "Authorization",
+        "field": "token",
+        "whenAbsent": "attach"
+      }
+    ],
+    "preset": "headers"
+  }
+}

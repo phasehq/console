@@ -1,0 +1,437 @@
+'use client'
+
+import clsx from 'clsx'
+import Link from 'next/link'
+import { ReactNode } from 'react'
+import { FaArrowRight, FaBan, FaExclamationTriangle, FaKey, FaPlug, FaRobot } from 'react-icons/fa'
+import { FaArrowRotateRight } from 'react-icons/fa6'
+import type { IconType } from 'react-icons'
+import { Button } from '@/components/common/Button'
+import Spinner from '@/components/common/Spinner'
+import { EmptyState } from '@/components/common/EmptyState'
+import { AgentHarnessTile, agentHarnessMeta } from '@/components/agents/AgentBrandIcons'
+import { agentWordLabel, isAgentActive } from '@/components/agents/AgentEnums'
+import { agentRequestPath } from '@/utils/agents/routes'
+import { relativeTimeFromDates } from '@/utils/time'
+
+export const humanizeAgentValue = (value?: string | null) => {
+  if (!value) return 'Unknown'
+  if (value.toLowerCase() === 'app_secret') return 'App secrets'
+  return value.toLowerCase().split('_').map(agentWordLabel).join(' ')
+}
+
+export const formatAgentDate = (value?: string | null) => {
+  if (!value) return 'Never'
+  const date = new Date(value)
+  return Number.isNaN(date.valueOf()) ? 'Unknown' : date.toLocaleString()
+}
+
+/** A relative time ("5 minutes ago", "in 3 days") with the full timestamp on hover. */
+export function AgentTime({
+  value,
+  fallback = 'Never',
+}: {
+  value?: string | null
+  fallback?: string
+}) {
+  if (!value) return <>{fallback}</>
+  const date = new Date(value)
+  if (Number.isNaN(date.valueOf())) return <>Unknown</>
+  return (
+    <time dateTime={date.toISOString()} title={date.toLocaleString()}>
+      {relativeTimeFromDates(date)}
+    </time>
+  )
+}
+
+const HOUR = 60 * 60 * 1000
+
+/** A pending request's deadline, red in its last day. */
+export function AgentRequestDeadline({
+  request,
+  now,
+}: {
+  request: { createdAt: string; expiresAt?: string | null }
+  now: number
+}) {
+  const deadline = Date.parse(request.expiresAt || '')
+  if (Number.isNaN(deadline))
+    return (
+      <>
+        Requested <AgentTime value={request.createdAt} />
+      </>
+    )
+  if (deadline <= now)
+    return (
+      <>
+        Expired <AgentTime value={request.expiresAt} />
+      </>
+    )
+  return (
+    <span
+      className={clsx(deadline - now < 24 * HOUR && 'font-semibold text-red-600 dark:text-red-400')}
+    >
+      Expires <AgentTime value={request.expiresAt} />
+    </span>
+  )
+}
+
+/** A key for a credential update, a plug for a Connection setup. */
+export function AgentRequestKindIcon({ kind }: { kind: string }) {
+  return (
+    <span className="shrink-0 text-amber-600 dark:text-amber-400">
+      {kind === 'CREDENTIAL_UPDATE' ? <FaKey aria-hidden="true" /> : <FaPlug aria-hidden="true" />}
+    </span>
+  )
+}
+
+/** Opens a request in the Requests section. A text link, so request lists stay light. */
+export function AgentRequestReviewLink({ team, requestId }: { team: string; requestId: string }) {
+  return (
+    <Link href={agentRequestPath(team, requestId)} className="shrink-0">
+      <Button variant="textWarning" icon={FaArrowRight} iconPosition="right">
+        Review
+      </Button>
+    </Link>
+  )
+}
+
+/** Row actions hide until hover or keyboard focus only where the pointer can hover: touch screens always show them. */
+export const agentRowActions = {
+  row: 'transition ease [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100',
+  workflow:
+    'transition ease [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-within:opacity-100 [@media(hover:hover)]:group-hover/workflow:opacity-100',
+  grant:
+    'transition ease [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-within:opacity-100 [@media(hover:hover)]:group-hover/grant:opacity-100',
+}
+
+/**
+ * The Agents card surface. The outline is a border, not an inset ring, so a table
+ * inside the card cannot paint over it.
+ */
+export const agentCardSurface = (
+  highlight: false | 'selected' | 'attention' = false,
+  { opaque = false }: { opaque?: boolean } = {}
+) =>
+  clsx(
+    'rounded-xl border',
+    opaque ? 'bg-zinc-100 dark:bg-neutral-900' : 'bg-zinc-100 dark:bg-white/2.5',
+    highlight === 'selected' && 'border-emerald-500/50 ring-2 ring-emerald-500/10',
+    highlight === 'attention' && 'border-amber-500/60 ring-2 ring-amber-500/15',
+    !highlight && 'border-neutral-500/20'
+  )
+
+export const isActiveSession = (session: { revokedAt?: string | null; expiresAt: string }) =>
+  !session.revokedAt && new Date(session.expiresAt).valueOf() > Date.now()
+
+export function AgentBadge({
+  children,
+  tone = 'neutral',
+}: {
+  children: ReactNode
+  tone?: 'neutral' | 'green' | 'red' | 'amber' | 'blue'
+}) {
+  const tones = {
+    neutral: 'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400',
+    green: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    red: 'bg-red-500/10 text-red-700 dark:text-red-400',
+    amber: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+    blue: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
+  }
+  return (
+    <span
+      className={clsx(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium whitespace-nowrap',
+        tones[tone]
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+export function AgentIdentity({
+  agent,
+  href,
+}: {
+  agent: { name: string; harnessType: string; status: string }
+  href: string
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <AgentHarnessTile harnessType={agent.harnessType} />
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <Link href={href} className="truncate font-medium hover:text-emerald-500">
+            {agent.name}
+          </Link>
+          {/* Active is the norm, so only an Agent that is not gets a badge. */}
+          {!isAgentActive(agent.status) && (
+            <AgentBadge tone="red">{humanizeAgentValue(agent.status)}</AgentBadge>
+          )}
+        </div>
+        <div className="text-2xs text-neutral-500">{agentHarnessMeta(agent.harnessType).label}</div>
+      </div>
+    </div>
+  )
+}
+
+export function AgentPanel({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string
+  description?: string
+  action?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <section className={clsx(agentCardSurface(), 'overflow-hidden')}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-b border-neutral-500/20">
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</h2>
+          {description && <p className="text-xs text-neutral-500 mt-0.5">{description}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+export function AgentLoading() {
+  return (
+    <div className="flex min-h-56 items-center justify-center" role="status" aria-label="Loading">
+      <Spinner size="md" />
+    </div>
+  )
+}
+
+export function AgentError({ message, retry }: { message?: string; retry?: () => void }) {
+  return (
+    <EmptyState
+      title="Unable to load AI Agents"
+      subtitle={message || 'The Console could not load this data. Try again.'}
+      graphic={
+        <div className="text-5xl text-red-500/70">
+          <FaExclamationTriangle />
+        </div>
+      }
+    >
+      {retry ? (
+        <Button type="button" variant="secondary" icon={FaArrowRotateRight} onClick={retry}>
+          Retry
+        </Button>
+      ) : (
+        <></>
+      )}
+    </EmptyState>
+  )
+}
+
+export function AgentAccessDenied({ subtitle }: { subtitle: string }) {
+  return (
+    <EmptyState
+      title="Access restricted"
+      subtitle={subtitle}
+      graphic={
+        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+          <FaBan />
+        </div>
+      }
+    >
+      <></>
+    </EmptyState>
+  )
+}
+
+export function AgentSkeletonBlock({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={clsx('animate-pulse rounded-md bg-neutral-500/10', className)}
+    />
+  )
+}
+
+export function AgentSearchSkeleton() {
+  return (
+    <div className="flex w-full max-w-sm items-center gap-2 rounded-md bg-zinc-100 px-2 py-2.5 dark:bg-zinc-800">
+      <AgentSkeletonBlock className="size-3.5 rounded-full" />
+      <AgentSkeletonBlock className="h-3 w-48" />
+    </div>
+  )
+}
+
+export function AgentCardSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={clsx(agentCardSurface(), className)}>
+      <div className="flex items-center gap-2.5 p-3">
+        <AgentSkeletonBlock className="size-9 rounded-lg" />
+        <div className="flex-1 space-y-1.5">
+          <AgentSkeletonBlock className="h-3.5 w-2/5" />
+          <AgentSkeletonBlock className="h-2.5 w-3/5" />
+        </div>
+      </div>
+      <div className="space-y-1.5 border-t border-neutral-500/10 px-3 py-2.5">
+        <AgentSkeletonBlock className="h-2.5 w-16" />
+        <AgentSkeletonBlock className="h-8 w-full rounded-lg" />
+      </div>
+    </div>
+  )
+}
+
+export function AgentTableSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div role="status" aria-label="Loading" className="divide-y divide-zinc-500/40">
+      <div className="py-3">
+        <AgentSkeletonBlock className="h-3 w-40" />
+      </div>
+      <div className="divide-y divide-zinc-500/20">
+        {Array.from({ length: rows }).map((_, index) => (
+          <div key={index} className="flex items-center gap-4 py-2">
+            <div className="flex w-1/4 items-center gap-2.5">
+              <AgentSkeletonBlock className="size-9 shrink-0 rounded-lg" />
+              <AgentSkeletonBlock className="h-3.5 flex-1" />
+            </div>
+            <AgentSkeletonBlock className="h-3 w-1/5" />
+            <AgentSkeletonBlock className="h-3 w-1/6" />
+            <AgentSkeletonBlock className="ml-auto h-7 w-20" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function AgentRequestsSkeleton({ cards = 2 }: { cards?: number }) {
+  return (
+    <div role="status" aria-label="Loading" className="max-w-3xl space-y-3">
+      {Array.from({ length: cards }).map((_, index) => (
+        <div key={index} className="overflow-hidden rounded-xl border border-neutral-500/20">
+          <div className="flex items-center gap-2.5 border-b border-neutral-500/20 bg-neutral-500/[0.025] px-4 py-3">
+            <AgentSkeletonBlock className="size-9 rounded-lg" />
+            <div className="flex-1 space-y-1.5">
+              <AgentSkeletonBlock className="h-3.5 w-1/3" />
+              <AgentSkeletonBlock className="h-2.5 w-1/2" />
+            </div>
+            <AgentSkeletonBlock className="h-8 w-24 rounded-full" />
+          </div>
+          <div className="space-y-3 px-4 py-3">
+            <AgentSkeletonBlock className="h-16 w-full rounded-lg" />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <AgentSkeletonBlock className="h-8" />
+              <AgentSkeletonBlock className="h-8" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function AgentMeshSkeleton() {
+  return (
+    <div role="status" aria-label="Loading" className="space-y-4">
+      <AgentSearchSkeleton />
+      <div className="overflow-hidden rounded-xl border border-neutral-500/10 bg-[radial-gradient(circle,rgba(113,113,122,0.18)_1px,transparent_1px)] p-6 [background-size:22px_22px]">
+        <div className="flex items-start gap-14">
+          {[3, 2, 2].map((cards, columnIndex) => (
+            <div
+              key={columnIndex}
+              className={clsx('shrink-0 space-y-4', columnIndex === 0 ? 'w-[340px]' : 'w-[300px]')}
+            >
+              <div className="flex min-h-[38px] items-center justify-between gap-2">
+                <AgentSkeletonBlock className="h-4 w-24" />
+                <AgentSkeletonBlock className="h-9 w-32 rounded-full" />
+              </div>
+              {Array.from({ length: cards }).map((_, cardIndex) => (
+                <AgentCardSkeleton key={cardIndex} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function AgentDetailSkeleton() {
+  return (
+    <div role="status" aria-label="Loading" className="space-y-5">
+      <div className="flex items-center gap-3">
+        <AgentSkeletonBlock className="size-10 rounded-lg" />
+        <div className="space-y-1.5">
+          <AgentSkeletonBlock className="h-4 w-48" />
+          <AgentSkeletonBlock className="h-3 w-32" />
+        </div>
+      </div>
+      <AgentSkeletonBlock className="h-8 w-72" />
+      <AgentSkeletonBlock className="h-40 w-full rounded-xl" />
+      <AgentSkeletonBlock className="h-40 w-full rounded-xl" />
+    </div>
+  )
+}
+
+export function AgentEmpty({
+  title,
+  subtitle,
+  icon: Icon = FaRobot,
+  children,
+}: {
+  title: string
+  subtitle: ReactNode
+  icon?: IconType
+  children?: ReactNode
+}) {
+  return (
+    <EmptyState
+      title={title}
+      subtitle={subtitle}
+      graphic={
+        <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
+          <Icon />
+        </div>
+      }
+    >
+      {children || <></>}
+    </EmptyState>
+  )
+}
+
+/**
+ * Section header, rendered in every state so the page does not jump.
+ * The primary action sits top-right only with content; when empty it moves to the empty state.
+ */
+export function AgentPageHeader({
+  title,
+  description,
+  action,
+}: {
+  title: string
+  description: string
+  action?: ReactNode
+}) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{title}</h2>
+        <p className="text-sm text-neutral-500 mt-0.5 max-w-3xl">{description}</p>
+      </div>
+      {action}
+    </div>
+  )
+}
+
+/**
+ * Return the node for the slot that owns a section's primary action. A caller renders
+ * it once, so it cannot appear in both the header and the empty state.
+ */
+export function agentPrimaryAction(action: ReactNode, hasContent: boolean) {
+  return {
+    header: hasContent ? action : undefined,
+    empty: hasContent ? undefined : action,
+  }
+}

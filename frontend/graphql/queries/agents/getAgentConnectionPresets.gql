@@ -1,0 +1,13 @@
+query GetAgentConnectionPresets($organisationId: ID!) {
+  agentConnectionPresets(organisationId: $organisationId) {
+    id
+    name
+    description
+    docsUrl
+    category
+    hosts
+    hostsEditable
+    labels
+    definition
+  }
+}

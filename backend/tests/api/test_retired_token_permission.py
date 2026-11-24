@@ -16,11 +16,11 @@ from api.utils.access.roles import (
 
 
 EXPECTED_VERSIONS = {
-    "Owner": 3,
-    "Admin": 3,
-    "Manager": 3,
-    "Developer": 2,
-    "Service": 2,
+    "Owner": 4,
+    "Admin": 4,
+    "Manager": 4,
+    "Developer": 3,
+    "Service": 3,
 }
 
 def _owner_member():
@@ -174,6 +174,7 @@ def test_effective_policy_omits_retired_keys():
     assert get_role_effective_policy(_legacy_role()) == (
         {"Roles": ["read"]},
         {"Secrets": ["read"]},
+        {},
         False,
     )
 
@@ -237,3 +238,14 @@ def test_create_mutation_rejects_legacy_policy(
         )
 
     mock_role_model.objects.create.assert_not_called()
+
+
+def test_prune_drops_retired_agent_permission_keys():
+    policy = {
+        "permissions": {"Agents": ["read"]},
+        "agent_permissions": {"AgentWorkflows": ["read"], "Retired": ["read"]},
+    }
+
+    assert prune_retired_permissions(policy)["agent_permissions"] == {
+        "AgentWorkflows": ["read"]
+    }

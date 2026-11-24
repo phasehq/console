@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "service_type": "github",
+  "display_name": "GitHub",
+  "provider": "github",
+  "protocol": "http",
+  "hosts": [
+    {"match": "exact", "value": "api.github.com", "port": 443}
+  ],
+  "host_rules_mode": "credential_endpoint",
+  "config_schema": [{"id": "hosts", "input_type": "host_rules", "required": true}],
+  "injection": {
+    "action": "set_header",
+    "name": "Authorization",
+    "value_format": "Bearer {value}",
+    "value_formats": ["token {value}"],
+    "value_from": {"source": "credential", "field": "token"},
+    "when_absent": "attach"
+  },
+  "fields": {"token": {"class": "secret"}},
+  "decoy_format": {"token": "ghp_{rand:alnum:36}"},
+  "environment_bindings": [
+    {"name": "GITHUB_TOKEN", "action": "set", "source": "decoy", "source_field": "token", "sensitive": true},
+    {"name": "GH_TOKEN", "action": "set", "source": "decoy", "source_field": "token", "sensitive": true},
+    {"name": "GH_ENTERPRISE_TOKEN", "action": "set", "source": "decoy", "source_field": "token", "sensitive": true},
+    {"name": "GITHUB_ENTERPRISE_TOKEN", "action": "set", "source": "decoy", "source_field": "token", "sensitive": true}
+  ],
+  "credential_providers": ["github"],
+  "client_matchers": [{"kind": "executable", "values": ["gh"]}],
+  "context_template": "The GitHub API through the Phase proxy. GITHUB_TOKEN and GH_TOKEN, and GH_ENTERPRISE_TOKEN and GITHUB_ENTERPRISE_TOKEN for an Enterprise Server, hold a placeholder; the proxy puts the live token in the Authorization header in its place. A request that carries no Authorization header gets the live token attached. A GraphQL call is a POST, so this Connection's access rules count it as a create whether it reads or writes.",
+  "credential_environment": [
+    "GH_ENTERPRISE_TOKEN",
+    "GH_TOKEN",
+    "GITHUB_ENTERPRISE_TOKEN",
+    "GITHUB_TOKEN"
+  ],
+  "secret_guard": {
+    "paths": [
+      {
+        "method": "POST",
+        "pattern": "/app/installations/*/access_tokens",
+        "operation": "GitHub App installation access token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/app/installations/*/access_tokens",
+        "operation": "GitHub App installation access token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v3/app/installations/*/access_tokens",
+        "operation": "GitHub App installation access token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/repos/*/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/repos/*/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v3/repos/*/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/repos/*/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/repos/*/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v3/repos/*/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/orgs/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/orgs/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v3/orgs/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/orgs/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/orgs/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v3/orgs/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/enterprises/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/enterprises/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v3/enterprises/*/actions/runners/registration-token",
+        "operation": "GitHub Actions runner registration token"
+      },
+      {
+        "method": "POST",
+        "pattern": "/enterprises/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/enterprises/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v3/enterprises/*/actions/runners/generate-jitconfig",
+        "operation": "GitHub Actions runner just-in-time configuration"
+      },
+      {
+        "method": "POST",
+        "pattern": "/repos/*/*/keys",
+        "operation": "GitHub repository deploy key"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/repos/*/*/keys",
+        "operation": "GitHub repository deploy key"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v3/repos/*/*/keys",
+        "operation": "GitHub repository deploy key"
+      },
+      {
+        "method": "POST",
+        "pattern": "/user/keys",
+        "operation": "GitHub user SSH key"
+      },
+      {
+        "method": "POST",
+        "pattern": "/api/v3/user/keys",
+        "operation": "GitHub user SSH key"
+      },
+      {
+        "method": "POST",
+        "pattern": "/*/api/v3/user/keys",
+        "operation": "GitHub user SSH key"
+      }
+    ]
+  },
+  "credential_fields": {
+    "token": "access_token"
+  }
+}

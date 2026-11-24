@@ -4,7 +4,8 @@ import { Disclosure, Transition } from '@headlessui/react'
 import { FaChevronRight } from 'react-icons/fa'
 import clsx from 'clsx'
 import { relativeTimeFromDates } from '@/utils/time'
-import { EVENT_TYPE_LABELS, LogField, JsonBlock, ProviderLogo } from './shared'
+import { JsonBlock } from '@/components/common/JsonBlock'
+import { EVENT_TYPE_LABELS, LogField, ProviderLogo } from './shared'
 
 export function SCIMEventRow({ event }: { event: any }) {
   const eventMeta = EVENT_TYPE_LABELS[event.eventType] || {

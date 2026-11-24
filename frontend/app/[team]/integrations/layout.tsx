@@ -56,7 +56,11 @@ export default function AccessLayout(props: {
             <Tab as={Fragment} key={tab.name}>
               {({ selected }) => (
                 <Link
-                  href={`/${params.team}/integrations/${tab.link}`}
+                  href={
+                    tab.link
+                      ? `/${params.team}/integrations/${tab.link}`
+                      : `/${params.team}/integrations`
+                  }
                   className={clsx(
                     'p-2 text-xs font-medium border-b -mb-px focus:outline-none transition ease',
                     selected

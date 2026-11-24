@@ -1,6 +1,7 @@
 from api.utils.access.permissions import user_is_org_member
 from api.models import (
     ActivatedPhaseLicense,
+    Agent,
     App,
     Organisation,
     OrganisationMember,
@@ -19,7 +20,8 @@ def resolve_organisation_plan(self, info, organisation_id):
 
         organisation = Organisation.objects.get(id=organisation_id)
 
-        plan = PLAN_CONFIG[organisation.plan]
+        # Copy: the counts below are per organisation, and PLAN_CONFIG is shared.
+        plan = dict(PLAN_CONFIG[organisation.plan])
 
         plan["seats_used"] = {
             "users": (
@@ -58,6 +60,10 @@ def resolve_organisation_plan(self, info, organisation_id):
         plan["seat_limit"] = seat_limit
 
         plan["app_count"] = App.objects.filter(
+            organisation=organisation, deleted_at=None
+        ).count()
+
+        plan["agent_count"] = Agent.objects.filter(
             organisation=organisation, deleted_at=None
         ).count()
 

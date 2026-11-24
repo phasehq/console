@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "id": "sentry",
+  "name": "Sentry",
+  "description": "The Sentry API with an auth token. Change the hosts for a self-hosted instance.",
+  "docsUrl": "https://docs.sentry.io/api/auth/",
+  "category": "observability",
+  "hostsEditable": true,
+  "labels": {
+    "token": "Auth token"
+  },
+  "definition": {
+    "specVersion": 1,
+    "hosts": [
+      {
+        "match": "exact",
+        "value": "sentry.io",
+        "port": 443,
+        "path": "/api/*"
+      },
+      {
+        "match": "suffix",
+        "value": ".sentry.io",
+        "port": 443,
+        "path": "/api/*"
+      }
+    ],
+    "fields": [
+      {
+        "name": "token",
+        "kind": "secret",
+        "source": {
+          "type": "sealed"
+        },
+        "env": "SENTRY_AUTH_TOKEN",
+        "decoyPrefix": "sntrys_"
+      }
+    ],
+    "injections": [
+      {
+        "type": "header",
+        "name": "Authorization",
+        "prefix": "Bearer ",
+        "field": "token",
+        "whenAbsent": "attach"
+      }
+    ],
+    "preset": "bearer"
+  }
+}

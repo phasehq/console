@@ -1,4 +1,4 @@
-from api.auth import PhaseTokenAuthentication
+from api.auth import PhaseTokenAuthentication, SecretsAPIAuthentication
 from api.models import (
     DynamicSecret,
     DynamicSecretLease,
@@ -23,6 +23,11 @@ from api.utils.access.permissions import (
     user_has_permission,
 )
 from api.utils.audit_logging import log_secret_event, log_secret_events_bulk
+from api.utils.agent_app_access import AgentSecretsReader
+from api.views.agents.app_secrets import (
+    AgentSecretsMixin,
+    authorize_agent_secrets_call,
+)
 
 from api.utils.crypto import encrypt_asymmetric, validate_encrypted_string
 from api.utils.rest import (
@@ -638,8 +643,10 @@ class E2EESecretsView(APIView):
         return Response(status=status.HTTP_200_OK)
 
 
-class PublicSecretsView(APIView):
-    authentication_classes = [PhaseTokenAuthentication]
+class PublicSecretsView(AgentSecretsMixin, APIView):
+    # Agent tokens are accepted here, and only here among the secrets
+    # endpoints; an Agent call is decided from its Workflow's app Connections.
+    authentication_classes = [SecretsAPIAuthentication]
     permission_classes = [IsAuthenticated, IsIPAllowed]
     throttle_classes = [PlanBasedRateThrottle]
     renderer_classes = [
@@ -648,6 +655,10 @@ class PublicSecretsView(APIView):
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
+
+        if request.auth.get("auth_type") == "Agent":
+            authorize_agent_secrets_call(request)
+            return
 
         # Determine the action based on the request method
         action = METHOD_TO_ACTION.get(request.method)
@@ -678,6 +689,62 @@ class PublicSecretsView(APIView):
                 f"You don't have permission to {action} secrets in this environment."
             )
 
+    def _reference_account(self, request):
+        """Whose access a secret reference is checked against."""
+
+        if request.auth.get("auth_type") == "Agent":
+            return AgentSecretsReader(request.auth["workflow"])
+        account, _ = get_request_principal(request)
+        return account
+
+    def _serializer_context(self, request, env, account, *, raw=False):
+        context = {
+            "org_member": request.auth["org_member"],
+            "account": account,
+            "sse": True,
+            "crypto_context": get_environment_crypto_context(env),
+            "context_cache": {},
+        }
+        if request.auth.get("auth_type") == "Agent":
+            # Values as stored, references left unresolved.
+            context["raw"] = raw
+            # A write must not read back what the Workflow may not read.
+            context["hide_values"] = not account.can_read_environment(env.id)
+        return context
+
+    def _written_response(self, request, env, secrets):
+        """What a write answers with: the secrets as they now are or, for an
+        Agent that may not read this environment, their ids alone. A key name,
+        path or tag it did not send is as unread to it as a value."""
+
+        account = self._reference_account(request)
+        is_agent = request.auth.get("auth_type") == "Agent"
+        if is_agent and not account.can_read_environment(env.id):
+            return Response(
+                [{"id": str(secret.id)} for secret in secrets],
+                status=status.HTTP_200_OK,
+            )
+        serializer = SecretSerializer(
+            secrets,
+            many=True,
+            context=self._serializer_context(request, env, account),
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def _log_events(self, request, secrets, event_type, ip_address, user_agent):
+        auth = request.auth
+        log_secret_events_bulk(
+            secrets,
+            event_type,
+            auth["org_member"],
+            auth["service_account_token"],
+            ip_address,
+            user_agent,
+            agent=auth.get("agent"),
+            agent_token=auth.get("agent_token"),
+            agent_workflow=auth.get("workflow"),
+        )
+
     def get(self, request, *args, **kwargs):
         env = request.auth["environment"]
 
@@ -689,7 +756,7 @@ class PublicSecretsView(APIView):
 
         secrets_filter = {"environment": env, "deleted_at": None}
 
-        account, _ = get_request_principal(request)
+        account = self._reference_account(request)
 
         # Filter by key
         key = request.GET.get("key")
@@ -718,29 +785,17 @@ class PublicSecretsView(APIView):
             Secret.objects.filter(**secrets_filter).prefetch_related('tags')
         )
 
-        log_secret_events_bulk(
-            secrets,
-            SecretEvent.READ,
-            request.auth["org_member"],
-            request.auth["service_account_token"],
-            ip_address,
-            user_agent,
-        )
-
-        # Pre-compute crypto context for N+1 optimization
-        crypto_context = get_environment_crypto_context(env)
-        context_cache = {}
+        self._log_events(request, secrets, SecretEvent.READ, ip_address, user_agent)
 
         serializer = SecretSerializer(
             secrets,
             many=True,
-            context={
-                "org_member": request.auth["org_member"],
-                "account": account,
-                "sse": True,
-                "crypto_context": crypto_context,
-                "context_cache": context_cache,
-            },
+            context=self._serializer_context(
+                request,
+                env,
+                account,
+                raw=request.GET.get("raw", "false").lower() == "true",
+            ),
         )
 
         include_dynamic_secrets = (
@@ -1004,34 +1059,11 @@ class PublicSecretsView(APIView):
             if created_secrets:
                 env.save()
 
-        log_secret_events_bulk(
-            created_secrets,
-            SecretEvent.CREATE,
-            request.auth["org_member"],
-            request.auth["service_account_token"],
-            ip_address,
-            user_agent,
+        self._log_events(
+            request, created_secrets, SecretEvent.CREATE, ip_address, user_agent
         )
 
-        # Pre-compute crypto context for N+1 optimization
-        crypto_context = get_environment_crypto_context(env)
-        context_cache = {}
-
-        account, _ = get_request_principal(request)
-
-        serializer = SecretSerializer(
-            created_secrets,
-            many=True,
-            context={
-                "org_member": request.auth["org_member"],
-                "account": account,
-                "sse": True,
-                "crypto_context": crypto_context,
-                "context_cache": context_cache,
-            },
-        )
-
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return self._written_response(request, env, created_secrets)
 
     def put(self, request, *args, **kwargs):
 
@@ -1216,34 +1248,11 @@ class PublicSecretsView(APIView):
             if updated_secrets:
                 env.save()
 
-        log_secret_events_bulk(
-            updated_secrets,
-            SecretEvent.UPDATE,
-            request.auth["org_member"],
-            request.auth["service_account_token"],
-            ip_address,
-            user_agent,
+        self._log_events(
+            request, updated_secrets, SecretEvent.UPDATE, ip_address, user_agent
         )
 
-        # Pre-compute crypto context for N+1 optimization
-        crypto_context = get_environment_crypto_context(env)
-        context_cache = {}
-
-        account, _ = get_request_principal(request)
-
-        serializer = SecretSerializer(
-            updated_secrets,
-            many=True,
-            context={
-                "org_member": request.auth["org_member"],
-                "account": account,
-                "sse": True,
-                "crypto_context": crypto_context,
-                "context_cache": context_cache,
-            },
-        )
-
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return self._written_response(request, env, updated_secrets)
 
     def delete(self, request, *args, **kwargs):
 
@@ -1311,13 +1320,8 @@ class PublicSecretsView(APIView):
             if deleted_secrets:
                 env.save()
 
-        log_secret_events_bulk(
-            deleted_secrets,
-            SecretEvent.DELETE,
-            request.auth["org_member"],
-            request.auth["service_account_token"],
-            ip_address,
-            user_agent,
+        self._log_events(
+            request, deleted_secrets, SecretEvent.DELETE, ip_address, user_agent
         )
 
         n = len(secrets_to_delete)

@@ -1,0 +1,15 @@
+query GetAgentRequestReviewerCandidates($organisationId: ID!, $requestId: ID!) {
+  agentRequestReviewerCandidates(organisationId: $organisationId, requestId: $requestId) {
+    id
+    fullName
+    email
+    avatarUrl
+    role {
+      id
+      name
+      description
+      permissions
+      color
+    }
+  }
+}

@@ -1,0 +1,14 @@
+query GetAgentGlobalAccessMembers($organisationId: ID!) {
+  organisationGlobalAccessUsers(organisationId: $organisationId) {
+    id
+    email
+    fullName
+    avatarUrl
+    role {
+      id
+      name
+      color
+      permissions
+    }
+  }
+}
