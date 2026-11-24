@@ -96,6 +96,15 @@ class ActionHandler:
 
         raise NotImplementedError
 
+    def check_approver(self, request, member):
+        """Raise ``ActionError`` unless ``member`` could approve the request as it stands.
+
+        The member checks ``apply`` runs, without carrying anything out; it decides who can be
+        asked to review a request. ``apply`` checks again when the action is carried out.
+        """
+
+        raise NotImplementedError
+
 
 _HANDLERS = {}
 

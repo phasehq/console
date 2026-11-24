@@ -71,11 +71,26 @@ jest.mock('@/components/agents/AgentActionRequest', () => ({
     <div data-action-review={request.id}>{request.actionReview?.type}</div>
   ),
 }))
+jest.mock('@/components/agents/AgentRequestReviewers', () => ({
+  AgentRequestReviewers: ({ requestId, reviewers, pending }: any) => (
+    <div data-reviewers={requestId} data-pending={String(pending)}>
+      {reviewers.map((reviewer: any) => reviewer.member.email).join(', ')}
+    </div>
+  ),
+}))
 jest.mock('@/components/agents/AgentRequestStatusFilter', () => ({
-  AgentRequestStatusFilter: ({ value, onChange }: any) => (
-    <div data-filter={value}>
+  AgentRequestStatusFilter: ({
+    value,
+    onChange,
+    reviewRequested,
+    onReviewRequestedChange,
+  }: any) => (
+    <div data-filter={value} data-review-requested={String(reviewRequested)}>
       <button type="button" onClick={() => onChange('denied')}>
         Denied
+      </button>
+      <button type="button" onClick={() => onReviewRequestedChange(!reviewRequested)}>
+        Asked of you
       </button>
     </div>
   ),
@@ -423,6 +438,63 @@ describe('Change request cards', () => {
     expect(listCalls().at(-1).variables).toMatchObject({ status: 'denied', limit: 16 })
     expect(container.querySelectorAll('article')).toHaveLength(15)
     expect(cardIds()).not.toContain('agent-request-request-3')
+  })
+
+  test('lists your own requests, and only those asked of you with the review filter', async () => {
+    await renderPage([request('request-3', 'pending'), request('request-2', 'denied')])
+
+    expect(listCalls().at(-1).variables).toMatchObject({ scope: 'mine', limit: 16 })
+
+    await act(async () => button('Asked of you')!.click())
+
+    expect(listCalls().at(-1).variables).toMatchObject({ scope: 'review_requested', limit: 16 })
+    expect(container.querySelector('[data-review-requested="true"]')).not.toBeNull()
+  })
+
+  test('a linked request is looked up among every request you can read', async () => {
+    await renderPage([request('request-3', 'pending')], [request('request-1', 'pending')])
+
+    const lookup = (useQuery as jest.Mock).mock.calls.find(
+      ([, options]) => options?.variables?.requestId
+    )!
+    expect(lookup[1].variables.scope).toBeUndefined()
+    expect(cardIds()).toEqual(['agent-request-request-1', 'agent-request-request-3'])
+  })
+
+  test('shows who was asked to review, and lets a pending request be sent for review', async () => {
+    const asked = {
+      id: 'reviewer-1',
+      member: { id: 'member-2', fullName: null, email: 'reviewer@example.com', avatarUrl: null },
+    }
+    await renderPage([
+      request('request-3', 'pending', { reviewers: [asked] }),
+      request('request-2', 'approved', { reviewers: [asked] }),
+      request('request-4', 'denied', { reviewers: [] }),
+    ])
+    await act(async () => {
+      for (const label of Array.from(container.querySelectorAll('button')).filter(
+        (element) => element.textContent === 'Details'
+      ))
+        label.click()
+    })
+
+    const pending = container.querySelector('[data-reviewers="request-3"]')!
+    expect(pending.textContent).toBe('reviewer@example.com')
+    expect(pending.getAttribute('data-pending')).toBe('true')
+    // A resolved request keeps the record of who was asked, with nothing to change.
+    expect(
+      container.querySelector('[data-reviewers="request-2"]')!.getAttribute('data-pending')
+    ).toBe('false')
+    // A resolved request nobody was asked to review has no Reviewers row.
+    expect(container.querySelector('[data-reviewers="request-4"]')).toBeNull()
+  })
+
+  test('a pending request nobody was asked to review can still be sent for review', async () => {
+    await renderPage([request('request-3', 'pending', { reviewers: [] })])
+
+    const row = container.querySelector('[data-reviewers="request-3"]')!
+    expect(row.getAttribute('data-pending')).toBe('true')
+    expect(row.textContent).toBe('')
   })
 
   test('collapses resolved requests to their outcome, with Details to open them', async () => {

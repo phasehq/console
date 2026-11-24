@@ -89,6 +89,11 @@ from api.utils.agents import (
     mint_agent_token,
     retire_unused_setup_connection,
 )
+from api.utils.agent_request_reviewers import (
+    ReviewerError,
+    member_name,
+    set_reviewers,
+)
 from api.utils.audit_logging import get_actor_info_from_graphql, log_audit_event
 from api.utils.request_actions import CREDENTIAL_TEXT, ActionError, action_handler
 from api.utils.request_actions.agent_grants import AllowCall
@@ -2688,6 +2693,68 @@ class ApproveAgentRequestActionMutation(graphene.Mutation):
             **applied.references,
         )
         return cls(request=agent_request, runtime_action=applied.runtime_action)
+
+
+class SetAgentRequestReviewersMutation(graphene.Mutation):
+    """Choose who is asked to review a pending change request.
+
+    Anyone who can read the request may ask, and each member asked must be able to approve it.
+    Asking only puts the request in front of them: anyone else who may approve it still can.
+    """
+
+    class Arguments:
+        request_id = graphene.ID(required=True)
+        member_ids = graphene.List(graphene.NonNull(graphene.ID), required=True)
+
+    request = graphene.Field(AgentRequestType, required=True)
+
+    @classmethod
+    def mutate(cls, root, info, request_id, member_ids):
+        try:
+            initial = AgentRequest.objects.select_related("workflow__agent").get(
+                id=request_id
+            )
+        except (AgentRequest.DoesNotExist, ValueError) as exc:
+            raise GraphQLError("Agent request not found") from exc
+        member = organisation_member(info, initial.organisation_id)
+        require_role(member, "read", "AgentRequests")
+        require_workflow(member, initial.workflow, "read")
+        if _expire_pending_request(request_id, initial.organisation_id, timezone.now()):
+            raise GraphQLError("Agent request has expired")
+        with transaction.atomic():
+            agent_request = (
+                AgentRequest.objects.select_for_update(of=("self",))
+                .select_related("organisation", "workflow__agent", "connection")
+                .get(id=request_id, organisation_id=initial.organisation_id)
+            )
+            if agent_request.status != AgentRequest.PENDING:
+                raise GraphQLError("Agent request is no longer pending")
+            try:
+                added, removed = set_reviewers(agent_request, member_ids, member)
+            except ReviewerError as exc:
+                raise GraphQLError(str(exc)) from exc
+            audit_title, audit_extra = _audited_title(agent_request, member)
+        if added or removed:
+            _audit(
+                info,
+                agent_request.organisation,
+                AuditEvent.UPDATE,
+                AuditEvent.AGENT_REQUEST,
+                agent_request,
+                f"Changed who reviews Agent request '{audit_title}'",
+                workflow_id=str(agent_request.workflow_id),
+                kind=agent_request.kind,
+                reviewers_added=[
+                    {"id": str(reviewer.id), "name": member_name(reviewer)}
+                    for reviewer in added
+                ],
+                reviewers_removed=[
+                    {"id": str(reviewer.id), "name": member_name(reviewer)}
+                    for reviewer in removed
+                ],
+                **audit_extra,
+            )
+        return cls(request=agent_request)
 
 
 class RevokeAgentSessionMutation(graphene.Mutation):

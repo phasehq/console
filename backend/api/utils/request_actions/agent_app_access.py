@@ -316,6 +316,26 @@ class AppAccess(ActionHandler):
             now=timezone.now(),
         )
 
+    def check_approver(self, request, member):
+        # Approving as asked: every environment, at the access asked for.
+        _require(member, "read")
+        action = request.action
+        app, environments = self._target(request, action)
+        if app is None or len(environments) != len(action.get("environmentIds") or []):
+            raise ActionError("The app or its environments changed; start a new request")
+        writes = action.get("access") == "read_write"
+        try:
+            require_member_can_release(
+                member,
+                app,
+                environments,
+                released_classes(DEFAULT_POLICY, WRITE_CLASSES if writes else ()),
+            )
+        except AppAccessError as exc:
+            raise _app_error(exc) from exc
+        if reusable_connection(request.organisation_id, app, environments) is None:
+            _require(member, "create")
+
     def apply(self, request, action, member, inputs):
         _require(member, "read")
         seconds, expires_at, inputs = _granted_access(request, inputs)

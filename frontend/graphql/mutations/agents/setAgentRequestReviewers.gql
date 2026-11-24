@@ -1,0 +1,22 @@
+mutation SetAgentRequestReviewersOp($requestId: ID!, $memberIds: [ID!]!) {
+  setAgentRequestReviewers(requestId: $requestId, memberIds: $memberIds) {
+    request {
+      id
+      reviewers {
+        id
+        createdAt
+        member {
+          id
+          fullName
+          email
+          avatarUrl
+        }
+        requestedBy {
+          id
+          fullName
+          email
+        }
+      }
+    }
+  }
+}

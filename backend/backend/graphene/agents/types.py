@@ -9,6 +9,7 @@ from api.models import (
     AgentEvent,
     AgentMembership,
     AgentRequest,
+    AgentRequestReviewer,
     AgentSession,
     AgentToken,
     AgentWorkflow,
@@ -745,8 +746,28 @@ def _request_review(agent_request, info):
     return agent_request._viewer_review
 
 
+class AgentRequestReviewerType(DjangoObjectType):
+    """A member asked to review a change request."""
+
+    member = graphene.Field(OrganisationMemberType, required=True)
+    # Who asked them, while they are still a member.
+    requested_by = graphene.Field(OrganisationMemberType)
+
+    class Meta:
+        model = AgentRequestReviewer
+        fields = ("id", "member", "requested_by", "created_at")
+
+    def resolve_requested_by(self, info):
+        member = self.requested_by
+        return member if member is not None and member.deleted_at is None else None
+
+
 class AgentRequestType(DjangoObjectType):
     agent = graphene.Field(lambda: AgentType, required=True)
+    # The members asked to review it who are still members, first asked first.
+    reviewers = graphene.List(
+        graphene.NonNull(AgentRequestReviewerType), required=True
+    )
     # A request about an app: whether the viewer cannot access the app, and
     # how many of its environments they cannot access. Names they cannot see
     # are left out of every field, titles included.
@@ -795,6 +816,17 @@ class AgentRequestType(DjangoObjectType):
             "expires_at",
             "created_at",
             "updated_at",
+        )
+
+    def resolve_reviewers(self, info):
+        # Lists prefetch them; a request on its own reads them here.
+        return sorted(
+            (
+                reviewer
+                for reviewer in self.reviewers.all()
+                if reviewer.member.deleted_at is None
+            ),
+            key=lambda reviewer: (reviewer.created_at, str(reviewer.id)),
         )
 
     def resolve_agent(self, info):

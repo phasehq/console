@@ -28,6 +28,7 @@ import {
 import { HardenedRequestMarkdown } from '@/components/agents/HardenedRequestMarkdown'
 import { AgentRequestResolver } from '@/components/agents/AgentRequestResolver'
 import { AgentRequestStatusFilter } from '@/components/agents/AgentRequestStatusFilter'
+import { AgentRequestReviewers } from '@/components/agents/AgentRequestReviewers'
 import {
   agentRequestKindLabel,
   isAgentRequestPending,
@@ -96,6 +97,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
   const requestedRequestId = searchParams?.get('request')?.trim() || ''
   const requestedAction = searchParams?.get('action')?.trim().toLowerCase() || ''
   const [status, setStatus] = useState('')
+  const [reviewRequested, setReviewRequested] = useState(false)
   const [pages, setPages] = useState(1)
   const [loadingMore, setLoadingMore] = useState(false)
   // Resolved requests start collapsed, except a linked one; these are the ones open.
@@ -111,8 +113,9 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
     !!permissions && userHasPermission(permissions, 'IntegrationCredentials', 'read')
   const canCreateCredentials =
     !!permissions && userHasPermission(permissions, 'IntegrationCredentials', 'create')
-  // One list of every request the member can read: pending first, then newest first.
-  // The window grows with each Load more and is polled whole, so every loaded request stays current.
+  // The member's own requests: on their Workflows, on Agents they created, and those they were
+  // asked to review. Pending first, then newest first. The window grows with each Load more and
+  // is polled whole, so every loaded request stays current.
   const shown = Math.min(pages * PAGE_SIZE, REQUEST_LIST_LIMIT)
   const {
     data: currentData,
@@ -124,6 +127,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
     variables: {
       organisationId: organisation?.id,
       status: status || null,
+      scope: reviewRequested ? 'review_requested' : 'mine',
       // One past the window, to tell whether there is more.
       limit: Math.min(shown + 1, REQUEST_LIST_LIMIT),
     },
@@ -132,7 +136,8 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
     pollInterval: 10000,
     skipPollAttempt: () => document.hidden,
   })
-  // A linked request can sit past the loaded window, so it loads on its own.
+  // A linked request can sit past the loaded window, or be one the member can read but is not
+  // their own, so it loads on its own.
   const { data: linkedData } = useQuery(GetAgentRequests, {
     variables: { organisationId: organisation?.id, requestId: requestedRequestId, limit: 1 },
     skip: !organisation?.id || !canRead || !requestedRequestId,
@@ -160,10 +165,11 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
   const inWindow = listed.slice(0, shown)
   const hasMore = listed.length > shown
   const linked = linkedData?.agentRequests?.[0]
-  // A linked request shows whatever its state, unless a status filter excludes it.
+  // A linked request shows whatever its state, unless a filter excludes it.
   const showLinked =
     !!linked &&
     (!status || normalizeAgentEnum(linked.status) === normalizeAgentEnum(status)) &&
+    (!reviewRequested || inWindow.some((request: { id: string }) => request.id === linked.id)) &&
     !inWindow.some((request: { id: string }) => request.id === linked.id)
   const requests = prioritiseAgentRequest<any>(
     showLinked ? [linked, ...inWindow] : inWindow,
@@ -208,13 +214,13 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
   // Requests are raised elsewhere, so this section has no create action.
   // Refresh and the status filter are only useful once there is something to
   // act on, or a filter to clear.
-  const hasControls = requests.length > 0 || !!status
+  const hasControls = requests.length > 0 || !!status || reviewRequested
   const header = (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <h1 className="text-lg font-semibold sm:text-xl">Change Requests</h1>
         <p className="mt-0.5 text-sm text-neutral-500">
-          Review and approve what is waiting on a member of your organisation.
+          Requests on your Agents and Workflows, and those you are asked to review.
         </p>
       </div>
       {hasControls && (
@@ -223,6 +229,11 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
             value={status}
             onChange={(value) => {
               setStatus(value)
+              setPages(1)
+            }}
+            reviewRequested={reviewRequested}
+            onReviewRequestedChange={(value) => {
+              setReviewRequested(value)
               setPages(1)
             }}
           />
@@ -264,9 +275,11 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
         <AgentEmpty
           title="No change requests"
           subtitle={
-            status
-              ? `No ${status} requests match this filter.`
-              : 'Change requests will appear here.'
+            reviewRequested
+              ? `No ${status ? `${status} ` : ''}requests you were asked to review.`
+              : status
+                ? `No ${status} requests match this filter.`
+                : 'Requests on your Agents and Workflows, and those you are asked to review, appear here.'
           }
         />
       ) : (
@@ -457,6 +470,19 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
                             <AgentTime value={timing.value} fallback={timing.fallback} />
                           </dd>
                         </div>
+                        {(pending || request.reviewers?.length > 0) && (
+                          <div className="min-w-0 sm:col-span-2">
+                            <dt className="text-neutral-500">Reviewers</dt>
+                            <dd className="mt-1">
+                              <AgentRequestReviewers
+                                requestId={request.id}
+                                organisationId={organisation.id}
+                                reviewers={request.reviewers || []}
+                                pending={pending}
+                              />
+                            </dd>
+                          </div>
+                        )}
                         {!pending && request.resolvedBy && (
                           <div className="min-w-0">
                             <dt className="text-neutral-500">

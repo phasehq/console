@@ -17,16 +17,37 @@ const REQUEST_STATUS_OPTIONS = [
 export function AgentRequestStatusFilter({
   value,
   onChange,
+  reviewRequested = false,
+  onReviewRequestedChange,
 }: {
   value: string
   onChange: (value: string) => void
+  /** Only requests the member was asked to review. */
+  reviewRequested?: boolean
+  onReviewRequestedChange?: (value: boolean) => void
 }) {
   return (
     <AgentFilterMenu
-      title="Filter change requests by status"
-      active={value !== ''}
-      onReset={() => onChange('')}
+      title="Filter change requests"
+      active={value !== '' || reviewRequested}
+      onReset={() => {
+        onChange('')
+        onReviewRequestedChange?.(false)
+      }}
     >
+      {onReviewRequestedChange && (
+        <AgentFilterSection title="Review">
+          <div className="flex flex-wrap gap-2">
+            <AgentFilterOption
+              selected={reviewRequested}
+              color="text-emerald-500"
+              onClick={() => onReviewRequestedChange(!reviewRequested)}
+            >
+              Asked of you
+            </AgentFilterOption>
+          </div>
+        </AgentFilterSection>
+      )}
       <AgentFilterSection title="Status">
         <div className="flex flex-wrap gap-2">
           {REQUEST_STATUS_OPTIONS.map((option) => (

@@ -98,6 +98,12 @@ class UpdateWorkflowContext(ActionHandler):
             "requested": {"markdown": action["markdown"]},
         }
 
+    def check_approver(self, request, member):
+        if not account_can_access_workflow(member, request.workflow, "update"):
+            raise ActionError(
+                "You don't have permission to update this Workflow", code="forbidden"
+            )
+
     def apply(self, request, action, member, inputs):
         _inputs(inputs)
         try:

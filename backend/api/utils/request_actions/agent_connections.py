@@ -422,8 +422,11 @@ class CreateConnection(ActionHandler):
             },
         }
 
-    def apply(self, request, action, member, inputs):
+    def check_approver(self, request, member):
         _require(member, "create")
+
+    def apply(self, request, action, member, inputs):
+        self.check_approver(request, member)
         seconds, expires_at, inputs = _granted_access(request, inputs)
         values = _inputs(
             inputs,
@@ -528,8 +531,11 @@ class UpdateConnection(ActionHandler):
             "requested": requested,
         }
 
-    def apply(self, request, action, member, inputs):
+    def check_approver(self, request, member):
         _require(member, "update")
+
+    def apply(self, request, action, member, inputs):
+        self.check_approver(request, member)
         values = _inputs(inputs, optional=("sealedValue",))
         connection = _custom_target(request)
         with _connection_errors():
@@ -577,8 +583,11 @@ class UpdateConnectionSecret(ActionHandler):
             "requested": None,
         }
 
-    def apply(self, request, action, member, inputs):
+    def check_approver(self, request, member):
         _require(member, "update")
+
+    def apply(self, request, action, member, inputs):
+        self.check_approver(request, member)
         values = _inputs(inputs, required=("sealedValue",))
         connection = _custom_target(request)
         with _connection_errors():
@@ -619,9 +628,12 @@ class RemoveConnection(ActionHandler):
             "requested": None,
         }
 
-    def apply(self, request, action, member, inputs):
+    def check_approver(self, request, member):
         # What revoking the grant directly needs.
         _require(member, "read")
+
+    def apply(self, request, action, member, inputs):
+        self.check_approver(request, member)
         _inputs(inputs)
         # Only this Workflow's grant goes; the Connection and its other grants
         # stay as they are.

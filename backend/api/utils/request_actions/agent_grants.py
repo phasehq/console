@@ -291,6 +291,14 @@ class AllowCall(ActionHandler):
             },
         }
 
+    def check_approver(self, request, member):
+        _require(member, "read")
+        connection = request.connection
+        if connection is not None and is_app_service(connection.service_type):
+            _require_app_release(
+                member, connection, _allow_classes(request.action["allow"])
+            )
+
     def apply(self, request, action, member, inputs):
         _require(member, "read")
         # A temporary allow always expires, within what an Agent may ask for.
@@ -411,6 +419,33 @@ class RenewAccess(ActionHandler):
             "current": current,
             "requested": {"durationSeconds": request.duration_seconds},
         }
+
+    def check_approver(self, request, member):
+        _require(member, "read")
+        connection = request.connection
+        if connection is None:
+            raise ActionError("The Agent Connection changed; start a new request")
+        if not is_app_service(connection.service_type) and not is_custom_service(
+            connection.service_type
+        ):
+            _require(member, "read", "IntegrationCredentials")
+        if is_app_service(connection.service_type):
+            from api.utils.agent_app_access import released_classes
+
+            renewed = renewable_grant(request.workflow_id, str(connection.id))
+            temporary = (
+                [
+                    allow.get("class")
+                    for allow in live_temporary_allows(
+                        renewed.temporary_allows, timezone.now()
+                    )
+                ]
+                if renewed is not None
+                else []
+            )
+            _require_app_release(
+                member, connection, released_classes(connection.policy, temporary)
+            )
 
     def apply(self, request, action, member, inputs):
         _require(member, "read")

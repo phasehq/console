@@ -110,9 +110,7 @@ describe('Agent controls', () => {
       root.render(<AgentRequestStatusFilter value="pending" onChange={onChange} />)
     })
 
-    const trigger = container.querySelector<HTMLButtonElement>(
-      '[title="Filter change requests by status"]'
-    )!
+    const trigger = container.querySelector<HTMLButtonElement>('[title="Filter change requests"]')!
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(trigger.textContent).toContain('(active)')
     // The active dot sits outside the button.

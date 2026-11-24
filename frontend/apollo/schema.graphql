@@ -91,7 +91,8 @@ type Query {
   agentWorkflows(organisationId: ID!, agentId: ID, workflowId: ID): [AgentWorkflowType]
   agentMemberships(organisationId: ID!, agentId: ID!, membershipId: ID, memberId: ID): [AgentMembershipType]
   agentConnections(organisationId: ID!, connectionId: ID): [AgentConnectionType]
-  agentRequests(organisationId: ID!, requestId: ID, agentId: ID, workflowId: ID, status: String, limit: Int): [AgentRequestType]
+  agentRequests(organisationId: ID!, requestId: ID, agentId: ID, workflowId: ID, status: String, limit: Int, scope: String): [AgentRequestType]
+  agentRequestReviewerCandidates(organisationId: ID!, requestId: ID!): [OrganisationMemberType!]!
   agentRequestQueue(organisationId: ID!, limit: Int): AgentRequestQueueType!
   agentSessions(organisationId: ID!, agentId: ID, workflowId: ID, activeOnly: Boolean = false): [AgentSessionType]
   agentEvents(organisationId: ID!, cursor: String, before: String, order: String, limit: Int = 100, agentId: ID, workflowId: ID, sessionUid: String, proxyDecision: String, eventType: String, provider: String, start: DateTime, end: DateTime): AgentEventPageType
@@ -1905,6 +1906,7 @@ type AgentRequestType {
   createdAt: DateTime!
   updatedAt: DateTime!
   agent: AgentType!
+  reviewers: [AgentRequestReviewerType!]!
   appRestricted: Boolean!
   hiddenEnvironmentCount: Int!
   progress: GenericScalar!
@@ -1915,6 +1917,14 @@ type AgentRequestType {
   approval: GenericScalar
   actionReview: GenericScalar
   access: GenericScalar
+}
+
+"""A member asked to review a change request."""
+type AgentRequestReviewerType {
+  id: String!
+  member: OrganisationMemberType!
+  requestedBy: OrganisationMemberType
+  createdAt: DateTime!
 }
 
 type AgentRequestQueueType {
@@ -2400,6 +2410,14 @@ type Mutation {
   mintAgentToken(agentId: ID!, expiresAt: String, name: String!, workflowId: ID!): MintAgentTokenMutation
   revokeAgentToken(tokenId: ID!): RevokeAgentTokenMutation
   resolveAgentRequest(approved: Boolean!, expectedRevision: String!, requestId: ID!, resolutionNote: String): ResolveAgentRequestMutation
+
+  """
+  Choose who is asked to review a pending change request.
+  
+  Anyone who can read the request may ask, and each member asked must be able to approve it.
+  Asking only puts the request in front of them: anyone else who may approve it still can.
+  """
+  setAgentRequestReviewers(memberIds: [ID!]!, requestId: ID!): SetAgentRequestReviewersMutation
   fulfillAgentRequest(credentialId: ID!, durationSeconds: Int, expectedCredentialRevision: String!, expectedRevision: String!, requestId: ID!, resolutionNote: String, untilRevoked: Boolean): FulfillAgentRequestMutation
 
   """
@@ -3389,6 +3407,16 @@ type RevokeAgentTokenMutation {
 }
 
 type ResolveAgentRequestMutation {
+  request: AgentRequestType!
+}
+
+"""
+Choose who is asked to review a pending change request.
+
+Anyone who can read the request may ask, and each member asked must be able to approve it.
+Asking only puts the request in front of them: anyone else who may approve it still can.
+"""
+type SetAgentRequestReviewersMutation {
   request: AgentRequestType!
 }
 

@@ -1,3 +1,19 @@
+fragment AgentRequestReviewerFields on AgentRequestReviewerType {
+  id
+  createdAt
+  member {
+    id
+    fullName
+    email
+    avatarUrl
+  }
+  requestedBy {
+    id
+    fullName
+    email
+  }
+}
+
 fragment AgentRequestFields on AgentRequestType {
   id
   kind
@@ -17,6 +33,9 @@ fragment AgentRequestFields on AgentRequestType {
     fullName
     email
     avatarUrl
+  }
+  reviewers {
+    ...AgentRequestReviewerFields
   }
   createdAt
   action
@@ -63,12 +82,19 @@ fragment AgentRequestFields on AgentRequestType {
   }
 }
 
-query GetAgentRequests($organisationId: ID!, $status: String, $requestId: ID, $limit: Int) {
+query GetAgentRequests(
+  $organisationId: ID!
+  $status: String
+  $requestId: ID
+  $limit: Int
+  $scope: String
+) {
   agentRequests(
     organisationId: $organisationId
     status: $status
     requestId: $requestId
     limit: $limit
+    scope: $scope
   ) {
     ...AgentRequestFields
   }

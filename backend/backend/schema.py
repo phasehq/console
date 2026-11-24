@@ -108,6 +108,7 @@ from .graphene.agents.queries import (
     resolve_agent_events,
     resolve_agent_memberships,
     resolve_agent_request_queue,
+    resolve_agent_request_reviewer_candidates,
     resolve_agent_requests,
     resolve_agent_service_templates,
     resolve_agent_sessions,
@@ -134,6 +135,7 @@ from .graphene.agents.mutations import (
     RemoveAgentMemberMutation,
     RemoveAgentWorkflowGrantAllowMutation,
     ResolveAgentRequestMutation,
+    SetAgentRequestReviewersMutation,
     RevokeAgentSessionMutation,
     RevokeAgentTokenMutation,
     RevokeAgentWorkflowGrantMutation,
@@ -822,6 +824,14 @@ class Query(graphene.ObjectType):
         workflow_id=graphene.ID(required=False),
         status=graphene.String(required=False),
         limit=graphene.Int(required=False),
+        # "all" (the default), "mine" or "review_requested".
+        scope=graphene.String(required=False),
+    )
+    agent_request_reviewer_candidates = graphene.List(
+        graphene.NonNull(OrganisationMemberType),
+        organisation_id=graphene.ID(required=True),
+        request_id=graphene.ID(required=True),
+        required=True,
     )
     agent_request_queue = graphene.Field(
         AgentRequestQueueType,
@@ -957,6 +967,9 @@ class Query(graphene.ObjectType):
     resolve_agent_connections = resolve_agent_connections
     resolve_agent_requests = resolve_agent_requests
     resolve_agent_request_queue = resolve_agent_request_queue
+    resolve_agent_request_reviewer_candidates = (
+        resolve_agent_request_reviewer_candidates
+    )
     resolve_agent_sessions = resolve_agent_sessions
     resolve_agent_events = resolve_agent_events
     resolve_agent_service_templates = resolve_agent_service_templates
@@ -1853,6 +1866,7 @@ class Mutation(graphene.ObjectType):
     mint_agent_token = MintAgentTokenMutation.Field()
     revoke_agent_token = RevokeAgentTokenMutation.Field()
     resolve_agent_request = ResolveAgentRequestMutation.Field()
+    set_agent_request_reviewers = SetAgentRequestReviewersMutation.Field()
     fulfill_agent_request = FulfillAgentRequestMutation.Field()
     approve_agent_request_action = ApproveAgentRequestActionMutation.Field()
     revoke_agent_session = RevokeAgentSessionMutation.Field()

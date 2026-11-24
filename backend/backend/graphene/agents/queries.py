@@ -13,9 +13,11 @@ from api.models import (
     AgentMembership,
     AgentOrganisationSettings,
     AgentRequest,
+    AgentRequestReviewer,
     AgentSession,
     AgentWorkflow,
     AgentWorkflowGrant,
+    AgentWorkflowMembership,
 )
 from api.utils.access.permissions import (
     role_has_global_access,
@@ -24,6 +26,7 @@ from api.utils.access.permissions import (
 from api.utils.agent_access import end_lapsed_access
 from api.utils.agent_config import get_config_registry, list_presets
 from api.utils.agent_leak_events import preload_secret_locations
+from api.utils.agent_request_reviewers import review_candidates
 from api.utils.agents import expire_overdue_requests
 from backend.graphene.agents.common import (
     organisation_for,
@@ -41,6 +44,42 @@ from backend.graphene.agents.types import (
 
 # Pending requests sort first, so a capped list still shows every open one.
 AGENT_REQUEST_LIST_LIMIT = 200
+# Which of the requests a member can read a list holds: all of them; their own
+# (see ``_own_requests``); or only those they were asked to review.
+AGENT_REQUEST_SCOPES = ("all", "mine", "review_requested")
+
+
+def _own_requests(queryset, member):
+    """The requests that are the member's to look at.
+
+    Those on a Workflow they are a member of, on an Agent they created, or that they were asked to
+    review. A role that reaches every Agent can read more; its holder finds those on each Agent.
+    """
+
+    member_of = AgentWorkflowMembership.objects.filter(
+        agent_membership__member=member,
+        agent_membership__deleted_at__isnull=True,
+        deleted_at__isnull=True,
+    ).values("workflow_id")
+    reviewing = AgentRequestReviewer.objects.filter(member=member).values("request_id")
+    return queryset.filter(
+        Q(workflow_id__in=member_of)
+        | Q(workflow__agent__created_by=member)
+        | Q(id__in=reviewing)
+    )
+
+
+def _with_reviewers(queryset):
+    return queryset.prefetch_related(
+        Prefetch(
+            "reviewers",
+            queryset=AgentRequestReviewer.objects.select_related(
+                "member__user", "requested_by__user"
+            )
+            .filter(member__deleted_at__isnull=True)
+            .order_by("created_at", "id"),
+        )
+    )
 
 
 def _visible_agents(member, queryset, action="read"):
@@ -177,6 +216,7 @@ def resolve_agent_requests(
     workflow_id=None,
     status=None,
     limit=None,
+    scope=None,
 ):
     organisation, member = organisation_for(
         info, organisation_id, "read", "AgentRequests"
@@ -214,7 +254,14 @@ def resolve_agent_requests(
         if status not in dict(AgentRequest.STATUS_CHOICES):
             raise GraphQLError("Unsupported Agent request status")
         queryset = queryset.filter(status=status)
-    return queryset.annotate(
+    scope = (scope or "all").lower()
+    if scope not in AGENT_REQUEST_SCOPES:
+        raise GraphQLError("Unsupported Agent request scope")
+    if scope == "mine":
+        queryset = _own_requests(queryset, member)
+    elif scope == "review_requested":
+        queryset = queryset.filter(reviewers__member=member)
+    return _with_reviewers(queryset).annotate(
         _pending_first=Case(
             When(status=AgentRequest.PENDING, then=Value(0)),
             default=Value(1),
@@ -224,7 +271,7 @@ def resolve_agent_requests(
 
 
 def resolve_agent_request_queue(root, info, organisation_id, limit=None):
-    """Pending requests across the organisation that the caller may resolve.
+    """Pending requests that are the caller's own (see ``_own_requests``) and that they may resolve.
 
     Resolving takes ``update`` on AgentRequests and access to the Workflow, and the queue matches that.
     """
@@ -243,14 +290,17 @@ def resolve_agent_request_queue(root, info, organisation_id, limit=None):
     expire_overdue_requests(
         AgentRequest.objects.filter(organisation=organisation), now
     )
-    pending = AgentRequest.objects.filter(
-        Q(expires_at__isnull=True) | Q(expires_at__gt=now),
-        organisation=organisation,
-        workflow_id__in=_accessible_workflow_ids(member, organisation, "update"),
-        status=AgentRequest.PENDING,
+    pending = _own_requests(
+        AgentRequest.objects.filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=now),
+            organisation=organisation,
+            workflow_id__in=_accessible_workflow_ids(member, organisation, "update"),
+            status=AgentRequest.PENDING,
+        ),
+        member,
     )
     return AgentRequestQueueType(
-        requests=pending.select_related(
+        requests=_with_reviewers(pending).select_related(
             "workflow__agent",
             "connection__authentication",
             "connection__host_rules_authored_by",
@@ -260,6 +310,26 @@ def resolve_agent_request_queue(root, info, organisation_id, limit=None):
         ).order_by("-created_at", "id")[:size],
         pending_count=pending.count(),
     )
+
+
+def resolve_agent_request_reviewer_candidates(root, info, organisation_id, request_id):
+    """Members who could approve the request, and so can be asked to review it."""
+
+    organisation, member = organisation_for(
+        info, organisation_id, "read", "AgentRequests"
+    )
+    agent_request = (
+        AgentRequest.objects.select_related("organisation", "workflow__agent", "connection")
+        .filter(
+            id=request_id,
+            organisation=organisation,
+            workflow_id__in=_accessible_workflow_ids(member, organisation),
+        )
+        .first()
+    )
+    if agent_request is None:
+        raise GraphQLError("Agent request not found")
+    return review_candidates(agent_request)
 
 
 def resolve_agent_sessions(

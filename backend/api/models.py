@@ -3184,6 +3184,39 @@ class AgentRequest(models.Model):
         ]
 
 
+class AgentRequestReviewer(models.Model):
+    """A member asked to review a change request.
+
+    Asking puts the request in front of them; it gives no access, and anyone else who may approve
+    the request still can. Only a member who could approve the request can be asked.
+    """
+
+    id = models.TextField(default=uuid4, primary_key=True, editable=False)
+    request = models.ForeignKey(
+        AgentRequest, on_delete=models.CASCADE, related_name="reviewers"
+    )
+    member = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.CASCADE,
+        related_name="agent_request_reviews",
+    )
+    requested_by = models.ForeignKey(
+        OrganisationMember,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agent_request_reviews_requested",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["request", "member"], name="unique_agent_request_reviewer"
+            )
+        ]
+
+
 class AgentEvent(models.Model):
     """High-volume runtime stream with monotonic ingest and idempotent event IDs."""
 
