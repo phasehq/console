@@ -12,8 +12,6 @@ import {
   FaChevronRight,
   FaEllipsisH,
   FaExternalLinkAlt,
-  FaSun,
-  FaMoon,
   FaPalette,
   FaUserCircle,
   FaBuilding,
@@ -466,11 +464,7 @@ const ThemeRow = ({ className }: { className: string }) => (
   <div className={clsx(className, 'text-zinc-600 dark:text-zinc-400')}>
     <FaPalette className={MENU_ROW_ICON} />
     <span className="flex-1">Theme</span>
-    <div className="flex items-center gap-2 text-neutral-500">
-      <FaSun />
-      <ModeToggle />
-      <FaMoon />
-    </div>
+    <ModeToggle />
   </div>
 )
 

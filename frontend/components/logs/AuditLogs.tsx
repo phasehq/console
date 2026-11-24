@@ -322,7 +322,9 @@ const LogRow = ({
           key={id}
           className={clsx(
             'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs',
-            variant === 'removed' ? 'text-red-400 line-through' : 'text-emerald-400'
+            variant === 'removed'
+              ? 'text-red-600 dark:text-red-400 line-through'
+              : 'text-emerald-600 dark:text-emerald-400'
           )}
         >
           {variant === 'removed' ? '- ' : '+ '}
@@ -374,8 +376,8 @@ const LogRow = ({
           className={clsx(
             'flex items-center gap-2 rounded px-2 py-1 text-xs',
             variant === 'removed'
-              ? 'bg-red-500/10 text-red-400'
-              : 'bg-emerald-500/10 text-emerald-400'
+              ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
           )}
         >
           <span
@@ -449,8 +451,8 @@ const LogRow = ({
                 className={clsx(
                   'flex items-center gap-2 rounded px-2 py-1 text-xs mt-0.5',
                   variant === 'removed'
-                    ? 'bg-red-500/10 text-red-400'
-                    : 'bg-emerald-500/10 text-emerald-400'
+                    ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                    : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                 )}
               >
                 <span
@@ -505,8 +507,8 @@ const LogRow = ({
                     className={clsx(
                       'flex items-center gap-2 rounded px-2 py-1 text-xs',
                       variant === 'removed'
-                        ? 'bg-red-500/10 text-red-400'
-                        : 'bg-emerald-500/10 text-emerald-400'
+                        ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                     )}
                   >
                     <span className={clsx(variant === 'removed' && 'line-through')}>
@@ -553,12 +555,12 @@ const LogRow = ({
               <div key={key} className="text-xs">
                 <span className="text-neutral-500 font-medium">{humanizeKey(key)}</span>
                 {oldVal !== undefined && (
-                  <pre className="text-red-400 bg-red-500/10 rounded px-2 py-1 mt-0.5 text-xs overflow-auto max-h-32">
+                  <pre className="text-red-600 dark:text-red-400 bg-red-500/10 rounded px-2 py-1 mt-0.5 text-xs overflow-auto max-h-32">
                     - {JSON.stringify(oldVal, null, 2)}
                   </pre>
                 )}
                 {newVal !== undefined && (
-                  <pre className="text-emerald-400 bg-emerald-500/10 rounded px-2 py-1 mt-0.5 text-xs overflow-auto max-h-32">
+                  <pre className="text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 rounded px-2 py-1 mt-0.5 text-xs overflow-auto max-h-32">
                     + {JSON.stringify(newVal, null, 2)}
                   </pre>
                 )}
@@ -570,7 +572,7 @@ const LogRow = ({
             <div key={key} className="text-xs flex items-center gap-2 flex-wrap">
               <span className="text-neutral-500 font-medium">{humanizeKey(key)}:</span>
               {oldVal !== undefined && (
-                <span className="text-red-400 bg-red-500/10 rounded px-1.5 py-0.5 line-through">
+                <span className="text-red-600 dark:text-red-400 bg-red-500/10 rounded px-1.5 py-0.5 line-through">
                   {String(oldVal)}
                 </span>
               )}
@@ -578,7 +580,7 @@ const LogRow = ({
                 <span className="text-neutral-500">&rarr;</span>
               )}
               {newVal !== undefined && (
-                <span className="text-emerald-400 bg-emerald-500/10 rounded px-1.5 py-0.5">
+                <span className="text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 rounded px-1.5 py-0.5">
                   {String(newVal)}
                 </span>
               )}
@@ -654,7 +656,9 @@ const LogRow = ({
             <span
               className={clsx(
                 'text-sm font-medium',
-                isRemoved ? 'text-red-400 line-through' : 'text-emerald-400'
+                isRemoved
+                  ? 'text-red-600 dark:text-red-400 line-through'
+                  : 'text-emerald-600 dark:text-emerald-400'
               )}
             >
               {memberAuditName}
@@ -664,7 +668,9 @@ const LogRow = ({
             <span
               className={clsx(
                 'text-xs',
-                isRemoved ? 'text-red-400/70 line-through' : 'text-emerald-400/70'
+                isRemoved
+                  ? 'text-red-600/70 dark:text-red-400/70 line-through'
+                  : 'text-emerald-600/70 dark:text-emerald-400/70'
               )}
             >
               {memberAuditEmail}
@@ -696,7 +702,9 @@ const LogRow = ({
             <span
               className={clsx(
                 'text-sm font-medium',
-                isRemoved ? 'text-red-400 line-through' : 'text-emerald-400'
+                isRemoved
+                  ? 'text-red-600 dark:text-red-400 line-through'
+                  : 'text-emerald-600 dark:text-emerald-400'
               )}
             >
               {saAuditName}
@@ -705,7 +713,9 @@ const LogRow = ({
           <span
             className={clsx(
               'text-xs font-mono',
-              isRemoved ? 'text-red-400/70 line-through' : 'text-emerald-400/70'
+              isRemoved
+                ? 'text-red-600/70 dark:text-red-400/70 line-through'
+                : 'text-emerald-600/70 dark:text-emerald-400/70'
             )}
           >
             {log.resourceId}

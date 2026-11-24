@@ -12,7 +12,7 @@ interface MarkdownViewerProps {
 }
 
 export const MarkdownViewer = ({ text, className }: MarkdownViewerProps) => {
-  const { theme } = useContext(ThemeContext)
+  const { resolvedTheme } = useContext(ThemeContext)
 
   const components = {
     code(props: React.HTMLAttributes<HTMLElement> & ExtraProps) {
@@ -31,7 +31,7 @@ export const MarkdownViewer = ({ text, className }: MarkdownViewerProps) => {
             PreTag="div"
             CodeTag="div"
             language={match[1]}
-            style={theme === 'dark' ? vscDarkPlus : vs}
+            style={resolvedTheme === 'dark' ? vscDarkPlus : vs}
             customStyle={{
               fontSize: '0.875rem',
               fontFamily: 'var(--font-jetbrains-mono)',

@@ -8,7 +8,7 @@ import { MdLogout } from 'react-icons/md'
 import { handleSignout } from '@/apollo/client'
 import { Button } from './common/Button'
 import { Avatar } from './common/Avatar'
-import { FaBuilding, FaMoon, FaPalette, FaSun, FaUserCircle } from 'react-icons/fa'
+import { FaBuilding, FaPalette, FaUserCircle } from 'react-icons/fa'
 import { ModeToggle } from './common/ModeToggle'
 import { organisationContext } from '@/contexts/organisationContext'
 import Link from 'next/link'
@@ -89,11 +89,7 @@ export default function UserMenu() {
               <div className={clsx(ROW_STYLE, ROW_TEXT)}>
                 <FaPalette className={ROW_ICON} />
                 <span className="flex-1">Theme</span>
-                <div className="flex items-center gap-2 text-neutral-500">
-                  <FaSun />
-                  <ModeToggle />
-                  <FaMoon />
-                </div>
+                <ModeToggle />
               </div>
             </div>
 

@@ -10,7 +10,11 @@ module.exports = {
     './utils/**/*.{js,ts}',
   ],
   safelist: ['border-t-neutral-500', 'border-t-amber-500', 'border-t-emerald-500', 'border-t-8'],
-  darkMode: 'class',
+  // dark: applies under html.dark, or under neither class (system theme) when the OS is dark
+  darkMode: [
+    'variant',
+    ['&:is(.dark *)', '@media (prefers-color-scheme: dark) { &:not(.light *) }'],
+  ],
   theme: {
     fontSize: {
       '3xs': ['0.625rem', { lineHeight: '1rem' }],
