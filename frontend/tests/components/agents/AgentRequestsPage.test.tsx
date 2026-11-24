@@ -418,11 +418,29 @@ describe('Change request cards', () => {
   test('with no requests at all shows a message and no action', async () => {
     await renderPage([])
 
-    expect(container.textContent).toContain('No change requests')
+    expect(container.textContent).toContain('No change requests yet')
+    expect(container.textContent).toContain('When an Agent or a member asks for a change')
     expect(container.querySelectorAll('article')).toHaveLength(0)
     // No filter and no refresh in the empty state.
     expect(container.querySelectorAll('button')).toHaveLength(0)
     expect(container.querySelector('[data-filter]')).toBeNull()
+  })
+
+  test('a filter that matches nothing says so, with a way to clear it', async () => {
+    await renderPage([request('request-3', 'pending')])
+
+    await act(async () => button('Denied')!.click())
+
+    expect(container.querySelectorAll('article')).toHaveLength(0)
+    expect(container.textContent).toContain('No denied change requests')
+    await act(async () => button('Asked of you')!.click())
+    expect(container.textContent).toContain('No denied requests asked of you')
+
+    await act(async () => button('Clear filters')!.click())
+
+    expect(listCalls().at(-1).variables).toMatchObject({ status: null, scope: 'mine' })
+    expect(cardIds()).toEqual(['agent-request-request-3'])
+    expect(button('Clear filters')).toBeUndefined()
   })
 
   test('a status filter narrows the list and starts again at 15', async () => {

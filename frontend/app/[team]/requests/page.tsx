@@ -5,7 +5,14 @@ import { useMutation, useQuery } from '@apollo/client'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { FaChevronDown, FaChevronRight, FaChevronUp, FaKey, FaSyncAlt } from 'react-icons/fa'
+import {
+  FaChevronDown,
+  FaChevronRight,
+  FaChevronUp,
+  FaInbox,
+  FaKey,
+  FaSyncAlt,
+} from 'react-icons/fa'
 import { FiChevronsDown, FiRefreshCw } from 'react-icons/fi'
 import { toast } from 'react-toastify'
 import { organisationContext } from '@/contexts/organisationContext'
@@ -220,7 +227,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
       <div>
         <h1 className="text-lg font-semibold sm:text-xl">Change Requests</h1>
         <p className="mt-0.5 text-sm text-neutral-500">
-          Requests on your Agents and Workflows, and those you are asked to review.
+          Changes asked for on your Agents and Workflows, and those you are asked to review.
         </p>
       </div>
       {hasControls && (
@@ -273,15 +280,37 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
 
       {requests.length === 0 ? (
         <AgentEmpty
-          title="No change requests"
-          subtitle={
+          icon={FaInbox}
+          title={
             reviewRequested
-              ? `No ${status ? `${status} ` : ''}requests you were asked to review.`
+              ? status
+                ? `No ${status} requests asked of you`
+                : 'Nothing waiting on your review'
               : status
-                ? `No ${status} requests match this filter.`
-                : 'Requests on your Agents and Workflows, and those you are asked to review, appear here.'
+                ? `No ${status} change requests`
+                : 'No change requests yet'
           }
-        />
+          subtitle={
+            <span className="mx-auto mt-1 block max-w-md">
+              {reviewRequested || status
+                ? 'Try another filter, or clear the filters to see all of your requests.'
+                : 'When an Agent or a member asks for a change to your Agents or Workflows, or asks you to review one, it shows up here to approve or deny.'}
+            </span>
+          }
+        >
+          {(reviewRequested || !!status) && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setStatus('')
+                setReviewRequested(false)
+                setPages(1)
+              }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </AgentEmpty>
       ) : (
         <div className="max-w-4xl space-y-3">
           {requests.map((request: any, index: number) => {

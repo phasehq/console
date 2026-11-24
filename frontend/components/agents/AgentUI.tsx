@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ReactNode } from 'react'
 import { FaArrowRight, FaBan, FaExclamationTriangle, FaKey, FaPlug, FaRobot } from 'react-icons/fa'
 import { FaArrowRotateRight } from 'react-icons/fa6'
+import type { IconType } from 'react-icons'
 import { Button } from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -377,10 +378,12 @@ export function AgentDetailSkeleton() {
 export function AgentEmpty({
   title,
   subtitle,
+  icon: Icon = FaRobot,
   children,
 }: {
   title: string
   subtitle: ReactNode
+  icon?: IconType
   children?: ReactNode
 }) {
   return (
@@ -389,7 +392,7 @@ export function AgentEmpty({
       subtitle={subtitle}
       graphic={
         <div className="text-neutral-300 dark:text-neutral-700 text-7xl text-center">
-          <FaRobot />
+          <Icon />
         </div>
       }
     >
