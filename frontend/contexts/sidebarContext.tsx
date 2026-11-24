@@ -16,18 +16,29 @@ interface SidebarProviderProps {
   children: React.ReactNode
 }
 
+const readStoredState = (): SidebarState => {
+  try {
+    return localStorage.getItem('sidebar-state') === 'collapsed' ? 'collapsed' : 'expanded'
+  } catch {
+    return 'expanded' // Storage can be blocked
+  }
+}
+
 export const SidebarProvider: React.FC<SidebarProviderProps> = ({ children }) => {
   const [userPreference, setUserPreference] = useState<SidebarState | null>(null)
   const [sidebarState, setSidebarState] = useState<SidebarState>('expanded')
 
   useEffect(() => {
-    const storedState = localStorage.getItem('sidebar-state') as SidebarState
-    setUserPreference(storedState === 'collapsed' ? 'collapsed' : 'expanded')
+    setUserPreference(readStoredState())
   }, [])
 
   useEffect(() => {
     if (userPreference !== null) {
-      localStorage.setItem('sidebar-state', userPreference)
+      try {
+        localStorage.setItem('sidebar-state', userPreference)
+      } catch {
+        // Storage can be blocked; the choice then lasts until the page reloads
+      }
       setSidebarState(userPreference) // Sync sidebar state with user preference
     }
   }, [userPreference])
