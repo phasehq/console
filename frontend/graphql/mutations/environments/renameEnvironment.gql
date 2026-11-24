@@ -1,8 +1,9 @@
-mutation RenameEnv($environmentId: ID!, $name: String!) {
-  renameEnvironment(environmentId: $environmentId, name: $name) {
+mutation RenameEnv($environmentId: ID!, $name: String!, $color: String) {
+  renameEnvironment(environmentId: $environmentId, name: $name, color: $color) {
     environment {
       id
       name
+      color
       updatedAt
     }
   }

@@ -1,5 +1,8 @@
+import pytest
 from unittest.mock import patch, MagicMock
 from api.tasks.syncing import (
+    perform_gitlab_sync,
+    sync_gitlab_secrets,
     trigger_syncs_for_referencing_envs,
     detect_and_trigger_referencing_syncs,
 )
@@ -220,3 +223,351 @@ def test_trigger_syncs_only_matching_envs_triggered(mock_get_model, mock_trigger
         trigger_syncs_for_referencing_envs(changed_env)
 
     mock_trigger_sync.assert_called_once_with(sync_with_ref)
+
+
+def _gitlab_sync(**options):
+    env_sync = MagicMock()
+    env_sync.authentication.id = "cred-1"
+    env_sync.options = {
+        "resource_id": "1",
+        "resource_path": "phase/backend",
+        "is_group": False,
+        "masked": True,
+        "protected": False,
+        **options,
+    }
+    return env_sync
+
+
+@patch("api.tasks.syncing.get_environment_scopes_of_other_syncs")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_with_scope_manages_only_that_scope(mock_handle, mock_other_scopes):
+    env_sync = _gitlab_sync(environment_scope="production")
+
+    perform_gitlab_sync(env_sync)
+
+    mock_other_scopes.assert_not_called()
+    mock_handle.assert_called_once_with(
+        env_sync,
+        sync_gitlab_secrets,
+        "cred-1",
+        "1",
+        False,
+        True,
+        False,
+        "production",
+        None,
+    )
+
+
+@patch("api.tasks.syncing.get_environment_scopes_of_other_syncs")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_without_scope_excludes_scopes_of_other_syncs(
+    mock_handle, mock_other_scopes
+):
+    """Syncs created before environment scopes have no scope in their options."""
+    mock_other_scopes.return_value = {"production"}
+    env_sync = _gitlab_sync()
+
+    perform_gitlab_sync(env_sync)
+
+    args = mock_handle.call_args.args
+    assert args[:8] == (
+        env_sync,
+        sync_gitlab_secrets,
+        "cred-1",
+        "1",
+        False,
+        True,
+        False,
+        None,
+    )
+    # Looked up while the sync runs, so errors are reported on the sync
+    mock_other_scopes.assert_not_called()
+    assert args[8]() == {"production"}
+    mock_other_scopes.assert_called_once_with(env_sync)
+
+
+@patch("api.tasks.syncing.environment_is_locked", return_value=False)
+@patch("api.tasks.syncing.organisation_is_locked", return_value=False)
+@patch("api.tasks.syncing.apps.get_model")
+@patch("api.tasks.syncing.resolve_gitlab_resource_id", return_value="42")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_that_only_stored_the_path_stores_the_id(
+    mock_handle, mock_resolve, mock_get_model, mock_is_locked, mock_env_is_locked
+):
+    """Syncs created before July 2024 only stored the project or group path."""
+    env_sync = _gitlab_sync()
+    del env_sync.options["resource_id"]
+
+    perform_gitlab_sync(env_sync)
+
+    mock_resolve.assert_called_once_with("cred-1", "phase/backend", False)
+    assert env_sync.options["resource_id"] == "42"
+    model = mock_get_model.return_value
+    model.objects.filter.assert_called_once_with(id=env_sync.id)
+    model.objects.filter.return_value.update.assert_called_once_with(
+        options=env_sync.options
+    )
+    assert mock_handle.call_args.args[3] == "42"
+
+
+@pytest.mark.parametrize("failure", [None, Exception("GitLab is down")])
+@patch("api.tasks.syncing.organisation_is_locked", return_value=False)
+@patch("api.tasks.syncing.apps.get_model")
+@patch("api.tasks.syncing.resolve_gitlab_resource_id")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_that_only_stored_the_path_still_syncs_without_the_id(
+    mock_handle, mock_resolve, mock_get_model, mock_is_locked, failure
+):
+    if failure:
+        mock_resolve.side_effect = failure
+    else:
+        mock_resolve.return_value = None
+    env_sync = _gitlab_sync()
+    del env_sync.options["resource_id"]
+
+    perform_gitlab_sync(env_sync)
+
+    mock_get_model.return_value.objects.filter.assert_not_called()
+    assert "resource_id" not in env_sync.options
+    assert mock_handle.call_args.args[3] == "phase/backend"
+
+
+@patch("api.tasks.syncing.organisation_is_locked", return_value=True)
+@patch("api.tasks.syncing.apps.get_model")
+@patch("api.tasks.syncing.resolve_gitlab_resource_id")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_that_only_stored_the_path_is_not_looked_up_while_the_org_is_locked(
+    mock_handle, mock_resolve, mock_get_model, mock_is_locked
+):
+    """handle_sync_event pauses the sync, without calling GitLab."""
+    env_sync = _gitlab_sync()
+    del env_sync.options["resource_id"]
+
+    perform_gitlab_sync(env_sync)
+
+    mock_is_locked.assert_called_once_with(env_sync.environment.app.organisation_id)
+    mock_resolve.assert_not_called()
+    mock_get_model.return_value.objects.filter.assert_not_called()
+    mock_handle.assert_called_once()
+    assert mock_handle.call_args.args[3] == "phase/backend"
+
+
+@patch("api.tasks.syncing.resolve_gitlab_resource_id")
+@patch("api.tasks.syncing.handle_sync_event")
+def test_gitlab_sync_with_id_does_not_look_it_up(mock_handle, mock_resolve):
+    perform_gitlab_sync(_gitlab_sync())
+
+    mock_resolve.assert_not_called()
+
+
+# --- handle_sync_event: the job writes back only what it owns ---
+
+
+def _run_job(sync_function, locked=False, env_sync=None, path_now="/", steps=None):
+    """handle_sync_event on a sync as a worker holds it: the copy pickled when the job was queued.
+
+    `path_now` is the path its row has by the time the job runs. `steps`, if given, collects what
+    the job does around its read of the secrets, in order.
+    """
+    from api.tasks.syncing import handle_sync_event
+
+    env_sync = env_sync or MagicMock()
+    steps = [] if steps is None else steps
+    with patch("api.tasks.syncing.apps.get_model") as mock_get_model, patch(
+        "api.tasks.syncing.organisation_is_locked", return_value=locked
+    ), patch("api.tasks.syncing.environment_is_locked", return_value=False), patch(
+        "api.tasks.syncing.transaction"
+    ) as transaction, patch(
+        "api.tasks.syncing.get_environment_secrets",
+        side_effect=lambda environment, path: steps.append(("read", path)) or [],
+    ):
+        objects = mock_get_model.return_value.objects
+        objects.filter.return_value.order_by.return_value.first.return_value = MagicMock()
+        transaction.atomic.return_value.__enter__.side_effect = lambda: steps.append("begin")
+        transaction.atomic.return_value.__exit__.side_effect = lambda *exc: steps.append("commit")
+        row = objects.select_for_update.return_value.values_list.return_value
+        row.get.side_effect = lambda **kwargs: steps.append(("lock", kwargs)) or path_now
+        handle_sync_event(env_sync, sync_function)
+    return [call.kwargs for call in env_sync.save.call_args_list]
+
+
+@pytest.mark.parametrize(
+    "sync_function",
+    [
+        MagicMock(return_value=(True, {})),
+        MagicMock(return_value=(False, {"message": "rejected"})),
+        MagicMock(side_effect=Exception("provider down")),
+    ],
+    ids=["synced", "refused", "raised"],
+)
+def test_sync_job_saves_its_status_and_nothing_else(sync_function):
+    """The folder a sync sends can be renamed while its job runs (the path is
+    rewritten in place), and a sync can be paused or re-pointed: saving the
+    job's whole stale copy would put the old values back."""
+    saves = _run_job(sync_function)
+
+    assert saves == [
+        {"update_fields": ["status", "updated_at"]},
+        {"update_fields": ["status", "updated_at", "last_sync"]},
+    ]
+
+
+def _queue(delay):
+    """trigger_sync_tasks on a sync as the request that queues it holds it; returns its saves."""
+    from api.services import ServiceConfig
+    from api.tasks.syncing import trigger_sync_tasks
+
+    env_sync = MagicMock(service=ServiceConfig.SUPABASE_EDGE_FUNCTIONS["id"])
+    with patch("api.tasks.syncing.apps.get_model"), patch(
+        "api.tasks.syncing.organisation_is_locked", return_value=False
+    ), patch("api.tasks.syncing.environment_is_locked", return_value=False), patch(
+        "api.tasks.syncing.cancel_sync_tasks"
+    ), patch(
+        "api.tasks.syncing.perform_supabase_sync"
+    ) as job:
+        job.delay.side_effect = delay
+        trigger_sync_tasks(env_sync)
+    return [call.kwargs for call in env_sync.save.call_args_list]
+
+
+@pytest.mark.parametrize(
+    "delay, saved",
+    [(lambda env_sync: MagicMock(), 1), (Exception("queue down"), 2)],
+    ids=["queued", "not queued"],
+)
+def test_queueing_a_sync_saves_its_status_and_nothing_else(delay, saved):
+    """The request loaded the sync before queueing it. A folder renamed in between has its
+    new path in the row: saving the whole stale copy would put the old one back, and the
+    job reads the row's path."""
+    saves = _queue(delay)
+
+    assert saves == [{"update_fields": ["status", "updated_at"]}] * saved
+
+
+def test_sync_job_paused_for_a_locked_org_saves_its_status_and_nothing_else():
+    sync_function = MagicMock()
+
+    saves = _run_job(sync_function, locked=True)
+
+    assert saves == [{"update_fields": ["status", "updated_at"]}]
+    sync_function.assert_not_called()
+
+
+def test_sync_job_reads_the_path_its_sync_has_now_not_the_one_it_was_queued_with():
+    """A job queued before its folder was renamed would find nothing at the old path, and
+    most providers delete what the source no longer has."""
+    queued = MagicMock(id="sync-1", path="/edge")
+    steps = []
+    sync_function = MagicMock(side_effect=lambda secrets: steps.append("push") or (True, {}))
+
+    _run_job(sync_function, env_sync=queued, path_now="/functions", steps=steps)
+
+    assert ("lock", {"id": "sync-1"}) in steps
+    assert ("read", "/functions") in steps
+    assert ("read", "/edge") not in steps
+
+
+def test_sync_job_reads_path_and_secrets_as_one_then_lets_go_before_pushing():
+    """The row lock holds a rename off between the two reads. The provider calls, which can
+    take minutes, run after it is released."""
+    steps = []
+    sync_function = MagicMock(side_effect=lambda secrets: steps.append("push") or (True, {}))
+
+    _run_job(sync_function, env_sync=MagicMock(id="sync-1"), path_now="/functions", steps=steps)
+
+    assert steps == [
+        "begin",
+        ("lock", {"id": "sync-1"}),
+        ("read", "/functions"),
+        "commit",
+        "push",
+    ]
+
+
+# --- several environments changed together (an app restore) ---
+
+
+@patch("api.tasks.syncing.trigger_sync_tasks")
+@patch("api.tasks.syncing.apps.get_model")
+def test_one_pass_covers_every_changed_env(mock_get_model, mock_trigger_sync):
+    """A candidate that references any of the changed envs is triggered, once."""
+    changed_env = _make_changed_env()
+    references_both = _sync("candidate-1")
+    references_the_other = _sync("candidate-2")
+    unrelated = _sync("candidate-3")
+    mock_get_model.side_effect = _mock_models(
+        [references_both, references_the_other, unrelated]
+    )
+
+    graph = {
+        "candidate-1": {"changed-env-id", "other-changed-id"},
+        "candidate-2": {"other-changed-id"},
+        "candidate-3": {"somewhere-else"},
+    }
+    with _patch_refs(graph) as refs:
+        trigger_syncs_for_referencing_envs(
+            changed_env, also_changed=["other-changed-id"]
+        )
+
+    assert mock_trigger_sync.call_args_list == [
+        ((references_both,),),
+        ((references_the_other,),),
+    ]
+    # The graph was read once per environment, not once per changed env.
+    assert sorted(c.args[0] for c in refs.call_args_list) == [
+        "candidate-1",
+        "candidate-2",
+        "candidate-3",
+        "somewhere-else",
+    ]
+
+
+@patch("api.tasks.syncing.trigger_sync_tasks")
+@patch("api.tasks.syncing.apps.get_model")
+def test_the_changed_envs_are_not_candidates(mock_get_model, mock_trigger_sync):
+    """Their own syncs are resumed by the restore job."""
+    changed_env = _make_changed_env()
+    mock_get_model.side_effect = _mock_models([])
+
+    with _patch_refs({}):
+        trigger_syncs_for_referencing_envs(
+            changed_env, also_changed=["other-changed-id"]
+        )
+
+    env_sync_model = mock_get_model("api", "EnvironmentSync")
+    excluded = env_sync_model.objects.filter.return_value.exclude.call_args.kwargs
+    assert excluded == {"environment_id__in": {"changed-env-id", "other-changed-id"}}
+
+
+@patch("api.tasks.syncing.trigger_syncs_for_referencing_envs")
+@patch("api.tasks.syncing.apps.get_model")
+def test_batch_job_runs_one_pass(mock_get_model, mock_trigger):
+    from api.tasks.syncing import detect_and_trigger_referencing_syncs_for
+
+    first, second, third = (MagicMock(id=f"env-{n}") for n in (1, 2, 3))
+    environment_model = MagicMock()
+    lookup = environment_model.objects.select_related.return_value.filter
+    lookup.return_value = [first, second, third]
+    mock_get_model.return_value = environment_model
+
+    detect_and_trigger_referencing_syncs_for(["env-1", "env-2", "env-3"])
+
+    lookup.assert_called_once_with(id__in=["env-1", "env-2", "env-3"])
+    mock_trigger.assert_called_once_with(first, also_changed=["env-2", "env-3"])
+
+
+@patch("api.tasks.syncing.trigger_syncs_for_referencing_envs")
+@patch("api.tasks.syncing.apps.get_model")
+def test_batch_job_does_nothing_when_none_is_live(mock_get_model, mock_trigger):
+    """Deleted again before the job ran: the default manager hides them."""
+    from api.tasks.syncing import detect_and_trigger_referencing_syncs_for
+
+    environment_model = MagicMock()
+    environment_model.objects.select_related.return_value.filter.return_value = []
+    mock_get_model.return_value = environment_model
+
+    detect_and_trigger_referencing_syncs_for(["env-1"])
+
+    mock_trigger.assert_not_called()

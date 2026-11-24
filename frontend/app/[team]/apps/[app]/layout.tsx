@@ -9,8 +9,13 @@ import { AppType } from '@/apollo/graphql'
 import { GetAppDetail } from '@/graphql/queries/getAppDetail.gql'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
+import { Button } from '@/components/common/Button'
 import CopyButton from '@/components/common/CopyButton'
 import { ProgrammaticAccessMenu } from '@/components/contextSnippets/ProgrammaticAccessMenu'
+import { EnvSelectionProvider } from './_components/EnvSelectionProvider'
+import { SecretsCacheProvider } from './_components/SecretsCacheProvider'
+import { AppReadmeButton } from '@/components/apps/AppReadmeButton'
+import { useAppPermissions } from '@/hooks/useAppPermissions'
 
 export default function AppLayout(props: {
   params: Promise<{ team: string; app: string }>
@@ -32,6 +37,10 @@ export default function AppLayout(props: {
     skip: !organisation,
   })
   const app = data?.apps[0] as AppType
+  // The name is on its way: the query runs, or waits for the organisation to
+  const awaitingApp = !app && (loading || !organisation)
+  const { hasPermission } = useAppPermissions(params.app)
+  const userCanUpdateApp = hasPermission('Apps', 'update')
 
   const [tabs, setTabs] = useState([
     {
@@ -70,53 +79,88 @@ export default function AppLayout(props: {
   }, [app, path, tabs])
 
   return (
-    <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col overflow-y-auto h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]">
-      {loading && (
-        <div className="px-3 sm:px-4 lg:px-6 dark:bg-neutral-700 bg-neutral-300 rounded-md h-12 w-40 animate-pulse"></div>
-      )}
-      {app && (
-        <div className="flex shrink-0 items-baseline justify-between gap-4 pb-3 sm:pb-4 px-3 sm:px-4 lg:px-6">
-          <div className="flex min-w-0 items-baseline gap-3 group">
-            <h1 className="max-w-full shrink-0 break-words text-lg sm:text-xl font-bold">
-              {app.name}
-            </h1>
-            <div className="hidden min-w-0 overflow-hidden opacity-0 group-hover:opacity-100 transition ease md:block">
-              <CopyButton value={app.id} buttonVariant="ghost">
-                <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
-              </CopyButton>
+    <EnvSelectionProvider appId={params.app}>
+      <SecretsCacheProvider appId={params.app}>
+        {/* The page fills the shell's panel; only the box under the tabs scrolls */}
+        <div className="w-full pt-3 sm:pt-4 lg:pt-6 text-black dark:text-white flex flex-col h-full">
+          {awaitingApp && (
+            // The heading's own structure, switched off: nothing below moves when the name arrives
+            <div
+              aria-hidden
+              className="flex shrink-0 items-baseline justify-between gap-4 pb-3 sm:pb-4 px-3 sm:px-4 lg:px-6"
+            >
+              <div className="flex min-w-0 items-baseline gap-3">
+                <div className="shrink-0 text-lg sm:text-xl font-bold">
+                  <span className="inline-block h-[0.7em] w-36 animate-pulse rounded-sm bg-neutral-300 dark:bg-neutral-700" />
+                </div>
+                <div className="invisible hidden md:block">
+                  <CopyButton value="" buttonVariant="ghost">
+                    <span className="text-xs font-mono">&nbsp;</span>
+                  </CopyButton>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {/* An icon-sized box first: the row lines up on its buttons' icons */}
+                {['README', 'One-click Access'].map((label) => (
+                  <Button key={label} variant="secondary" disabled>
+                    <span className="size-3.5 shrink-0" />
+                    <span className="invisible">{label}</span>
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="shrink-0">
-            <ProgrammaticAccessMenu />
-          </div>
-        </div>
-      )}
+          )}
+          {app && (
+            <div className="flex shrink-0 items-baseline justify-between gap-4 pb-3 sm:pb-4 px-3 sm:px-4 lg:px-6">
+              <div className="flex min-w-0 items-baseline gap-3 group">
+                <h1 className="max-w-full shrink-0 break-words text-lg sm:text-xl font-bold">
+                  {app.name}
+                </h1>
+                <div className="hidden min-w-0 overflow-hidden opacity-0 group-hover:opacity-100 transition ease md:block">
+                  <CopyButton value={app.id} buttonVariant="ghost">
+                    <span className="text-neutral-500 text-xs font-mono">{app.id}</span>
+                  </CopyButton>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <AppReadmeButton
+                  appId={app.id}
+                  description={app.description ?? ''}
+                  canEdit={userCanUpdateApp}
+                />
+                <ProgrammaticAccessMenu />
+              </div>
+            </div>
+          )}
 
-      <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
-        {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
-        <div className="w-full shrink-0 overflow-x-auto">
-          <Tab.List className="flex gap-0 sm:gap-2 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
-            {tabs.map((tab) => (
-              <Tab as={Fragment} key={tab.name}>
-                {({ selected }) => (
-                  <Link
-                    href={`/${params.team}/apps/${params.app}/${tab.link}`}
-                    className={clsx(
-                      'p-2 text-xs font-medium border-b focus:outline-none -mb-px',
-                      selected
-                        ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
-                        : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+          <Tab.Group selectedIndex={tabIndex} onChange={(index) => setTabIndex(index)}>
+            {/* overflow-x-auto lives on the wrapper so the tabs' -mb-px underline isn't clipped */}
+            <div className="w-full shrink-0 overflow-x-auto scrollbar-hide">
+              <Tab.List className="flex gap-0 sm:gap-2 w-full min-w-max border-b border-neutral-500/20 px-3 sm:px-4 lg:px-6">
+                {tabs.map((tab) => (
+                  <Tab as={Fragment} key={tab.name}>
+                    {({ selected }) => (
+                      <Link
+                        href={`/${params.team}/apps/${params.app}/${tab.link}`}
+                        className={clsx(
+                          'p-2 text-xs font-medium border-b focus:outline-none -mb-px',
+                          selected
+                            ? 'border-emerald-500 font-semibold text-zinc-900 dark:text-zinc-100'
+                            : 'border-transparent text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
+                        )}
+                      >
+                        {tab.name}
+                      </Link>
                     )}
-                  >
-                    {tab.name}
-                  </Link>
-                )}
-              </Tab>
-            ))}
-          </Tab.List>
+                  </Tab>
+                ))}
+              </Tab.List>
+            </div>
+          </Tab.Group>
+
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">{children}</div>
         </div>
-        {children}
-      </Tab.Group>
-    </div>
+      </SecretsCacheProvider>
+    </EnvSelectionProvider>
   )
 }

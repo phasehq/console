@@ -38,6 +38,7 @@ import { CreateServiceAccountDialog } from '../../service-accounts/_components/C
 import { DeleteServiceAccountDialog } from '../../service-accounts/_components/DeleteServiceAccountDialog'
 import { RemoveTeamAppDialog } from './_components/RemoveTeamAppDialog'
 import { TransferTeamOwnershipDialog } from './_components/TransferTeamOwnershipDialog'
+import { appSecretsUrl } from '@/utils/appLinks'
 
 export default function TeamDetail(props: { params: Promise<{ team: string; teamId: string }> }) {
   const params = use(props.params)
@@ -157,6 +158,11 @@ export default function TeamDetail(props: { params: Promise<{ team: string; team
       envsByApp[appId] = { app: tae!.app as unknown as AppType, envs: [] }
     }
     envsByApp[appId].envs.push(tae!)
+  }
+  // An app with no environment here: the team reaches it only through one
+  // that is scheduled for deletion.
+  for (const app of team.apps || []) {
+    if (!envsByApp[app!.id]) envsByApp[app!.id] = { app: app as AppType, envs: [] }
   }
 
   return (
@@ -461,10 +467,13 @@ export default function TeamDetail(props: { params: Promise<{ team: string; team
                       Environments
                     </div>
                     <div className="text-xs text-zinc-700 dark:text-zinc-300">
+                      {envs.length === 0 && (
+                        <span className="text-neutral-500">Scheduled for deletion</span>
+                      )}
                       {envs.map((tae, i) => (
                         <span key={tae.id}>
                           <Link
-                            href={`/${params.team}/apps/${appId}/environments/${tae.environment!.id}`}
+                            href={appSecretsUrl(params.team, appId, { envId: tae.environment!.id })}
                             className="hover:text-emerald-500 dark:hover:text-emerald-400 transition"
                           >
                             {tae.environment!.name}

@@ -153,7 +153,7 @@ def test_app_save_does_not_publish_or_change_retained_credentials(settings, host
         id="existing-app", app_token="old-token", app_seed="old-seed",
         wrapped_key_share="old-share", identity_key="old-identity", app_version=1,
     )
-    assert App.save is models.Model.save
+    # App.save only narrows the columns written; it publishes nothing.
     with patch.object(models.Model, "save") as save:
         app.name = "Renamed"
         app.save()

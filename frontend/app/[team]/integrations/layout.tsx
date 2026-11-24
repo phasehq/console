@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { organisationContext } from '@/contexts/organisationContext'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
+import { getIntegrationPages } from '@/utils/navigation'
 
 export default function AccessLayout(props: {
   params: Promise<{ team: string }>
@@ -30,31 +31,7 @@ export default function AccessLayout(props: {
       userHasGlobalAccess(activeOrganisation.role?.permissions)
     : false
 
-  const tabs = useMemo(
-    () => [
-      {
-        name: 'Syncs',
-        link: 'syncs',
-      },
-      {
-        name: 'Dynamic Secrets',
-        link: 'dynamic-secrets',
-      },
-      ...(userCanReadLogStreams
-        ? [
-            {
-              name: 'Log Streams',
-              link: 'log-streams',
-            },
-          ]
-        : []),
-      {
-        name: 'Third-party credentials',
-        link: 'credentials',
-      },
-    ],
-    [userCanReadLogStreams]
-  )
+  const tabs = useMemo(() => getIntegrationPages(userCanReadLogStreams), [userCanReadLogStreams])
 
   useEffect(() => {
     const activeTabIndex = () => {
@@ -67,7 +44,7 @@ export default function AccessLayout(props: {
   }, [path, tabs])
 
   return (
-    <div className="w-full p-3 sm:p-4 lg:p-6 pb-0 sm:pb-0 lg:pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto space-y-3 h-[calc(100dvh_-_56px_-_var(--mobile-tabbar-height))]">
+    <div className="w-full p-3 sm:p-4 lg:p-6 pb-0 sm:pb-0 lg:pb-0 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-y-auto space-y-3 h-full">
       <div className="space-y-1">
         <h1 className="text-lg sm:text-xl font-semibold">{params.team} Integrations</h1>
         <p className="text-neutral-500">Manage integrations with third-party services</p>

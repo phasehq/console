@@ -719,7 +719,7 @@ describe('getSuggestionUrl', () => {
       closesReference: false,
     }
     const url = getSuggestionUrl(suggestion, token, ctx)
-    expect(url).toBe('/my-team/apps/app-1/environments/env-stg-id')
+    expect(url).toBe('/my-team/apps/app-1?envs=env-stg-id')
   })
 
   test('returns env URL for cross-app env suggestions', () => {
@@ -738,7 +738,7 @@ describe('getSuggestionUrl', () => {
       closesReference: false,
     }
     const url = getSuggestionUrl(suggestion, token, ctx)
-    expect(url).toBe('/my-team/apps/app-2/environments/other-env-dev')
+    expect(url).toBe('/my-team/apps/app-2?envs=other-env-dev')
   })
 
   test('returns key URL with secret ID when available', () => {
@@ -759,7 +759,91 @@ describe('getSuggestionUrl', () => {
       closesReference: true,
     }
     const url = getSuggestionUrl(suggestion, token, ctxWithIds)
-    expect(url).toContain('?secret=secret-123')
+    expect(url).toBe('/my-team/apps/app-1?envs=env-dev-id&secret=secret-123')
+  })
+
+  test('returns a key URL in a folder with the secret ID', () => {
+    const ctxWithIds = makeContext({
+      secretIdLookup: { 'development|/backend|REDIS_URL': 'secret-456' },
+    })
+    const token: ActiveReferenceToken = {
+      stage: 'folder-key',
+      raw: 'backend/REDIS_URL',
+      startIndex: 0,
+      insideClosedRef: false,
+      filterText: 'REDIS_URL',
+      folderPath: 'backend',
+    }
+    const suggestion = {
+      label: 'REDIS_URL',
+      insertText: 'backend/REDIS_URL',
+      type: 'key' as const,
+      closesReference: true,
+    }
+    expect(getSuggestionUrl(suggestion, token, ctxWithIds)).toBe(
+      '/my-team/apps/app-1/backend?envs=env-dev-id&secret=secret-456'
+    )
+  })
+
+  test('returns a cross-env key URL with the secret ID', () => {
+    const ctxWithIds = makeContext({
+      secretIdLookup: { 'staging|/|STAGING_ONLY': 'secret-789' },
+    })
+    const token: ActiveReferenceToken = {
+      stage: 'cross-env-key',
+      raw: 'staging.STAGING_ONLY',
+      startIndex: 0,
+      insideClosedRef: false,
+      filterText: 'STAGING_ONLY',
+      env: 'staging',
+    }
+    const suggestion = {
+      label: 'STAGING_ONLY',
+      insertText: 'staging.STAGING_ONLY',
+      type: 'key' as const,
+      closesReference: true,
+    }
+    expect(getSuggestionUrl(suggestion, token, ctxWithIds)).toBe(
+      '/my-team/apps/app-1?envs=env-stg-id&secret=secret-789'
+    )
+  })
+
+  test('returns a cross-app key URL with the secret ID', () => {
+    const token: ActiveReferenceToken = {
+      stage: 'cross-app-key',
+      raw: 'OtherApp::development.OTHER_KEY',
+      startIndex: 0,
+      insideClosedRef: false,
+      filterText: 'OTHER_KEY',
+      app: 'OtherApp',
+      env: 'development',
+    }
+    const suggestion = {
+      label: 'OTHER_KEY',
+      insertText: 'OtherApp::development.OTHER_KEY',
+      type: 'key' as const,
+      closesReference: true,
+    }
+    expect(getSuggestionUrl(suggestion, token, ctx)).toBe(
+      '/my-team/apps/app-2?envs=other-env-dev&secret=other-secret-id'
+    )
+  })
+
+  test('returns a key URL without a secret ID when none is known', () => {
+    const token: ActiveReferenceToken = {
+      stage: 'initial',
+      raw: 'DB_HOST',
+      startIndex: 0,
+      insideClosedRef: false,
+      filterText: 'DB_HOST',
+    }
+    const suggestion = {
+      label: 'DB_HOST',
+      insertText: 'DB_HOST',
+      type: 'key' as const,
+      closesReference: true,
+    }
+    expect(getSuggestionUrl(suggestion, token, ctx)).toBe('/my-team/apps/app-1?envs=env-dev-id')
   })
 
   test('returns null for local key when no envId', () => {
@@ -795,7 +879,7 @@ describe('getSuggestionUrl', () => {
       closesReference: false,
     }
     const url = getSuggestionUrl(suggestion, token, ctx)
-    expect(url).toBe('/my-team/apps/app-1/environments/env-dev-id/backend')
+    expect(url).toBe('/my-team/apps/app-1/backend?envs=env-dev-id')
   })
 })
 
@@ -1109,5 +1193,60 @@ describe('validateSecretReferences', () => {
     expect(errors).toHaveLength(2)
     expect(errors[0].secretKey).toBe('A')
     expect(errors[1].secretKey).toBe('B')
+  })
+
+  describe("with the caller's own copy of where each key is", () => {
+    // The copy holds Development and Production; Staging falls back to the key lists
+    const states: Record<string, 'present' | 'deleted'> = {
+      'env-dev-id|/|DB_HOST': 'present',
+      'env-dev-id|/backend|REDIS_URL': 'present',
+      'env-dev-id|/|OLD_KEY': 'deleted',
+      'env-prod-id|/|PROD_KEY': 'present',
+      'env-prod-id|/|RETIRED': 'deleted',
+    }
+    const held = makeContext({
+      keyStateAt: (envId, path, key) =>
+        envId === 'env-dev-id' || envId === 'env-prod-id'
+          ? states[`${envId}|${path}|${key}`] ?? 'missing'
+          : undefined,
+    })
+    const inDev = (value: string) => [
+      {
+        key: 'CONN',
+        envs: [{ env: { id: 'env-dev-id', name: 'Development' }, secret: { value } }],
+      },
+    ]
+
+    test('resolves a local reference at the folder it names', () => {
+      expect(validateSecretReferences(inDev('${DB_HOST} ${backend/REDIS_URL}'), held)).toEqual([])
+      const errors = validateSecretReferences(inDev('${REDIS_URL} ${backend/DB_HOST}'), held)
+      expect(errors.map((e) => e.reference)).toEqual(['${REDIS_URL}', '${backend/DB_HOST}'])
+    })
+
+    test('flags a local reference to a key staged for deletion', () => {
+      const errors = validateSecretReferences(inDev('${OLD_KEY}'), held)
+      expect(errors).toHaveLength(1)
+      expect(errors[0].deleted).toBe(true)
+    })
+
+    test('flags a reference into another env to a key staged for deletion there', () => {
+      const errors = validateSecretReferences(inDev('${production.RETIRED}'), held)
+      expect(errors).toHaveLength(1)
+      expect(errors[0].deleted).toBe(true)
+      expect(errors[0].error).toContain('staged for deletion in "production"')
+    })
+
+    test('flags a reference into another env to a key it lacks, and accepts one it has', () => {
+      expect(validateSecretReferences(inDev('${production.PROD_KEY}'), held)).toEqual([])
+      const errors = validateSecretReferences(inDev('${production.DB_HOST}'), held)
+      expect(errors.map((e) => e.error)).toEqual([
+        'Referenced key "DB_HOST" does not exist in "production"',
+      ])
+    })
+
+    test('falls back to the key lists for an env the copy does not hold', () => {
+      expect(validateSecretReferences(inDev('${staging.STAGING_ONLY}'), held)).toEqual([])
+      expect(validateSecretReferences(inDev('${staging.PROD_KEY}'), held)).toHaveLength(1)
+    })
   })
 })

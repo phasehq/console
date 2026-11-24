@@ -6,7 +6,6 @@ import GenericDialog from '@/components/common/GenericDialog'
 import { Input } from '@/components/common/Input'
 import { ProviderCredentialPicker } from '@/components/syncing/ProviderCredentialPicker'
 import { organisationContext } from '@/contexts/organisationContext'
-import { GetRotatingSecrets } from '@/graphql/queries/secrets/rotation/getRotatingSecrets.gql'
 import { UpdateRotatingSecretOP } from '@/graphql/mutations/environments/secrets/rotation/updateRotatingSecret.gql'
 import { useMutation } from '@apollo/client'
 import { humanReadableDurationLong } from '@/utils/time'
@@ -129,12 +128,8 @@ export const EditRotatingSecretDialog = forwardRef<
           revocationDelaySeconds,
           authenticationId: credential.id,
         },
-        refetchQueries: [
-          {
-            query: GetRotatingSecrets,
-            variables: { orgId: organisation?.id, envId: rotatingSecret.environment?.id },
-          },
-        ],
+        // By name: the grid's group headers and the Manage dialog's own copy
+        refetchQueries: ['GetRotatingSecrets'],
       })
       toast.success('Rotating secret updated')
       dialogRef.current?.closeModal()

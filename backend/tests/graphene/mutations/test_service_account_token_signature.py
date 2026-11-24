@@ -48,7 +48,9 @@ def mutation_env():
         f"{MUTATIONS}.OrganisationMember"
     ), patch(f"{MUTATIONS}.ServiceAccountToken") as token_model, patch(
         f"{MUTATIONS}._check_sa_permission"
-    ) as sa_permission, patch(f"{MUTATIONS}.log_audit_event"), patch(
+    ) as sa_permission, patch(f"{MUTATIONS}._check_sa_token_ceiling"), patch(
+        f"{MUTATIONS}.log_audit_event"
+    ), patch(
         f"{MUTATIONS}.get_actor_info_from_graphql",
         return_value=("user", "member-1", {}),
     ), patch(

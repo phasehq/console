@@ -45,8 +45,8 @@ def get_mocked_response(url, *args, **kwargs):
 @patch(
     "api.utils.syncing.github.dependabot.encrypt_secret", return_value=MOCK_ENCRYPTED_VALUE
 )
-@patch("api.utils.syncing.github.dependabot.requests.put")
-@patch("api.utils.syncing.github.dependabot.requests.get")
+@patch("api.utils.syncing.github.dependabot.safe_requests.put")
+@patch("api.utils.syncing.github.dependabot.safe_requests.get")
 def test_sync_dependabot_secrets_success(mock_get, mock_put, mock_encrypt, mock_existing):
     mock_get.side_effect = get_mocked_response
     mock_put.return_value.status_code = 201
@@ -65,8 +65,8 @@ def test_sync_dependabot_secrets_success(mock_get, mock_put, mock_encrypt, mock_
     "api.utils.syncing.github.dependabot.encrypt_secret",
     return_value="A" * (64 * 1024 + 1),
 )  # too large
-@patch("api.utils.syncing.github.dependabot.requests.put")
-@patch("api.utils.syncing.github.dependabot.requests.get")
+@patch("api.utils.syncing.github.dependabot.safe_requests.put")
+@patch("api.utils.syncing.github.dependabot.safe_requests.get")
 def test_sync_dependabot_oversized_secret(mock_get, mock_put, mock_encrypt, mock_existing):
     mock_get.side_effect = get_mocked_response
     secrets = [("HUGE_SECRET", "value", None)]
@@ -85,9 +85,9 @@ def test_sync_dependabot_oversized_secret(mock_get, mock_put, mock_encrypt, mock
 @patch(
     "api.utils.syncing.github.dependabot.encrypt_secret", return_value=MOCK_ENCRYPTED_VALUE
 )
-@patch("api.utils.syncing.github.dependabot.requests.delete")
-@patch("api.utils.syncing.github.dependabot.requests.put")
-@patch("api.utils.syncing.github.dependabot.requests.get")
+@patch("api.utils.syncing.github.dependabot.safe_requests.delete")
+@patch("api.utils.syncing.github.dependabot.safe_requests.put")
+@patch("api.utils.syncing.github.dependabot.safe_requests.get")
 def test_sync_dependabot_deletes_missing_secrets(
     mock_get, mock_put, mock_delete, mock_encrypt, mock_existing
 ):
@@ -108,8 +108,8 @@ def test_sync_dependabot_deletes_missing_secrets(
 @patch(
     "api.utils.syncing.github.dependabot.encrypt_secret", return_value=MOCK_ENCRYPTED_VALUE
 )
-@patch("api.utils.syncing.github.dependabot.requests.put")
-@patch("api.utils.syncing.github.dependabot.requests.get")
+@patch("api.utils.syncing.github.dependabot.safe_requests.put")
+@patch("api.utils.syncing.github.dependabot.safe_requests.get")
 def test_sync_dependabot_secrets_fails_on_put_error(
     mock_get, mock_put, mock_encrypt, mock_existing
 ):
@@ -125,7 +125,7 @@ def test_sync_dependabot_secrets_fails_on_put_error(
     assert "Error syncing secret" in result["message"]
 
 
-@patch("api.utils.syncing.github.dependabot.requests.get")
+@patch("api.utils.syncing.github.dependabot.safe_requests.get")
 def test_get_all_dependabot_repo_secrets_pagination(mock_get):
     page1_response = Mock()
     page1_response.status_code = 200
@@ -149,7 +149,7 @@ def test_get_all_dependabot_repo_secrets_pagination(mock_get):
     assert secrets[1]["name"] == "SECRET2"
 
 
-@patch("api.utils.syncing.github.dependabot.requests.get")
+@patch("api.utils.syncing.github.dependabot.safe_requests.get")
 def test_get_all_dependabot_org_secrets_pagination(mock_get):
     page1_response = Mock()
     page1_response.status_code = 200

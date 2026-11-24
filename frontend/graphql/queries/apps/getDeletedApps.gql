@@ -1,0 +1,11 @@
+query GetDeletedApps($organisationId: ID!) {
+  deletedApps(organisationId: $organisationId) {
+    id
+    name
+    deletedAt
+    deletionScheduledFor
+    deletionDelayed
+    canRestore
+    viewerCanDelete
+  }
+}

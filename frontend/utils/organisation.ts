@@ -1,3 +1,5 @@
+import { DELETION_GRACE_PERIOD_HOURS } from '@/constants'
+
 /**
  * Calculate the number of seats still available on an organisation plan.
  *
@@ -20,3 +22,7 @@ export const getAvailableSeats = (
 /** When an organisation pending deletion will be deleted, in the viewer's locale. */
 export const formatDeletionDate = (date: string) =>
   new Date(date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
+/** When an app or environment scheduled for deletion now would be deleted. */
+export const scheduledDeletionDate = (now: number = Date.now()) =>
+  formatDeletionDate(new Date(now + DELETION_GRACE_PERIOD_HOURS * 60 * 60 * 1000).toISOString())

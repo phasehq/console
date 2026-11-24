@@ -78,6 +78,20 @@ CREATE_MUTATION_CASES = [
         },
     ),
     (
+        "CreateGitLabCISync",
+        {
+            "env_id": "env-1",
+            "path": "/",
+            "credential_id": "cred-1",
+            "resource_path": "phase/backend",
+            "resource_id": "1",
+            "is_group": False,
+            "masked": False,
+            "protected": False,
+            "environment_scope": "production",
+        },
+    ),
+    (
         "CreateGitHubDependabotSync",
         {
             "env_id": "env-1",
@@ -240,3 +254,32 @@ def test_update_sync_authentication_accepts_same_org_credential(monkeypatch):
 
     assert mocks.env_sync.authentication_id == "cred-2"
     mocks.env_sync.save.assert_called_once()
+
+
+# A sync's row is read at the top of the mutation, and a folder rename can
+# rewrite its path before it is saved: each save names the fields it changes.
+
+
+def test_toggling_a_sync_saves_only_the_switch(monkeypatch):
+    mocks = _patch_manage_mutations(monkeypatch)
+    mocks.env_sync.is_active = True
+
+    mutations.ToggleSyncActive.mutate(None, _make_info(), sync_id="sync-1")
+
+    assert mocks.env_sync.is_active is False
+    mocks.env_sync.save.assert_called_once_with(
+        update_fields=["is_active", "updated_at"]
+    )
+
+
+def test_changing_a_syncs_credentials_saves_only_the_credentials(monkeypatch):
+    mocks = _patch_manage_mutations(monkeypatch)
+
+    mutations.UpdateSyncAuthentication.mutate(
+        None, _make_info(), sync_id="sync-1", credential_id="cred-2"
+    )
+
+    assert mocks.env_sync.authentication_id == "cred-2"
+    mocks.env_sync.save.assert_called_once_with(
+        update_fields=["authentication", "updated_at"]
+    )

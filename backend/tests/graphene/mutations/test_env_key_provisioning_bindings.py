@@ -40,6 +40,8 @@ def _patch_init_env_sync(monkeypatch, app_envs, permission=True):
 
     mock_env_model = MagicMock()
     mock_env_model.objects.filter.return_value = app_envs
+    # No environment of the app is pending deletion.
+    mock_env_model.all_objects.filter.return_value.exists.return_value = False
     monkeypatch.setattr(mutations, "Environment", mock_env_model)
 
     mock_sek_model = MagicMock()
@@ -206,8 +208,10 @@ def _patch_create_environment(monkeypatch, admin_members, global_access=True):
     monkeypatch.setattr(mutations, "App", mock_app_model)
 
     mock_env_model = MagicMock()
-    mock_env_model.objects.filter.return_value.exists.return_value = False
     monkeypatch.setattr(mutations, "Environment", mock_env_model)
+    monkeypatch.setattr(
+        mutations, "environment_name_conflict", MagicMock(return_value=None)
+    )
 
     owner = MagicMock(id="owner-1")
     creator = MagicMock(id="creator-1")
@@ -252,6 +256,7 @@ def _patch_create_environment(monkeypatch, admin_members, global_access=True):
         identity_key="env-ik",
         wrapped_seed="env-seed",
         wrapped_salt="env-salt",
+        color=None,
     )
 
     return (

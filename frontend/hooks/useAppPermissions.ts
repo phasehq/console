@@ -9,15 +9,15 @@ import { userHasPermission, userHasGlobalAccess } from '@/utils/access/permissio
  * Hook that computes effective app-level permissions using the override role model.
  *
  * For app-level resources (isAppResource=true), the effective permissions depend on
- * how the user accesses the app:
+ * how the user accesses the app. Each access path contributes one role:
  *
- * - Team with memberRole override → override REPLACES the org role
- * - Team without memberRole override → org role applies (no override)
- * - No team-based access → org role applies (backward compat for direct membership)
+ * - Direct app membership → org role
+ * - Team with memberRole override → the override, in place of the org role for that path
+ * - Team without memberRole override, or a team the user owns → org role
  * - Global access (Owner/Admin) → org role always applies (bypasses restrictions)
  *
- * When a user has multiple access paths (e.g. multiple teams), the union of all
- * effective roles applies — most permissive wins across paths.
+ * The union of all paths applies — most permissive wins, as in the backend's
+ * `_check_app_permission`. A team override never narrows a direct member's org role.
  *
  * For org-level resources (isAppResource=false), only the org role is checked.
  */
@@ -37,6 +37,8 @@ export function useAppPermissions(appId: string) {
     skip: !organisation || !userCanReadTeams,
   })
 
+  const isDirectMember = organisation?.individualAppIds?.includes(appId) ?? false
+
   // Compute effective permission sources for app-level checks.
   // Each source is a permissions JSON string representing one access path's effective role.
   const appPermissionSources = useMemo(() => {
@@ -55,6 +57,9 @@ export function useAppPermissions(appId: string) {
     }
 
     let hasTeamAccess = false
+
+    // Direct membership keeps the org role, alongside any team access
+    if (isDirectMember) sources.push(organisation.role!.permissions!)
 
     for (const team of teamsData.teams as TeamType[]) {
       // Does this team include this app?
@@ -84,15 +89,21 @@ export function useAppPermissions(appId: string) {
       }
     }
 
-    if (!hasTeamAccess) {
-      // User has no team-based access to this app → must be direct membership
-      // Use org role (backward compat)
+    if (!hasTeamAccess && !isDirectMember) {
+      // No known access path → use org role (backward compat)
       if (organisation?.role?.permissions) sources.push(organisation.role.permissions)
     }
 
-    return sources
+    return Array.from(new Set(sources))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamsData, appId, organisation?.memberId, organisation?.role?.permissions, isGlobalAccess])
+  }, [
+    teamsData,
+    appId,
+    organisation?.memberId,
+    organisation?.role?.permissions,
+    isGlobalAccess,
+    isDirectMember,
+  ])
 
   /**
    * Check a permission in the context of this app. Always team-aware

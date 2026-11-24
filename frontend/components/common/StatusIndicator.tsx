@@ -6,23 +6,17 @@ import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { isCloudHosted } from '@/utils/appConfig'
 
-type Status = {
+export type Status = {
   indicator: 'none' | 'minor' | 'major' | 'critical' | 'error'
   description: string
 }
 
-const STATUS_PAGE_BASE_URL = 'https://phase.statuspage.io'
+export const STATUS_PAGE_BASE_URL = 'https://phase.statuspage.io'
 
-export const StatusIndicator = () => {
+// Fetches the public status once. `enabled` is false when self-hosted, where there is nothing to show
+export const useSystemStatus = () => {
   const [status, setStatus] = useState<Status | null>(null)
   const [isLoading, setLoading] = useState<boolean>(false)
-
-  // const [isCloudHosted, setIsCloudHosted] = useState(false)
-
-  // useEffect(() => {
-
-  //   if (appHost === 'cloud') setIsCloudHosted(true)
-  // }, [])
 
   useEffect(() => {
     const getStatus = async () => {
@@ -50,34 +44,38 @@ export const StatusIndicator = () => {
     if (isCloudHosted()) getStatus()
   }, [])
 
-  const statusColor = () => {
-    let color = 'bg-neutral-500'
-    switch (status?.indicator) {
-      case 'none':
-        color = 'bg-emerald-500'
-        break
-      case 'minor':
-        color = 'bg-yellow-500'
-        break
-      case 'major':
-        color = 'bg-orange-500'
-        break
-      case 'critical':
-        color = 'bg-red-500'
-        break
-      default:
-        color = 'bg-neutral-500'
-    }
-    return color
-  }
+  return { status, isLoading, enabled: isCloudHosted() }
+}
 
-  if (!isCloudHosted()) return <></>
+export const statusColor = (status: Status | null) => {
+  switch (status?.indicator) {
+    case 'none':
+      return 'bg-emerald-500'
+    case 'minor':
+      return 'bg-yellow-500'
+    case 'major':
+      return 'bg-orange-500'
+    case 'critical':
+      return 'bg-red-500'
+    default:
+      return 'bg-neutral-500'
+  }
+}
+
+export const StatusIndicator = () => {
+  const { status, isLoading, enabled } = useSystemStatus()
+
+  if (!enabled) return <></>
 
   return (
     <Link href={STATUS_PAGE_BASE_URL} target="_blank" className="hidden lg:block">
       <Button variant="secondary">
         <span
-          className={clsx('h-2 w-2 mr-1 rounded-full', statusColor(), isLoading && 'animate-pulse')}
+          className={clsx(
+            'h-2 w-2 mr-1 rounded-full',
+            statusColor(status),
+            isLoading && 'animate-pulse'
+          )}
         ></span>
         <span className="truncate whitespace-nowrap">{status?.description || 'Loading'}</span>
       </Button>

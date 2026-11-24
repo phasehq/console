@@ -242,8 +242,10 @@ class TestRotationsPauseWhileLocked:
             is_active=True
         )
         with patch.object(engine.apps, "get_model", return_value=model), patch.object(
-            engine, "transaction"
-        ), patch.object(engine, "_mint_once") as mint, patch.object(
+            engine, "environment_is_locked", return_value=False
+        ), patch.object(engine, "transaction"), patch.object(
+            engine, "_mint_once"
+        ) as mint, patch.object(
             engine, "_retire_prior_credential"
         ), patch.object(
             engine, "record_event"
@@ -285,7 +287,9 @@ class TestRotationsPauseWhileLocked:
         ) as schedule:
             engine.reschedule(rotating_secret)
 
-        schedule.assert_called_once_with(rotating_secret, delay=expected_delay)
+        schedule.assert_called_once_with(
+            rotating_secret, delay=expected_delay, trigger_syncs=True
+        )
 
     def test_reschedule_rotates_now_when_a_blocked_purge_revoked_the_credential(
         self,
@@ -301,7 +305,9 @@ class TestRotationsPauseWhileLocked:
             engine.reschedule(rotating_secret)
 
         rotating_secret.credentials.filter.assert_called_once_with(status="active")
-        schedule.assert_called_once_with(rotating_secret, delay=timedelta(0))
+        schedule.assert_called_once_with(
+            rotating_secret, delay=timedelta(0), trigger_syncs=True
+        )
 
 
 class TestSyncsPauseWhileLocked:
@@ -320,7 +326,7 @@ class TestSyncsPauseWhileLocked:
         models = {"EnvironmentSync": sync_model, "EnvironmentSyncEvent": event_model}
         with patch.object(
             syncing.apps, "get_model", side_effect=lambda app, name: models[name]
-        ):
+        ), patch.object(syncing, "environment_is_locked", return_value=False):
             yield SimpleNamespace(module=syncing, event=event)
 
     def test_locked_org_skips_the_sync_job(self, syncing):
@@ -336,7 +342,9 @@ class TestSyncsPauseWhileLocked:
         env_sync, sync_function = MagicMock(), MagicMock(return_value=(True, {}))
         with patch.object(
             syncing.module, "organisation_is_locked", return_value=False
-        ), patch.object(syncing.module, "get_environment_secrets", return_value=[]):
+        ), patch.object(syncing.module, "transaction"), patch.object(
+            syncing.module, "get_environment_secrets", return_value=[]
+        ):
             syncing.module.handle_sync_event(env_sync, sync_function)
 
         sync_function.assert_called_once()
