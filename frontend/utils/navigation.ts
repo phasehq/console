@@ -1,5 +1,5 @@
 import { startCase } from 'lodash'
-import { AppType, EnvironmentType } from '@/apollo/graphql'
+import { AppType } from '@/apollo/graphql'
 import { isUUID } from '@/utils/copy'
 
 export type NavigationItem = {
@@ -12,18 +12,41 @@ export type NavigationContext = {
   team?: string | null
   context?: string | null
   appId?: string | null
-  envId?: string | null
   page?: string | null
   subPage?: string | null
   activeApp?: AppType
-  activeEnv?: EnvironmentType
   // Add support for non-team routes
   route?: string | null // e.g., 'signup', 'webauth', 'lockbox'
   routeParam?: string | null // e.g., boxId, requestCode
 }
 
+export type SectionPage = {
+  name: string
+  link: string
+}
+
+// Sub-pages of the org-level sections, shared by the sidebar and each section's tab bar.
+export const ACCESS_PAGES: SectionPage[] = [
+  { name: 'Members', link: 'members' },
+  { name: 'Service Accounts', link: 'service-accounts' },
+  { name: 'Teams', link: 'teams' },
+  { name: 'Roles', link: 'roles' },
+  { name: 'Single Sign-On', link: 'sso' },
+  { name: 'SCIM', link: 'scim' },
+  { name: 'External Identities', link: 'identities' },
+  { name: 'Authentication', link: 'authentication' },
+  { name: 'Network', link: 'network' },
+]
+
+export const getIntegrationPages = (canReadLogStreams: boolean): SectionPage[] => [
+  { name: 'Syncs', link: 'syncs' },
+  { name: 'Dynamic Secrets', link: 'dynamic-secrets' },
+  ...(canReadLogStreams ? [{ name: 'Log Streams', link: 'log-streams' }] : []),
+  { name: 'Third-party credentials', link: 'credentials' },
+]
+
 export const generateBreadcrumbs = (ctx: NavigationContext): NavigationItem[] => {
-  const { team, context, page, subPage, activeApp, activeEnv, route, routeParam } = ctx
+  const { team, context, page, subPage, activeApp, route, routeParam } = ctx
 
   // Handle non-team routes first
   if (route) {
@@ -65,7 +88,7 @@ export const generateBreadcrumbs = (ctx: NavigationContext): NavigationItem[] =>
 
   if (activeApp) {
     // App name should only be clickable if we're not at the app home
-    const isAtAppHome = !page && !activeEnv
+    const isAtAppHome = !page
     breadcrumbs.push({
       label: activeApp.name,
       href: isAtAppHome ? undefined : `/${team}/apps/${activeApp.id}`,
@@ -82,43 +105,17 @@ export const generateBreadcrumbs = (ctx: NavigationContext): NavigationItem[] =>
 
   // Handle different app sections
   if (page) {
-    if (page === 'environments' && activeEnv) {
-      // For environment routes: /apps/[app]/environments/[environment]/[...path]
+    // /apps/[app]/[page]
+    breadcrumbs.push({
+      label: page,
+      isLink: Boolean(activeApp),
+    })
+    if (subPage && !isUUID(subPage)) {
       breadcrumbs.push({
-        label: 'environments',
-        href: activeApp ? `/${team}/apps/${activeApp.id}` : undefined,
-        isLink: Boolean(activeApp),
-      })
-      breadcrumbs.push({
-        label: activeEnv.name,
+        label: subPage,
         isLink: false,
       })
-      // Add folder path if present
-      if (subPage && !isUUID(subPage)) {
-        breadcrumbs.push({
-          label: subPage,
-          isLink: false,
-        })
-      }
-    } else {
-      // For other app routes: /apps/[app]/[page]
-      breadcrumbs.push({
-        label: page,
-        isLink: Boolean(activeApp),
-      })
-      // Add subPage if present and not in environments
-      if (subPage && !isUUID(subPage)) {
-        breadcrumbs.push({
-          label: subPage,
-          isLink: false,
-        })
-      }
     }
-  } else if (activeEnv && !page) {
-    breadcrumbs.push({
-      label: activeEnv.name,
-      isLink: false,
-    })
   }
 
   return breadcrumbs

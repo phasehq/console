@@ -2,6 +2,7 @@ import {
   formatEnvValue,
   exportToEnvFile,
   processEnvFile,
+  readEnvFile,
   toggleBooleanKeepingCase,
   getSecretPermalink,
   sortSecrets,
@@ -334,7 +335,7 @@ describe('getSecretPermalink', () => {
     } as SecretType
 
     expect(getSecretPermalink(secret, 'my-org')).toBe(
-      '/my-org/apps/app-1/environments/env-1/backend?secret=secret-1'
+      '/my-org/apps/app-1/backend?envs=env-1&secret=secret-1'
     )
   })
 
@@ -349,7 +350,7 @@ describe('getSecretPermalink', () => {
     } as SecretType
 
     expect(getSecretPermalink(secret, 'org')).toBe(
-      '/org/apps/app-2/environments/env-2/?secret=secret-2'
+      '/org/apps/app-2?envs=env-2&secret=secret-2'
     )
   })
 })
@@ -519,6 +520,26 @@ describe('processEnvFile', () => {
 
   test('returns empty array for comments-only input', () => {
     expect(processEnvFile('# just a comment\n# another one', mockEnv, '/')).toEqual([])
+  })
+})
+
+describe('readEnvFile', () => {
+  const file = (name: string, text: string) => new File([text], name)
+
+  test.each(['.env', '.env.local', 'staging.env'])('reads %s', async (name) => {
+    await expect(readEnvFile(file(name, 'A=1\n'))).resolves.toBe('A=1\n')
+  })
+
+  test('turns away a file that is not a .env', async () => {
+    await expect(readEnvFile(file('notes.txt', 'A=1'))).rejects.toThrow('Invalid file type')
+  })
+
+  test('turns away a file over 100KB', async () => {
+    await expect(readEnvFile(file('.env', 'A'.repeat(100 * 1024 + 1)))).rejects.toThrow('100KB')
+  })
+
+  test('turns away an empty file', async () => {
+    await expect(readEnvFile(file('.env', ' \n'))).rejects.toThrow('empty')
   })
 })
 

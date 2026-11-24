@@ -3,17 +3,32 @@ import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
 import { Textarea } from '@/components/common/TextArea'
 import { ToggleSwitch } from '@/components/common/ToggleSwitch'
-import { duplicateKeysExist, envFilePlaceholder, processEnvFile } from '@/utils/secrets'
+import {
+  duplicateKeysExist,
+  envFilePlaceholder,
+  processEnvFile,
+  readEnvFile,
+} from '@/utils/secrets'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import EnvFileDropZone from './EnvFileDropZone'
+import { EnvFileDropHint } from './EnvFileDropHint'
+import { useFileDrop } from '@/hooks/useFileDrop'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
+import { ImportEnvOptions } from '@/utils/appSecrets'
 import clsx from 'clsx'
 import { toast } from 'react-toastify'
+
+export type ImportDialogHandle = {
+  openModal: () => void
+  closeModal: () => void
+  /** Opens on a .env file's contents, as though they had been pasted in */
+  importFile: (file: File) => void
+}
 
 interface MultiEnvImportDialogProps {
   environments: EnvironmentType[]
   path?: string
-  addSecrets: (secrets: AppSecret[]) => void
+  /** With each env's options: one that takes keys only keeps the values it already has */
+  addSecrets: (secrets: AppSecret[], options: Record<string, ImportEnvOptions>) => void
 }
 
 const MultiEnvImportDialog = forwardRef(
@@ -28,26 +43,40 @@ const MultiEnvImportDialog = forwardRef(
         {} as Record<string, { withValues: boolean; withComments: boolean }>
       )
     )
-    const [selectedEnvs, setSelectedEnvs] = useState<EnvironmentType[]>(environments)
+    // By id: a data refresh hands over new objects for the same environments
+    const [selectedEnvIds, setSelectedEnvIds] = useState(() => environments.map((env) => env.id))
+    const isSelected = (env: EnvironmentType) => selectedEnvIds.includes(env.id)
 
     const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     const openModal = () => dialogRef.current?.openModal()
     const closeModal = () => dialogRef.current?.closeModal()
 
+    const importFile = (file: File) =>
+      readEnvFile(file).then(
+        (text) => {
+          setEnvFileString(text)
+          openModal()
+        },
+        (error: Error) => toast.error(error.message)
+      )
+    const { over, dropTarget } = useFileDrop(importFile)
+
     useImperativeHandle(ref, () => ({
       openModal,
       closeModal,
+      importFile,
     }))
 
     const handleToggleEnv = (env: EnvironmentType) => {
-      setSelectedEnvs((prev) => {
-        const newSelection = prev.includes(env)
-          ? prev.filter((e) => e !== env) // Remove env
-          : [...prev, env] // Add env
+      setSelectedEnvIds((prev) => {
+        const newSelection = prev.includes(env.id)
+          ? prev.filter((id) => id !== env.id) // Remove env
+          : [...prev, env.id] // Add env
 
         // Reset envConfigs when the environment is unselected
-        if (!newSelection.includes(env)) {
+        if (!newSelection.includes(env.id)) {
           setEnvConfigs((prevConfigs) => ({
             ...prevConfigs,
             [env.id]: { withValues: false, withComments: false },
@@ -64,7 +93,7 @@ const MultiEnvImportDialog = forwardRef(
       try {
         // First pass: Process only selected environments
         environments.forEach((env) => {
-          if (!selectedEnvs.includes(env)) return
+          if (!isSelected(env)) return
 
           const secrets = processEnvFile(
             envFileString,
@@ -106,17 +135,15 @@ const MultiEnvImportDialog = forwardRef(
       const newSecrets = Array.from(secretsByKey.values())
 
       if (newSecrets.length) {
-        addSecrets(newSecrets)
+        addSecrets(newSecrets, envConfigs)
         setEnvFileString('') // Clear textarea after import
         if (dialogRef.current) dialogRef.current.closeModal()
       }
     }
 
-    const handleFileSelection = (fileString: string) => setEnvFileString(fileString)
-
     const reset = () => {
       setEnvFileString('')
-      setSelectedEnvs(environments)
+      setSelectedEnvIds(environments.map((env) => env.id))
       setEnvConfigs(
         environments.reduce(
           (acc, env, index) => {
@@ -128,36 +155,51 @@ const MultiEnvImportDialog = forwardRef(
       )
     }
 
-    // reset the component state if the environments are updated
+    // Reset when the environments themselves change, not when a refresh re-creates their objects
+    const envIds = environments.map((env) => env.id).join(',')
     useEffect(() => {
-      if (environments) {
-        reset()
-      }
+      reset()
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [environments])
+    }, [envIds])
 
-    const disabled = !envFileString || selectedEnvs.length === 0
+    const disabled = !envFileString || selectedEnvIds.length === 0
 
     return (
       <GenericDialog title="Import secrets" ref={dialogRef} onClose={reset}>
-        <div className="space-y-4">
+        {/* A file dropped anywhere on the dialog lands in the box */}
+        <div className="space-y-4" {...dropTarget}>
           <p className="text-neutral-500 text-sm">
-            Drop, select or paste your .env here to import secrets into your environment
+            Type or paste your secrets, drop a .env file onto the box, or{' '}
+            <button
+              type="button"
+              className="text-emerald-600 hover:underline dark:text-emerald-400"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              choose a file
+            </button>
+            .
           </p>
+          <input
+            type="file"
+            hidden
+            ref={fileInputRef}
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              // Lets the same file be chosen again
+              event.target.value = ''
+              if (file) importFile(file)
+            }}
+          />
 
-          <div>
-            <div className="py-4">
-              <Textarea
-                value={envFileString}
-                setValue={setEnvFileString}
-                placeholder={envFilePlaceholder}
-                rows={12}
-                className="font-mono text-zinc-700 dark:text-zinc-300 text-sm placeholder:text-zinc-500"
-              />
-            </div>
-            {!envFileString && (
-              <EnvFileDropZone onFileProcessed={(content) => handleFileSelection(content)} />
-            )}
+          <div className="relative">
+            <Textarea
+              value={envFileString}
+              setValue={setEnvFileString}
+              placeholder={envFilePlaceholder}
+              rows={12}
+              className="block font-mono text-zinc-700 dark:text-zinc-300 text-sm placeholder:text-zinc-500"
+            />
+            {over && <EnvFileDropHint>Drop your .env file here</EnvFileDropHint>}
           </div>
 
           {envFileString && (
@@ -182,14 +224,14 @@ const MultiEnvImportDialog = forwardRef(
                         <div
                           className="flex p-2 items-center justify-between border-r border-neutral-500/20"
                           title={
-                            selectedEnvs.includes(env)
+                            isSelected(env)
                               ? "Don't import secrets into this environment"
                               : 'Import secrets into this environment'
                           }
                         >
                           <span
                             className={clsx(
-                              selectedEnvs.includes(env)
+                              isSelected(env)
                                 ? 'text-neutral-800 dark:text-neutral-200 font-medium'
                                 : 'text-neutral-500'
                             )}
@@ -198,7 +240,7 @@ const MultiEnvImportDialog = forwardRef(
                           </span>
 
                           <ToggleSwitch
-                            value={selectedEnvs.includes(env)}
+                            value={isSelected(env)}
                             onToggle={() => handleToggleEnv(env)}
                           />
                         </div>
@@ -208,7 +250,7 @@ const MultiEnvImportDialog = forwardRef(
                         <div className="flex p-2 items-center justify-center">
                           <ToggleSwitch
                             value={envConfigs[env.id].withValues}
-                            disabled={!selectedEnvs.includes(env)}
+                            disabled={!isSelected(env)}
                             onToggle={() =>
                               setEnvConfigs((prev) => ({
                                 ...prev,
@@ -226,7 +268,7 @@ const MultiEnvImportDialog = forwardRef(
                         <div className="flex p-2 items-center justify-center">
                           <ToggleSwitch
                             value={envConfigs[env.id].withComments}
-                            disabled={!selectedEnvs.includes(env)}
+                            disabled={!isSelected(env)}
                             onToggle={() =>
                               setEnvConfigs((prev) => ({
                                 ...prev,

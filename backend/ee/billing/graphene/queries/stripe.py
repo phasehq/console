@@ -1,5 +1,5 @@
 from api.models import Organisation
-from api.utils.access.permissions import user_has_permission
+from api.utils.access.permissions import user_has_permission, user_is_org_member
 from api.utils.organisation_deletion import has_pending_invoices
 import graphene
 from graphene import ObjectType, String, Boolean, List, Int, Float
@@ -7,7 +7,8 @@ import stripe
 from django.conf import settings
 from django.utils import timezone
 from graphql import GraphQLError
-from ee.billing.graphene.types import BillingPeriodEnum, PlanTypeEnum
+from ee.billing.graphene.types import BillingIssueEnum, BillingPeriodEnum, PlanTypeEnum
+from ee.billing.stripe import cached_billing_issue
 from ee.billing.utils import calculate_graduated_price, get_org_billable_seats
 
 
@@ -42,6 +43,12 @@ class StripeSubscriptionDetails(ObjectType):
     payment_methods = List(PaymentMethodDetails)
     billing_period = BillingPeriodEnum()
     plan_type = PlanTypeEnum()
+
+
+class OrganisationBillingIssueType(ObjectType):
+    status = BillingIssueEnum(required=True)
+    # Pays the only open invoice. Withheld from members who can't update billing.
+    invoice_url = String()
 
 
 def resolve_stripe_checkout_details(self, info, stripe_session_id, organisation_id):
@@ -91,6 +98,26 @@ def resolve_organisation_has_pending_invoices(self, info, organisation_id):
     if not user_has_permission(info.context.user, "read", "Billing", org):
         raise GraphQLError("You don't have permission to view billing for this organisation")
     return has_pending_invoices(org)
+
+
+def resolve_organisation_billing_issue(self, info, organisation_id):
+    """Phase Cloud. Open to every member, since all of them see the banner."""
+    if settings.APP_HOST != "cloud":
+        return None
+    if not user_is_org_member(info.context.user.userId, organisation_id):
+        raise GraphQLError("You don't have access to this organisation")
+
+    org = Organisation.objects.get(id=organisation_id)
+    issue = cached_billing_issue(org)
+    if issue is None:
+        return None
+
+    # Anyone holding the link can view the invoice and pay it.
+    can_pay = user_has_permission(info.context.user, "update", "Billing", org)
+    return OrganisationBillingIssueType(
+        status=BillingIssueEnum.get(issue.status),
+        invoice_url=issue.invoice_url if can_pay else None,
+    )
 
 
 def resolve_stripe_subscription_details(self, info, organisation_id):

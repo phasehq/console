@@ -614,6 +614,8 @@ class Environment(models.Model):
         choices=ENV_TYPES,
         default=DEVELOPMENT,
     )
+    # Hex label color; null = clients derive a default from the name
+    color = models.CharField(max_length=7, blank=True, null=True)
     index = models.IntegerField(default=0)
     identity_key = models.CharField(max_length=256)
     wrapped_seed = models.CharField(max_length=256)
@@ -1411,7 +1413,8 @@ class SecretEvent(models.Model):
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
     secret = models.ForeignKey(Secret, on_delete=models.CASCADE)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
-    folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
+    # SET_NULL: a secret moved out of a folder keeps its history when that folder is deleted
+    folder = models.ForeignKey(SecretFolder, on_delete=models.SET_NULL, null=True)
     path = models.TextField(default="/")
     user = models.ForeignKey(
         OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True

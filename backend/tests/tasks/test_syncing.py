@@ -362,6 +362,130 @@ def test_gitlab_sync_with_id_does_not_look_it_up(mock_handle, mock_resolve):
     mock_resolve.assert_not_called()
 
 
+# --- handle_sync_event: the job writes back only what it owns ---
+
+
+def _run_job(sync_function, locked=False, env_sync=None, path_now="/", steps=None):
+    """handle_sync_event on a sync as a worker holds it: the copy pickled when the job was queued.
+
+    `path_now` is the path its row has by the time the job runs. `steps`, if given, collects what
+    the job does around its read of the secrets, in order.
+    """
+    from api.tasks.syncing import handle_sync_event
+
+    env_sync = env_sync or MagicMock()
+    steps = [] if steps is None else steps
+    with patch("api.tasks.syncing.apps.get_model") as mock_get_model, patch(
+        "api.tasks.syncing.organisation_is_locked", return_value=locked
+    ), patch("api.tasks.syncing.environment_is_locked", return_value=False), patch(
+        "api.tasks.syncing.transaction"
+    ) as transaction, patch(
+        "api.tasks.syncing.get_environment_secrets",
+        side_effect=lambda environment, path: steps.append(("read", path)) or [],
+    ):
+        objects = mock_get_model.return_value.objects
+        objects.filter.return_value.order_by.return_value.first.return_value = MagicMock()
+        transaction.atomic.return_value.__enter__.side_effect = lambda: steps.append("begin")
+        transaction.atomic.return_value.__exit__.side_effect = lambda *exc: steps.append("commit")
+        row = objects.select_for_update.return_value.values_list.return_value
+        row.get.side_effect = lambda **kwargs: steps.append(("lock", kwargs)) or path_now
+        handle_sync_event(env_sync, sync_function)
+    return [call.kwargs for call in env_sync.save.call_args_list]
+
+
+@pytest.mark.parametrize(
+    "sync_function",
+    [
+        MagicMock(return_value=(True, {})),
+        MagicMock(return_value=(False, {"message": "rejected"})),
+        MagicMock(side_effect=Exception("provider down")),
+    ],
+    ids=["synced", "refused", "raised"],
+)
+def test_sync_job_saves_its_status_and_nothing_else(sync_function):
+    """The folder a sync sends can be renamed while its job runs (the path is
+    rewritten in place), and a sync can be paused or re-pointed: saving the
+    job's whole stale copy would put the old values back."""
+    saves = _run_job(sync_function)
+
+    assert saves == [
+        {"update_fields": ["status", "updated_at"]},
+        {"update_fields": ["status", "updated_at", "last_sync"]},
+    ]
+
+
+def _queue(delay):
+    """trigger_sync_tasks on a sync as the request that queues it holds it; returns its saves."""
+    from api.services import ServiceConfig
+    from api.tasks.syncing import trigger_sync_tasks
+
+    env_sync = MagicMock(service=ServiceConfig.SUPABASE_EDGE_FUNCTIONS["id"])
+    with patch("api.tasks.syncing.apps.get_model"), patch(
+        "api.tasks.syncing.organisation_is_locked", return_value=False
+    ), patch("api.tasks.syncing.environment_is_locked", return_value=False), patch(
+        "api.tasks.syncing.cancel_sync_tasks"
+    ), patch(
+        "api.tasks.syncing.perform_supabase_sync"
+    ) as job:
+        job.delay.side_effect = delay
+        trigger_sync_tasks(env_sync)
+    return [call.kwargs for call in env_sync.save.call_args_list]
+
+
+@pytest.mark.parametrize(
+    "delay, saved",
+    [(lambda env_sync: MagicMock(), 1), (Exception("queue down"), 2)],
+    ids=["queued", "not queued"],
+)
+def test_queueing_a_sync_saves_its_status_and_nothing_else(delay, saved):
+    """The request loaded the sync before queueing it. A folder renamed in between has its
+    new path in the row: saving the whole stale copy would put the old one back, and the
+    job reads the row's path."""
+    saves = _queue(delay)
+
+    assert saves == [{"update_fields": ["status", "updated_at"]}] * saved
+
+
+def test_sync_job_paused_for_a_locked_org_saves_its_status_and_nothing_else():
+    sync_function = MagicMock()
+
+    saves = _run_job(sync_function, locked=True)
+
+    assert saves == [{"update_fields": ["status", "updated_at"]}]
+    sync_function.assert_not_called()
+
+
+def test_sync_job_reads_the_path_its_sync_has_now_not_the_one_it_was_queued_with():
+    """A job queued before its folder was renamed would find nothing at the old path, and
+    most providers delete what the source no longer has."""
+    queued = MagicMock(id="sync-1", path="/edge")
+    steps = []
+    sync_function = MagicMock(side_effect=lambda secrets: steps.append("push") or (True, {}))
+
+    _run_job(sync_function, env_sync=queued, path_now="/functions", steps=steps)
+
+    assert ("lock", {"id": "sync-1"}) in steps
+    assert ("read", "/functions") in steps
+    assert ("read", "/edge") not in steps
+
+
+def test_sync_job_reads_path_and_secrets_as_one_then_lets_go_before_pushing():
+    """The row lock holds a rename off between the two reads. The provider calls, which can
+    take minutes, run after it is released."""
+    steps = []
+    sync_function = MagicMock(side_effect=lambda secrets: steps.append("push") or (True, {}))
+
+    _run_job(sync_function, env_sync=MagicMock(id="sync-1"), path_now="/functions", steps=steps)
+
+    assert steps == [
+        "begin",
+        ("lock", {"id": "sync-1"}),
+        ("read", "/functions"),
+        "commit",
+        "push",
+    ]
+
+
 # --- several environments changed together (an app restore) ---
 
 

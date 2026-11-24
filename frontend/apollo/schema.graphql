@@ -30,6 +30,11 @@ type Query {
   appServiceAccounts(appId: ID): [ServiceAccountType]
   secrets(envId: ID, path: String, id: ID): [SecretType]
   folders(envId: ID, path: String): [SecretFolderType]
+
+  """
+  The number of secrets stored directly at each path in an environment, counting only static secrets that haven't been deleted: the secrets a sync from that path sends.
+  """
+  secretCountsByPath(envId: ID!): [SecretPathCountType!]
   secretHistory(secretId: ID): [SecretEventType]
   secretTags(orgId: ID): [SecretTagType]
   environmentKeys(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentKeyType]
@@ -72,6 +77,7 @@ type Query {
   stripeCheckoutDetails(stripeSessionId: String!, organisationId: ID!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
   organisationHasPendingInvoices(organisationId: ID!): Boolean
+  organisationBillingIssue(organisationId: ID!): OrganisationBillingIssueType
   stripeCustomerPortalUrl(organisationId: ID!): String
   estimateStripeSubscription(organisationId: ID!, planType: PlanTypeEnum!, billingPeriod: BillingPeriodEnum!, previewV2: Boolean = false): StripePlanEstimate
   dynamicSecretProviders: [DynamicSecretProviderType]
@@ -213,13 +219,14 @@ type EnvironmentType {
   app: AppMembershipType!
   name: String!
   envType: ApiEnvironmentEnvTypeChoices!
+  color: String
   index: Int!
   identityKey: String!
   wrappedSeed: String
   wrappedSalt: String
   createdAt: DateTime
   updatedAt: DateTime!
-  folders: [SecretFolderType]!
+  folders(path: String): [SecretFolderType]!
   secrets(path: String): [SecretType]!
   dynamicSecrets(path: String): [DynamicSecretType]!
   folderCount: Int
@@ -1093,10 +1100,16 @@ type DeletedEnvironmentType {
   id: ID!
   name: String!
   envType: String!
+  index: Int!
   deletedAt: DateTime!
   deletionScheduledFor: DateTime!
   deletionDelayed: Boolean!
   canRestore: Boolean!
+}
+
+type SecretPathCountType {
+  path: String!
+  secretCount: Int!
 }
 
 type EnvironmentKeyType {
@@ -1352,6 +1365,19 @@ enum BillingPeriodEnum {
 enum PlanTypeEnum {
   PRO
   ENTERPRISE
+}
+
+type OrganisationBillingIssueType {
+  status: BillingIssueEnum!
+  invoiceUrl: String
+}
+
+"""The Stripe status of a paid subscription that is awaiting payment."""
+enum BillingIssueEnum {
+  PAST_DUE
+  UNPAID
+  INCOMPLETE
+  PAUSED
 }
 
 type StripePlanEstimate {
@@ -1845,7 +1871,7 @@ type Mutation {
   or later while a credential that can't be revoked blocks the purge.
   """
   restoreEnvironment(environmentId: ID!): RestoreEnvironmentMutation
-  renameEnvironment(environmentId: ID!, name: String!): RenameEnvironmentMutation
+  renameEnvironment(color: String, environmentId: ID!, name: String!): RenameEnvironmentMutation
   updateEnvironmentOrder(appId: ID!, environmentOrder: [ID]!): UpdateEnvironmentOrderMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
@@ -1941,6 +1967,11 @@ type Mutation {
   createUserToken(expiry: BigInt, identityKey: String!, name: String!, orgId: ID!, token: String!, wrappedKeyShare: String!): CreateUserTokenMutation
   deleteUserToken(tokenId: ID!): DeleteUserTokenMutation
   createSecretFolder(envId: ID, name: String, path: String): CreateSecretFolderMutation
+
+  """
+  Renames a folder, or moves it under another, with everything inside it.
+  """
+  updateSecretFolder(folderId: ID!, name: String, path: String): UpdateSecretFolderMutation
   deleteSecretFolder(folderId: ID): DeleteSecretFolderMutation
   createSecretTag(color: String!, name: String!, orgId: ID!): CreateSecretTagMutation
   readSecret(ids: [ID]): ReadSecretMutation
@@ -2282,6 +2313,7 @@ input EnvironmentInput {
   wrappedSeed: String!
   wrappedSalt: String!
   identityKey: String!
+  color: String
 }
 
 """
@@ -2656,6 +2688,13 @@ type DeleteUserTokenMutation {
 }
 
 type CreateSecretFolderMutation {
+  folder: SecretFolderType
+}
+
+"""
+Renames a folder, or moves it under another, with everything inside it.
+"""
+type UpdateSecretFolderMutation {
   folder: SecretFolderType
 }
 

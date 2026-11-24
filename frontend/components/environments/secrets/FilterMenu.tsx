@@ -13,7 +13,7 @@ import {
 } from '@/utils/secrets'
 
 const SECTION_LABEL =
-  'flex items-center justify-between gap-2 px-2 pt-1.5 pb-0.5 text-3xs font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-600'
+  'flex items-center justify-between gap-2 px-2 pt-1.5 pb-0.5 text-3xs font-semibold uppercase tracking-widest text-neutral-500'
 
 const SectionHeading = ({
   label,
@@ -26,7 +26,7 @@ const SectionHeading = ({
 }) => (
   <div className={clsx(SECTION_LABEL, divider && 'mt-1 border-t border-neutral-500/15')}>
     <span>{label}</span>
-    <span className="font-mono font-semibold normal-case tracking-normal text-neutral-400/80 dark:text-neutral-600">
+    <span className="font-mono font-semibold normal-case tracking-normal text-neutral-500">
       {hint}
     </span>
   </div>
@@ -122,7 +122,7 @@ const FilterMenu = ({
           <Popover.Button as={Fragment}>
             <button
               className={clsx(
-                'bg-zinc-100 dark:bg-zinc-800 transition ease px-2 py-1.5 text-2xs 2xl:text-sm rounded-md flex items-center gap-2',
+                'bg-zinc-100 dark:bg-zinc-800 transition ease px-2 py-1.5 text-2xs 2xl:text-xs rounded-md flex items-center gap-2',
                 open || active
                   ? 'text-neutral-900 dark:text-neutral-100'
                   : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'
@@ -146,7 +146,7 @@ const FilterMenu = ({
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
           >
-            <Popover.Panel className="absolute z-20 left-0 origin-top-left top-10 p-1.5 ring-1 ring-inset ring-neutral-500/20 bg-zinc-200 dark:bg-zinc-800 rounded-md shadow-xl text-2xs 2xl:text-sm w-52 max-h-[70vh] overflow-y-auto">
+            <Popover.Panel className="absolute z-20 left-0 origin-top-left top-10 p-1.5 ring-1 ring-inset ring-neutral-500/20 bg-zinc-200 dark:bg-zinc-800 rounded-md shadow-xl text-2xs 2xl:text-xs w-52 max-h-[70vh] overflow-y-auto">
               <SectionHeading label="Type" hint="type:" />
               <ToggleRow
                 active={filter.types.includes(ApiSecretTypeChoices.Config)}

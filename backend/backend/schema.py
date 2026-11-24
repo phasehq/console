@@ -132,9 +132,11 @@ from ee.billing.graphene.queries.stripe import (
     StripeCheckoutDetails,
     StripeSubscriptionDetails,
     StripePlanEstimate,
+    OrganisationBillingIssueType,
     resolve_stripe_checkout_details,
     resolve_stripe_subscription_details,
     resolve_organisation_has_pending_invoices,
+    resolve_organisation_billing_issue,
     resolve_stripe_customer_portal_url,
     resolve_estimate_stripe_subscription,
 )
@@ -246,6 +248,7 @@ from .graphene.mutations.environment import (
     DeleteUserTokenMutation,
     ReadSecretMutation,
     RenameEnvironmentMutation,
+    UpdateSecretFolderMutation,
     RestoreEnvironmentMutation,
     UpdateEnvironmentOrderMutation,
     UpdateMemberEnvScopeMutation,
@@ -354,6 +357,7 @@ from .graphene.types import (
     RoleType,
     SecretEventType,
     SecretFolderType,
+    SecretPathCountType,
     SecretTagType,
     SecretType,
     SecretLogsResponseType,
@@ -394,7 +398,7 @@ from itertools import chain
 import time
 import logging
 import heapq
-from django.db.models import Exists, OuterRef, Q, prefetch_related_objects
+from django.db.models import Count, Exists, OuterRef, Q, prefetch_related_objects
 
 logger = logging.getLogger(__name__)
 
@@ -522,6 +526,15 @@ class Query(graphene.ObjectType):
 
     folders = graphene.List(
         SecretFolderType, env_id=graphene.ID(), path=graphene.String(required=False)
+    )
+    secret_counts_by_path = graphene.List(
+        graphene.NonNull(SecretPathCountType),
+        env_id=graphene.ID(required=True),
+        description=(
+            "The number of secrets stored directly at each path in an environment, "
+            "counting only static secrets that haven't been deleted: the secrets a "
+            "sync from that path sends."
+        ),
     )
     secret_history = graphene.List(SecretEventType, secret_id=graphene.ID())
     secret_tags = graphene.List(SecretTagType, org_id=graphene.ID())
@@ -660,6 +673,10 @@ class Query(graphene.ObjectType):
 
     organisation_has_pending_invoices = graphene.Boolean(
         organisation_id=graphene.ID(required=True)
+    )
+
+    organisation_billing_issue = graphene.Field(
+        OrganisationBillingIssueType, organisation_id=graphene.ID(required=True)
     )
 
     stripe_customer_portal_url = graphene.String(
@@ -1089,6 +1106,22 @@ class Query(graphene.ObjectType):
 
         return SecretFolder.objects.filter(**filter).order_by("created_at")
 
+    def resolve_secret_counts_by_path(root, info, env_id):
+        if not user_can_access_environment(info.context.user.userId, env_id):
+            raise GraphQLError("You don't have access to this environment")
+
+        # One grouped query, matching the secrets get_environment_secrets syncs
+        counts = (
+            Secret.objects.filter(environment_id=env_id, deleted_at=None)
+            .values("path")
+            .annotate(secret_count=Count("id"))
+            .order_by("path")
+        )
+        return [
+            SecretPathCountType(path=row["path"], secret_count=row["secret_count"])
+            for row in counts
+        ]
+
     def resolve_secret_history(root, info, secret_id):
         user = info.context.user
 
@@ -1444,6 +1477,7 @@ class Query(graphene.ObjectType):
     resolve_stripe_checkout_details = resolve_stripe_checkout_details
     resolve_stripe_subscription_details = resolve_stripe_subscription_details
     resolve_organisation_has_pending_invoices = resolve_organisation_has_pending_invoices
+    resolve_organisation_billing_issue = resolve_organisation_billing_issue
     resolve_stripe_customer_portal_url = resolve_stripe_customer_portal_url
     resolve_estimate_stripe_subscription = resolve_estimate_stripe_subscription
 
@@ -1611,6 +1645,7 @@ class Mutation(graphene.ObjectType):
 
 
     create_secret_folder = CreateSecretFolderMutation.Field()
+    update_secret_folder = UpdateSecretFolderMutation.Field()
     delete_secret_folder = DeleteSecretFolderMutation.Field()
 
     create_secret_tag = CreateSecretTagMutation.Field()

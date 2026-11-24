@@ -29,6 +29,7 @@ KWARG_MODEL_ALIASES = {
     "policy_id": "NetworkAccessPolicy",
     "credential_id": "ProviderCredentials",
     "sync_id": "EnvironmentSync",
+    "folder_id": "SecretFolder",
     "stream_id": "LogStream",
     "delivery_event_id": "LogStreamDeliveryEvent",
 }

@@ -14,7 +14,7 @@ import { toast } from 'react-toastify'
 import { SiCloudflareworkers } from 'react-icons/si'
 import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
-import { Input } from '@/components/common/Input'
+import { SyncPathInput } from '@/components/syncing/SyncPathInput'
 
 export const CreateCloudflareWorkersSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -154,7 +154,7 @@ export const CreateCloudflareWorkersSync = (props: { appId: string; closeModal: 
                 </div>
               </RadioGroup>
 
-              <Input value={path} setValue={setPath} label="Path" />
+              <SyncPathInput appId={appId} env={phaseEnv} path={path} setPath={setPath} />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-8">

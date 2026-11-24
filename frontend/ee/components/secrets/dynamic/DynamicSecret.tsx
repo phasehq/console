@@ -7,6 +7,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import Link from 'next/link'
 import { useContext } from 'react'
 import { FaExternalLinkAlt } from 'react-icons/fa'
+import { appSecretsUrl } from '@/utils/appLinks'
 
 export const DynamicSecret = ({ secret }: { secret: DynamicSecretType }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -31,7 +32,11 @@ export const DynamicSecret = ({ secret }: { secret: DynamicSecretType }) => {
         <div className="flex h-full items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition ease">
           {/* <DeleteDynamicSecretDialog secret={secret} /> */}
           <Link
-            href={`/${organisation?.name}/apps/${secret.environment.app.id}/environments/${secret.environment.id}${secret.path}?secret=${secret.id}`}
+            href={appSecretsUrl(organisation?.name ?? '', secret.environment.app.id, {
+              envId: secret.environment.id,
+              path: secret.path,
+              secretId: secret.id,
+            })}
             title="View this secret"
           >
             <Button variant="ghost">

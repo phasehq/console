@@ -25,3 +25,12 @@ def test_create_environment_key_mutation_is_not_exposed():
     mutation_fields = schema.graphql_schema.mutation_type.fields
 
     assert "createEnvironmentKey" not in mutation_fields
+
+
+def test_billing_issue_invoice_url_is_nullable():
+    """resolve_organisation_billing_issue withholds invoiceUrl from members who
+    can't update billing — the field must stay nullable."""
+    field = schema.graphql_schema.type_map["OrganisationBillingIssueType"].fields[
+        "invoiceUrl"
+    ]
+    assert not isinstance(field.type, GraphQLNonNull)

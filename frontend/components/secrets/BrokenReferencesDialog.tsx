@@ -8,12 +8,14 @@ import { SecretReferenceHighlight } from '@/components/secrets/SecretReferenceHi
 interface BrokenReferencesDialogProps {
   warnings: ReferenceValidationError[]
   onSaveAnyway: () => void
+  /** Closed, whichever way, "Deploy anyway" included */
+  onClose?: () => void
 }
 
 export const BrokenReferencesDialog = forwardRef<
   { openModal: () => void; closeModal: () => void },
   BrokenReferencesDialogProps
->(({ warnings, onSaveAnyway }, ref) => {
+>(({ warnings, onSaveAnyway, onClose }, ref) => {
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
 
   useImperativeHandle(ref, () => ({
@@ -22,7 +24,7 @@ export const BrokenReferencesDialog = forwardRef<
   }))
 
   return (
-    <GenericDialog title="Broken Secret References" ref={dialogRef} size="md">
+    <GenericDialog title="Broken Secret References" ref={dialogRef} size="md" onClose={onClose}>
       <div className="pt-4 space-y-4">
         <Alert variant="warning" icon size="sm">
           {warnings.length} broken reference{warnings.length !== 1 ? 's' : ''} found. These

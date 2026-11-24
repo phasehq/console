@@ -12,9 +12,20 @@ import { PostHogProvider } from 'posthog-js/react'
 import { initializePostHog } from '@/utils/posthog'
 import { isCloudHosted } from '@/utils/appConfig'
 import { printConsoleBranding } from '@/utils/console'
+import { installPopStateGuard } from '@/utils/navigationGuard'
+import { Theme } from '@/utils/theme'
 import { useEffect } from 'react'
 
-export default function Providers({ children }: { children: React.ReactNode }) {
+// At load, ahead of the router's own back/forward listener, so a page can hold a step back
+installPopStateGuard()
+
+export default function Providers({
+  savedTheme,
+  children,
+}: {
+  savedTheme: Theme | null
+  children: React.ReactNode
+}) {
   useEffect(() => {
     if (isCloudHosted()) {
       initializePostHog()
@@ -24,7 +35,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <ThemeProvider>
+    <ThemeProvider savedTheme={savedTheme}>
       <SidebarProvider>
         <UserProvider>
           <ApolloProvider client={graphQlClient}>

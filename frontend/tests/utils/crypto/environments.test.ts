@@ -109,3 +109,33 @@ describe('Environment Keyring Tests', () => {
   })
 
 })
+
+describe('encryptSecretsForEnv', () => {
+  test('a secret encrypted for an env reads back with its keys, and its digest uses its salt', async () => {
+    const { ApiSecretTypeChoices } = await import('@/apollo/graphql')
+    const { decryptAsymmetric, digest, encryptSecretsForEnv } = await import('@/utils/crypto')
+    const keys = await envKeyring(await newEnvSeed())
+    const salt = await newEnvSalt()
+
+    const [input] = await encryptSecretsForEnv(
+      [
+        {
+          key: 'DATABASE_URL',
+          value: 'postgres://localhost',
+          comment: 'primary',
+          path: '/workers',
+          type: ApiSecretTypeChoices.Sealed,
+          tags: [{ id: 'tag-1', name: 'db', color: '#000' }],
+        },
+      ],
+      { id: 'env-1', identityKey: keys.publicKey, salt }
+    )
+
+    const read = (ciphertext: string) => decryptAsymmetric(ciphertext, keys.privateKey, keys.publicKey)
+    expect(await read(input.key)).toBe('DATABASE_URL')
+    expect(await read(input.value)).toBe('postgres://localhost')
+    expect(await read(input.comment!)).toBe('primary')
+    expect(input.keyDigest).toBe(await digest('DATABASE_URL', salt))
+    expect(input).toMatchObject({ envId: 'env-1', path: '/workers', type: 'sealed', tags: ['tag-1'] })
+  })
+})

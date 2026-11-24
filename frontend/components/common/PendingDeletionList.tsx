@@ -22,14 +22,14 @@ export type PendingDeletion = {
 export const isBeingDeleted = (item: Pick<PendingDeletion, 'canRestore' | 'deletionDelayed'>) =>
   !item.canRestore && !item.deletionDelayed
 
-const status = (item: PendingDeletion) => {
+export const deletionStatus = (item: PendingDeletion) => {
   if (item.deletionDelayed) return "Deletion delayed: Phase couldn't revoke some credentials"
   if (item.canRestore) return `Will be deleted on ${formatDeletionDate(item.deletionScheduledFor)}`
   return 'Being deleted'
 }
 
 /** A red clock while it waits for its date, the amber spinner of a running sync once it is being deleted. */
-const StatusLine = ({ item }: { item: PendingDeletion }) => {
+export const StatusLine = ({ item }: { item: PendingDeletion }) => {
   const beingDeleted = isBeingDeleted(item)
 
   return (
@@ -40,13 +40,13 @@ const StatusLine = ({ item }: { item: PendingDeletion }) => {
       )}
     >
       {beingDeleted ? <Spinner size="xs" color="amber" /> : <FaClock className="shrink-0" />}
-      <span>{status(item)}</span>
+      <span>{deletionStatus(item)}</span>
     </div>
   )
 }
 
 /** Asks before giving up the rest of the time in which the item can be restored. */
-const DeleteNowDialog = ({
+export const DeleteNowDialog = ({
   item,
   kind,
   disabled,
