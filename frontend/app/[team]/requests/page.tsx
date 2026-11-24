@@ -294,7 +294,7 @@ export default function AgentRequestsPage(props: { params: Promise<{ team: strin
             <span className="mx-auto mt-1 block max-w-md">
               {reviewRequested || status
                 ? 'Try another filter, or clear the filters to see all of your requests.'
-                : 'When an Agent or a member asks for a change to your Agents or Workflows, or asks you to review one, it shows up here to approve or deny.'}
+                : 'Change requests on your Agents and Workflows, and those assigned to you for review, will appear here.'}
             </span>
           }
         >

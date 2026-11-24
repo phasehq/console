@@ -419,7 +419,9 @@ describe('Change request cards', () => {
     await renderPage([])
 
     expect(container.textContent).toContain('No change requests yet')
-    expect(container.textContent).toContain('When an Agent or a member asks for a change')
+    expect(container.textContent).toContain(
+      'Change requests on your Agents and Workflows, and those assigned to you for review, will appear here.'
+    )
     expect(container.querySelectorAll('article')).toHaveLength(0)
     // No filter and no refresh in the empty state.
     expect(container.querySelectorAll('button')).toHaveLength(0)
