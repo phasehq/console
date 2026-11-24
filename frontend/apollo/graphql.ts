@@ -581,12 +581,16 @@ export type AzureKeyVaultSecretType = {
   updatedOn?: Maybe<Scalars['DateTime']['output']>;
 };
 
-/** The Stripe status of a paid subscription that is awaiting payment. */
+/**
+ * Why an org with a paid subscription is awaiting payment: the subscription's
+ * Stripe status, or an overdue invoice while the subscription is active.
+ */
 export enum BillingIssueEnum {
   Incomplete = 'INCOMPLETE',
   PastDue = 'PAST_DUE',
   Paused = 'PAUSED',
-  Unpaid = 'UNPAID'
+  Unpaid = 'UNPAID',
+  UnpaidInvoice = 'UNPAID_INVOICE'
 }
 
 export enum BillingPeriodEnum {

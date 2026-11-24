@@ -197,8 +197,11 @@ def has_unpaid_subscriptions(organisation):
 # Most urgent first. incomplete: the first payment hasn't gone through.
 # paused: a trial ended without a payment method.
 _BILLING_ISSUE_STATUSES = ("unpaid", "past_due", "incomplete", "paused")
+# Stripe sets a subscription's status from its latest invoice only, so an older
+# invoice can stay unpaid while the subscription is active.
+UNPAID_INVOICE = "unpaid_invoice"
 
-# Webhooks clear an entry as soon as the customer's subscriptions change.
+# Any webhook event for the customer clears their entry sooner.
 BILLING_ISSUE_CACHE_TTL = 10 * 60
 BILLING_ISSUE_ERROR_CACHE_TTL = 60
 # Cached when there's no issue, since a cache miss reads as None.
@@ -211,8 +214,16 @@ class BillingIssue(NamedTuple):
     invoice_url: Optional[str] = None
 
 
+def _is_overdue(invoice):
+    # Stripe charges a new invoice shortly after it opens; a sent one is due on its date
+    if invoice.get("collection_method") == "send_invoice":
+        due_date = invoice.get("due_date")
+        return due_date is not None and due_date < time.time()
+    return bool(invoice.get("attempted"))
+
+
 def get_billing_issue(organisation):
-    """The most urgent problem on the org's paid subscriptions, or None."""
+    """The most urgent payment problem of an org with a paid subscription, or None."""
     stripe.api_key = settings.STRIPE["secret_key"]
 
     statuses = {
@@ -220,13 +231,19 @@ def get_billing_issue(organisation):
         for subscription in _open_subscriptions(organisation)
         if _is_paid(subscription)
     }
+    if not statuses:
+        return None
+
+    # Newest first, and an overdue invoice is usually an older one: take a full page
+    invoices = stripe.Invoice.list(
+        customer=organisation.stripe_customer_id, status="open", limit=100
+    )
     status = next((s for s in _BILLING_ISSUE_STATUSES if s in statuses), None)
+    if status is None and any(_is_overdue(invoice) for invoice in invoices["data"]):
+        status = UNPAID_INVOICE
     if status is None:
         return None
 
-    invoices = stripe.Invoice.list(
-        customer=organisation.stripe_customer_id, status="open", limit=2
-    )
     if len(invoices["data"]) == 1 and not invoices.get("has_more"):
         return BillingIssue(status, invoices["data"][0].get("hosted_invoice_url"))
     return BillingIssue(status)

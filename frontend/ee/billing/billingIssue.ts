@@ -24,6 +24,10 @@ export const BILLING_ISSUE_MESSAGES: Record<BillingIssueEnum, { title: string; d
     title: 'Subscription paused',
     detail: "This organisation's subscription is paused because there's no payment method.",
   },
+  [BillingIssueEnum.UnpaidInvoice]: {
+    title: 'Unpaid invoice',
+    detail: "An invoice for this organisation hasn't been paid.",
+  },
 }
 
 const POLL_INTERVAL = 60_000
