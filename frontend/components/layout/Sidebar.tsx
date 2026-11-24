@@ -45,6 +45,12 @@ import { FaCodeMerge, FaListUl } from 'react-icons/fa6'
 import { userHasGlobalAccess, userHasPermission } from '@/utils/access/permissions'
 import { sortApps } from '@/utils/app'
 import { ACCESS_PAGES, getIntegrationPages } from '@/utils/navigation'
+import {
+  BillingIssueCard,
+  BillingIssueNoticeState,
+  SidebarBillingIssue,
+  useBillingIssueNotice,
+} from '@/ee/billing/BillingIssueNotice'
 
 type SidebarSubLinkT = {
   name: string
@@ -690,9 +696,17 @@ const MobileTab = ({
 )
 
 // On phones the tab bar is the whole shell, so More is the account menu with Search added
-const MobileMoreMenu = ({ team, settingsActive }: { team: string; settingsActive: boolean }) => (
+const MobileMoreMenu = ({
+  team,
+  settingsActive,
+  billingIssue,
+}: {
+  team: string
+  settingsActive: boolean
+  billingIssue: BillingIssueNoticeState
+}) => (
   <Menu as="div" className="relative min-w-0 flex-1">
-    {({ open }) => {
+    {({ open, close }) => {
       const highlighted = open || settingsActive
       const rowStyle = (active: boolean, current = false) =>
         clsx(
@@ -716,7 +730,21 @@ const MobileMoreMenu = ({ team, settingsActive }: { team: string; settingsActive
             aria-label="More navigation"
             title="More"
           >
-            <MobileTab name="More" icon={<FaEllipsisH />} active={highlighted} />
+            <MobileTab
+              name="More"
+              icon={
+                // A billing issue marks the tab, so it is seen without opening the menu
+                <span className="relative flex">
+                  <FaEllipsisH />
+                  {billingIssue.issue && (
+                    <span className="absolute -right-1.5 -top-1 size-2 rounded-full bg-red-500">
+                      <span className="sr-only">Billing issue:</span>
+                    </span>
+                  )}
+                </span>
+              }
+              active={highlighted}
+            />
           </Menu.Button>
           <Transition
             as={Fragment}
@@ -728,6 +756,15 @@ const MobileMoreMenu = ({ team, settingsActive }: { team: string; settingsActive
             leaveTo="transform opacity-0 translate-y-1"
           >
             <Menu.Items className="absolute bottom-full right-1 mb-2 max-h-[calc(100dvh_-_4.5rem)] w-64 origin-bottom-right divide-y divide-neutral-500/20 overflow-y-auto rounded-md bg-neutral-200 shadow-2xl ring-1 ring-inset ring-neutral-500/40 focus:outline-none dark:bg-neutral-800">
+              {billingIssue.issue && (
+                <div className="p-1">
+                  <BillingIssueCard
+                    issue={billingIssue.issue}
+                    onDismiss={billingIssue.dismiss}
+                    onAction={close}
+                  />
+                </div>
+              )}
               <AccountHeader />
               <div className="p-1">
                 <Menu.Item>
@@ -800,6 +837,7 @@ const Sidebar = () => {
   const pathname = usePathname()
   const [, team, section, page] = pathname?.split('/') ?? []
   const { activeOrganisation } = useContext(organisationContext)
+  const billingIssue = useBillingIssueNotice()
 
   const navRef = useRef<HTMLElement>(null)
 
@@ -1029,6 +1067,13 @@ const Sidebar = () => {
           ))}
         </nav>
 
+        <SidebarBillingIssue
+          notice={billingIssue}
+          collapsed={collapsed}
+          animating={animating}
+          tooltipClassName={TOOLTIP_STYLE}
+        />
+
         <div className="shrink-0 border-t border-neutral-500/20 px-3 py-2">
           {/* The toggle is pinned bottom left, so it stays under the pointer. Help rises above it on the rail */}
           <div
@@ -1078,7 +1123,7 @@ const Sidebar = () => {
             />
           </Link>
         ))}
-        <MobileMoreMenu team={team} settingsActive={settingsActive} />
+        <MobileMoreMenu team={team} settingsActive={settingsActive} billingIssue={billingIssue} />
       </nav>
     </>
   )
