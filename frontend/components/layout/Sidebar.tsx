@@ -23,11 +23,7 @@ import {
   FaGithub,
   FaSearch,
 } from 'react-icons/fa'
-import {
-  TbLayoutSidebarLeftCollapseFilled,
-  TbLayoutSidebarLeftExpandFilled,
-  TbSelector,
-} from 'react-icons/tb'
+import { TbSelector } from 'react-icons/tb'
 import { MdLogout } from 'react-icons/md'
 import { IconType } from 'react-icons'
 import { useQuery } from '@apollo/client'
@@ -89,7 +85,7 @@ const TOOLTIP_STYLE =
 const SLIDE_MS = 300
 // Applied only while that runs, so the sidebar never animates on load or while it is resized
 const SLIDE =
-  'transition-[width,height,grid-template-columns,opacity] duration-300 ease-in-out motion-reduce:transition-none'
+  'transition-[width,height,grid-template-columns,opacity,transform] duration-300 ease-in-out motion-reduce:transition-none'
 
 // Fades its child in and out as the sidebar expands and collapses
 const Fade = ({ show, children }: { show: boolean; children: React.ReactElement }) => (
@@ -619,13 +615,26 @@ const SidebarSearchButton = ({ collapsed, animating }: FooterMenuProps) => {
   )
 }
 
+// Tabler's layout-sidebar-left-collapse (filled), with its chevron as a path of its own so it can turn
+const SidebarToggleIcon = ({ collapsed, animating }: FooterMenuProps) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="size-[18px] shrink-0">
+    <path d="M18 3a3 3 0 0 1 2.995 2.824l.005 .176v12a3 3 0 0 1 -2.824 2.995l-.176 .005h-12a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-12a3 3 0 0 1 2.824 -2.995l.176 -.005h12zm0 2h-9v14h9a1 1 0 0 0 .993 -.883l.007 -.117v-12a1 1 0 0 0 -.883 -.993l-.117 -.007z" />
+    <path
+      className={clsx(
+        'origin-center [transform-box:fill-box]',
+        animating && SLIDE,
+        collapsed && 'rotate-180'
+      )}
+      d="M15.707 9.293a1 1 0 0 1 .083 1.32l-.083 .094l-1.292 1.293l1.292 1.293a1 1 0 0 1 .083 1.32l-.083 .094a1 1 0 0 1 -1.32 .083l-.094 -.083l-2 -2a1 1 0 0 1 -.083 -1.32l.083 -.094l2 -2a1 1 0 0 1 1.414 0z"
+    />
+  </svg>
+)
+
 const SidebarCollapseToggle = ({
   collapsed,
   animating,
   onToggle,
 }: FooterMenuProps & { onToggle: () => void }) => {
-  const Icon = collapsed ? TbLayoutSidebarLeftExpandFilled : TbLayoutSidebarLeftCollapseFilled
-
   return (
     <div className="group/item absolute bottom-0 left-0 flex">
       <button
@@ -640,7 +649,7 @@ const SidebarCollapseToggle = ({
         )}
       >
         <span className={FOOTER_ICON_SLOT}>
-          <Icon className="size-[18px] shrink-0" />
+          <SidebarToggleIcon collapsed={collapsed} animating={animating} />
         </span>
         <FooterLabel show={!collapsed} animating={animating}>
           Collapse
