@@ -1,5 +1,5 @@
-"""Billing issues: paid subscriptions, or their invoices, awaiting payment. Every
-member of the organisation reads them through a cache that the Stripe webhook clears."""
+"""Billing issues: paid subscriptions awaiting payment. Every member of the
+organisation reads them through a cache that the Stripe webhook clears."""
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -41,22 +41,13 @@ def _with_subscriptions(stripe_api, subscriptions):
     stripe_api.subscriptions.return_value.auto_paging_iter.return_value = subscriptions
 
 
-def _invoice(url=INVOICE_URL, **fields):
-    """An open invoice, charged automatically and not yet attempted unless given."""
-    return {
-        "hosted_invoice_url": url,
-        "collection_method": "charge_automatically",
-        "attempted": False,
-        **fields,
-    }
-
-
-def _with_invoices(stripe_api, *invoices):
-    stripe_api.invoices.return_value = {"data": list(invoices), "has_more": False}
-
-
 def _with_open_invoices(stripe_api, *urls):
-    _with_invoices(stripe_api, *(_invoice(url) for url in urls))
+    stripe_api.invoices.return_value = {
+        "data": [
+            {"id": f"in_{i}", "hosted_invoice_url": url} for i, url in enumerate(urls)
+        ],
+        "has_more": False,
+    }
 
 
 @pytest.fixture
@@ -78,29 +69,19 @@ class TestGetBillingIssue:
             customer="cus_123", status="all"
         )
 
-    @pytest.mark.parametrize("status", ["active", "trialing"])
+    @pytest.mark.parametrize(
+        "status", ["active", "trialing", "canceled", "incomplete_expired"]
+    )
     def test_settled_subscriptions(self, stripe_api, status):
         _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", status)])
-
-        assert billing.get_billing_issue(_org()) is None
-        stripe_api.invoices.assert_called_once_with(
-            customer="cus_123", status="open", limit=100
-        )
-
-    @pytest.mark.parametrize("status", ["canceled", "incomplete_expired"])
-    def test_ended_subscriptions(self, stripe_api, status):
-        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", status)])
-        _with_invoices(stripe_api, _invoice(attempted=True))
 
         assert billing.get_billing_issue(_org()) is None
         stripe_api.invoices.assert_not_called()
 
     def test_free_subscriptions_are_ignored(self, stripe_api):
         _with_subscriptions(stripe_api, [_sub("sub_free", "price_free", "past_due")])
-        _with_invoices(stripe_api, _invoice(attempted=True))
 
         assert billing.get_billing_issue(_org()) is None
-        stripe_api.invoices.assert_not_called()
 
     def test_most_urgent_issue_wins(self, stripe_api):
         _with_subscriptions(
@@ -123,7 +104,7 @@ class TestGetBillingIssue:
 
         assert issue == billing.BillingIssue("past_due", INVOICE_URL)
         stripe_api.invoices.assert_called_once_with(
-            customer="cus_123", status="open", limit=100
+            customer="cus_123", status="open", limit=2
         )
 
     def test_no_link_when_several_invoices_are_open(self, stripe_api):
@@ -131,66 +112,6 @@ class TestGetBillingIssue:
         _with_open_invoices(stripe_api, INVOICE_URL, "https://invoice.stripe.com/i/2")
 
         assert billing.get_billing_issue(_org()) == billing.BillingIssue("past_due")
-
-    def test_unpaid_invoice_on_an_active_subscription(self, stripe_api):
-        # e.g. an older invoice, after the latest one was paid
-        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", "active")])
-        _with_invoices(stripe_api, _invoice(attempted=True))
-
-        assert billing.get_billing_issue(_org()) == billing.BillingIssue(
-            billing.UNPAID_INVOICE, INVOICE_URL
-        )
-
-    def test_invoice_not_charged_yet_is_not_overdue(self, stripe_api):
-        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", "active")])
-        _with_invoices(stripe_api, _invoice(attempted=False))
-
-        assert billing.get_billing_issue(_org()) is None
-
-    @pytest.mark.parametrize(
-        "due_in, overdue", [(-86400, True), (86400, False), (None, False)]
-    )
-    def test_sent_invoice_is_overdue_after_its_due_date(
-        self, stripe_api, due_in, overdue
-    ):
-        now = 1_800_000_000
-        due_date = None if due_in is None else now + due_in
-        _with_subscriptions(stripe_api, [_sub("sub_ent", "price_ent", "active")])
-        _with_invoices(
-            stripe_api, _invoice(collection_method="send_invoice", due_date=due_date)
-        )
-
-        with patch.object(billing.time, "time", return_value=now):
-            issue = billing.get_billing_issue(_org())
-
-        unpaid = billing.BillingIssue(billing.UNPAID_INVOICE, INVOICE_URL)
-        assert issue == (unpaid if overdue else None)
-
-    def test_unpaid_invoice_links_only_when_it_is_the_only_open_one(self, stripe_api):
-        _with_subscriptions(stripe_api, [_sub("sub_pro", "price_pro", "active")])
-        _with_invoices(
-            stripe_api,
-            _invoice("https://invoice.stripe.com/i/new"),
-            _invoice(INVOICE_URL, attempted=True),
-        )
-
-        assert billing.get_billing_issue(_org()) == billing.BillingIssue(
-            billing.UNPAID_INVOICE
-        )
-
-    def test_subscription_issue_wins_over_an_unpaid_invoice(self, stripe_api):
-        _with_subscriptions(
-            stripe_api,
-            [
-                _sub("sub_pro", "price_pro", "active"),
-                _sub("sub_ent", "price_ent", "past_due"),
-            ],
-        )
-        _with_invoices(stripe_api, _invoice(attempted=True))
-
-        assert billing.get_billing_issue(_org()) == billing.BillingIssue(
-            "past_due", INVOICE_URL
-        )
 
 
 class TestCachedBillingIssue:
@@ -292,17 +213,6 @@ class TestBillingIssueQuery:
 
         assert call.result.status == BillingIssueEnum.get("past_due")
         call.check.assert_called_once_with(call.org)
-
-    @pytest.mark.parametrize(
-        "status",
-        ["unpaid", "past_due", "incomplete", "paused", billing.UNPAID_INVOICE],
-    )
-    def test_every_issue_has_a_graphql_status(self, settings, status):
-        settings.APP_HOST = "cloud"
-
-        call = self._resolve(issue=billing.BillingIssue(status))
-
-        assert call.result.status.value == status
 
     def test_billing_updaters_get_the_invoice_link(self, settings):
         settings.APP_HOST = "cloud"

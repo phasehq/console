@@ -1342,16 +1342,12 @@ type OrganisationBillingIssueType {
   invoiceUrl: String
 }
 
-"""
-Why an org with a paid subscription is awaiting payment: the subscription's
-Stripe status, or an overdue invoice while the subscription is active.
-"""
+"""The Stripe status of a paid subscription that is awaiting payment."""
 enum BillingIssueEnum {
   PAST_DUE
   UNPAID
   INCOMPLETE
   PAUSED
-  UNPAID_INVOICE
 }
 
 type StripePlanEstimate {
