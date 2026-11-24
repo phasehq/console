@@ -349,6 +349,7 @@ from .graphene.types import (
     IdentityProviderType,
     RoleType,
     SecretEventType,
+    attach_keys_when_read,
     SecretFolderType,
     SecretTagType,
     SecretType,
@@ -1109,13 +1110,14 @@ class Query(graphene.ObjectType):
 
         # select_related("secret") avoids a per-event query in
         # resolve_actor_deleted's rotating-secret check.
-        qs = (
+        events = list(
             SecretEvent.objects.filter(secret_id=secret_id)
             .select_related("secret")
             .order_by("-timestamp")
         )
+        attach_keys_when_read(events)
 
-        return qs
+        return events
 
     def resolve_secret_tags(root, info, org_id):
         if not user_is_org_member(info.context.user.userId, org_id):
@@ -1398,7 +1400,7 @@ class Query(graphene.ObjectType):
 
         if len(env_ids) == 1:
             # Single environment → simple fast path
-            logs_qs = (
+            logs_qs = list(
                 SecretEvent.objects.filter(environment_id=env_ids[0], **base_filter)
                 .select_related("secret")
                 .order_by("-timestamp", "-id")
@@ -1420,6 +1422,8 @@ class Query(graphene.ObjectType):
                 PAGE_SIZE, combined, key=lambda e: e.timestamp
             )  # Efficiently select the newest 25 events overall
             prefetch_related_objects(logs_qs, "tags")
+
+        attach_keys_when_read(logs_qs)
 
         # Approximate count (on combined filter)
         count_qs = SecretEvent.objects.filter(environment_id__in=env_ids, **base_filter)
