@@ -53,6 +53,12 @@ export type ReferenceValidationError = {
 /** A key at one env and folder, as the editor's own copy has it */
 export type KeyState = 'present' | 'deleted' | 'missing'
 
+/** A key and the folder it is in, as stored: `/` or `/backend/config` */
+export type KeyAt = { path: string; key: string }
+
+/** The value a reference is typed into: its key, its env and its folder */
+export type ReferenceOrigin = { key?: string; envId?: string; path?: string }
+
 export type OrgApp = {
   id: string
   name: string
@@ -60,8 +66,9 @@ export type OrgApp = {
   envIds: Record<string, string> // env name (lowercase) → env ID
   envSecretKeys: Record<string, string[]> // env name (lowercase) → ALL decrypted key names
   envRootKeys: Record<string, string[]> // env name (lowercase) → root-level key names only
-  folderKeys: Record<string, string[]> // folder path (lowercase, no leading slash) → key names
-  envFolderKeys: Record<string, Record<string, string[]>> // env name (lowercase) → { folder path (lowercase) → key names }
+  // Folder paths are kept as named: a reference has to spell a folder the way it is stored
+  folderKeys: Record<string, string[]> // folder path (no leading slash) → key names
+  envFolderKeys: Record<string, Record<string, string[]>> // env name (lowercase) → { folder path → key names }
   secretIdLookup: Record<string, string> // "env|path|key" → secret ID
 }
 
@@ -76,10 +83,15 @@ export type ReferenceContext = {
   envRootKeys: Record<string, string[]> // env name (lowercase) → root-level keys only
   envNames: string[]
   folderPaths: string[]
-  folderSecretKeys: Record<string, string[]> // folder path (lowercase) → keys at that path
+  folderSecretKeys: Record<string, string[]> // folder path → keys at that path
   envFolderKeys: Record<string, Record<string, string[]>> // env name (lowercase) → { folder path → keys }
   orgApps: OrgApp[]
   deletedKeys: string[]
+  /**
+   * The keys an env of this app holds in the caller's own copy, each with its folder. What is
+   * offered then matches what a deploy checks. Undefined for an env the caller holds no copy of.
+   */
+  keysOf?: (envId: string) => KeyAt[] | undefined
   /** Looks a key up where a reference points; undefined for an env the caller holds no copy of */
   keyStateAt?: (envId: string | undefined, path: string, key: string) => KeyState | undefined
 }
@@ -274,14 +286,130 @@ function mergeSuggestions(
   return [...pinned, ...truncatedKeys]
 }
 
+const trimSlashes = (path: string) => path.replace(/^\/+|\/+$/g, '')
+
+/** One env's keys from the org-wide snapshot, in the shape of the caller's own copy */
+function keysFromSnapshot(
+  rootKeys: string[] | undefined,
+  folderKeys: Record<string, string[]> | undefined
+): KeyAt[] {
+  return [
+    ...(rootKeys ?? []).map((key) => ({ path: '/', key })),
+    ...Object.entries(folderKeys ?? {}).flatMap(([folder, keys]) =>
+      keys.map((key) => ({ path: `/${trimSlashes(folder)}`, key }))
+    ),
+  ]
+}
+
+/**
+ * Every folder that holds one of the keys, and the folders that lead to it, without a leading
+ * slash. In alphabetical order, as the editor lists them.
+ */
+function foldersHolding(paths: string[]): string[] {
+  const folders = new Set<string>()
+  for (const path of paths) {
+    const segments = trimSlashes(path).split('/').filter(Boolean)
+    segments.forEach((_, depth) => folders.add(segments.slice(0, depth + 1).join('/')))
+  }
+  const ranked = (name: string) => name.toLowerCase()
+  return Array.from(folders).sort((a, b) =>
+    ranked(a) === ranked(b) ? (a < b ? -1 : 1) : ranked(a) < ranked(b) ? -1 : 1
+  )
+}
+
+type Wording = {
+  /** Shown beside a key, given the folder it is in ('' at the root) */
+  key: (folder: string) => string | undefined
+  /** Shown beside a folder at the root */
+  rootFolder: string
+}
+
+/**
+ * What can follow `typed` (a folder path so far, then the start of a name) among one env's keys:
+ * the folders at that level, and its keys. A folder is matched in any case but written as it is
+ * named, at any depth: a reference resolves only if its path matches the stored one exactly.
+ */
+function suggestionsWithin(
+  keys: KeyAt[],
+  typed: string,
+  unfiltered: boolean,
+  prefix: string,
+  wording: Wording,
+  emptyFolders: string[] = []
+): ReferenceSuggestion[] {
+  const lastSlash = typed.lastIndexOf('/')
+  // `${/backend/KEY}` is as good as `${backend/KEY}`: the path keeps the form it was started in
+  const lead = typed.startsWith('/') ? '/' : ''
+  const typedFolder = lastSlash === -1 ? '' : trimSlashes(typed.slice(0, lastSlash))
+  const filter = unfiltered ? '' : typed.slice(lastSlash + 1).toLowerCase()
+  const folders = foldersHolding([...keys.map((at) => at.path), ...emptyFolders])
+
+  // The folders the typed path can mean: the one spelled that way, else any that differ in case
+  const parents =
+    typedFolder === '' || folders.includes(typedFolder)
+      ? [typedFolder]
+      : folders.filter((folder) => folder.toLowerCase() === typedFolder.toLowerCase())
+
+  const keySuggestions: ReferenceSuggestion[] = []
+  const folderSuggestions: ReferenceSuggestion[] = []
+  const offered = new Set<string>()
+  const offer = (list: ReferenceSuggestion[], suggestion: ReferenceSuggestion) => {
+    if (offered.has(suggestion.insertText)) return
+    offered.add(suggestion.insertText)
+    list.push(suggestion)
+  }
+
+  for (const parent of parents) {
+    const inside = parent === '' ? '' : `${parent}/`
+    for (const { path, key } of keys) {
+      if (trimSlashes(path) !== parent || !key.toLowerCase().includes(filter)) continue
+      offer(keySuggestions, {
+        label: key,
+        insertText: `${prefix}${lead}${inside}${key}`,
+        type: 'key',
+        description: wording.key(parent),
+        closesReference: true,
+      })
+    }
+    for (const folder of folders) {
+      if (!folder.startsWith(inside)) continue
+      const name = folder.slice(inside.length).split('/')[0]
+      if (!name || !name.toLowerCase().includes(filter)) continue
+      offer(folderSuggestions, {
+        label: `${name}/`,
+        insertText: `${prefix}${lead}${inside}${name}/`,
+        type: 'folder',
+        description: parent === '' ? wording.rootFolder : 'Subfolder',
+        closesReference: false,
+      })
+    }
+  }
+
+  // At the root the folders lead the way; inside a folder its keys do
+  return typedFolder === ''
+    ? [...folderSuggestions, ...keySuggestions]
+    : [...keySuggestions, ...folderSuggestions]
+}
+
 export function computeSuggestions(
   token: ActiveReferenceToken,
   context: ReferenceContext,
-  currentSecretKey?: string
+  origin: ReferenceOrigin = {}
 ): ReferenceSuggestion[] {
   // Inside a closed reference: show all suggestions (unfiltered) so the user can swap segments
-  const filter = token.insideClosedRef ? '' : token.filterText.toLowerCase()
+  const unfiltered = token.insideClosedRef
+  const filter = unfiltered ? '' : token.filterText.toLowerCase()
   const suggestions: ReferenceSuggestion[] = []
+
+  // A local reference resolves in the value's own env: its keys there, without the value itself
+  const originFolder = trimSlashes(origin.path ?? '/')
+  const own = origin.envId
+    ? context
+        .keysOf?.(origin.envId)
+        ?.filter((at) => !(at.key === origin.key && trimSlashes(at.path) === originFolder))
+    : undefined
+  const notDeleted = (at: KeyAt) => !context.deletedKeys.includes(at.key)
+  const localWording: Wording = { key: (folder) => folder, rootFolder: 'Folder' }
 
   switch (token.stage) {
     case 'initial': {
@@ -290,30 +418,62 @@ export function computeSuggestions(
       const envSuggestions: ReferenceSuggestion[] = []
       const appSuggestions: ReferenceSuggestion[] = []
 
-      // Show keys at the current path level (context.secretKeys is already path-filtered by the page query)
-      for (const key of context.secretKeys) {
-        if (key === currentSecretKey) continue
-        if (context.deletedKeys.includes(key)) continue
-        if (key.toLowerCase().includes(filter)) {
-          keySuggestions.push({
-            label: key,
-            insertText: key,
-            type: 'key',
-            closesReference: true,
-          })
+      if (own) {
+        const offered = new Set<string>()
+        const offerKey = (insertText: string) => {
+          if (offered.has(insertText)) return
+          offered.add(insertText)
+          keySuggestions.push({ label: insertText, insertText, type: 'key', closesReference: true })
         }
-      }
+        // A bare key is looked up at the root, wherever the value is. A key beside the value in
+        // its folder is therefore offered with that folder
+        if (originFolder !== '') {
+          for (const { path, key } of own) {
+            if (trimSlashes(path) === originFolder && key.toLowerCase().includes(filter))
+              offerKey(`${originFolder}/${key}`)
+          }
+        }
+        for (const { path, key } of own) {
+          if (trimSlashes(path) === '' && key.toLowerCase().includes(filter)) offerKey(key)
+        }
 
-      // Folder-qualified paths
-      for (const folderPath of context.folderPaths) {
-        if (folderPath.toLowerCase().includes(filter)) {
-          folderSuggestions.push({
-            label: `${folderPath}/`,
-            insertText: `${folderPath}/`,
-            type: 'folder',
-            description: 'Folder',
-            closesReference: false,
-          })
+        for (const folderPath of foldersHolding(own.map((at) => at.path))) {
+          if (folderPath.toLowerCase().includes(filter)) {
+            folderSuggestions.push({
+              label: `${folderPath}/`,
+              insertText: `${folderPath}/`,
+              type: 'folder',
+              description: 'Folder',
+              closesReference: false,
+            })
+          }
+        }
+      } else {
+        // No copy to read the value's env from: the keys and folders the caller lists
+        for (const key of context.secretKeys) {
+          if (key === origin.key) continue
+          if (context.deletedKeys.includes(key)) continue
+          if (key.toLowerCase().includes(filter)) {
+            keySuggestions.push({
+              label: key,
+              insertText: key,
+              type: 'key',
+              closesReference: true,
+            })
+          }
+        }
+
+        // Folder-qualified paths
+        for (const folderPath of context.folderPaths) {
+          if (folderPath.toLowerCase().includes(filter)) {
+            folderSuggestions.push({
+              label: `${folderPath}/`,
+              insertText: `${folderPath}/`,
+              type: 'folder',
+              description: 'Folder',
+              closesReference: false,
+            })
+          }
         }
       }
 
@@ -349,119 +509,37 @@ export function computeSuggestions(
     }
 
     case 'folder-key': {
-      // Show keys at the specified folder path
-      const folderKeys = context.folderSecretKeys[token.folderPath!.toLowerCase()] ?? []
-      for (const key of folderKeys) {
-        if (context.deletedKeys.includes(key)) continue
-        if (key.toLowerCase().includes(filter)) {
-          suggestions.push({
-            label: key,
-            insertText: `${token.folderPath}/${key}`,
-            type: 'key',
-            description: token.folderPath,
-            closesReference: true,
-          })
-        }
-      }
-
-      // Sub-folders under this path
-      const prefix = token.folderPath!.toLowerCase() + '/'
-      const seenSubFolders = new Set<string>()
-      for (const fp of context.folderPaths) {
-        if (fp.toLowerCase().startsWith(prefix)) {
-          const remaining = fp.slice(prefix.length)
-          const nextSlash = remaining.indexOf('/')
-          const subFolder = nextSlash === -1 ? remaining : remaining.slice(0, nextSlash)
-          if (seenSubFolders.has(subFolder.toLowerCase())) continue
-          seenSubFolders.add(subFolder.toLowerCase())
-          if (subFolder.toLowerCase().includes(filter)) {
-            suggestions.push({
-              label: `${subFolder}/`,
-              insertText: `${token.folderPath}/${subFolder}/`,
-              type: 'folder',
-              description: 'Subfolder',
-              closesReference: false,
-            })
-          }
-        }
-      }
+      // The keys at the folder path typed so far, and the folders under it
+      suggestions.push(
+        ...(own
+          ? suggestionsWithin(own, token.raw, unfiltered, '', localWording)
+          : suggestionsWithin(
+              keysFromSnapshot(undefined, context.folderSecretKeys).filter(notDeleted),
+              token.raw,
+              unfiltered,
+              '',
+              localWording,
+              context.folderPaths
+            ))
+      )
       break
     }
 
     case 'cross-env-key': {
-      const insertPrefix = `${token.env}.`
-      const slashIdx = filter.indexOf('/')
-      const targetEnvFolders = context.envFolderKeys[token.env!.toLowerCase()] ?? {}
-
-      if (slashIdx !== -1) {
-        // User is inside a folder, e.g. ${env.backend/...
-        const folderPath = token.filterText.slice(0, slashIdx)
-        const keyFilter = filter.slice(slashIdx + 1)
-
-        const folderKeys = targetEnvFolders[folderPath.toLowerCase()] ?? []
-        for (const key of folderKeys) {
-          if (context.deletedKeys.includes(key)) continue
-          if (key.toLowerCase().includes(keyFilter)) {
-            suggestions.push({
-              label: key,
-              insertText: `${insertPrefix}${folderPath}/${key}`,
-              type: 'key',
-              description: `${token.env} / ${folderPath}`,
-              closesReference: true,
-            })
-          }
-        }
-
-        // Sub-folders scoped to the target env
-        const subPrefix = folderPath.toLowerCase() + '/'
-        const seenSub = new Set<string>()
-        for (const fp of Object.keys(targetEnvFolders)) {
-          if (fp.startsWith(subPrefix)) {
-            const rest = fp.slice(subPrefix.length)
-            const seg = rest.includes('/') ? rest.slice(0, rest.indexOf('/')) : rest
-            if (seenSub.has(seg.toLowerCase())) continue
-            seenSub.add(seg.toLowerCase())
-            if (seg.toLowerCase().includes(keyFilter)) {
-              suggestions.push({
-                label: `${seg}/`,
-                insertText: `${insertPrefix}${folderPath}/${seg}/`,
-                type: 'folder',
-                description: 'Subfolder',
-                closesReference: false,
-              })
-            }
-          }
-        }
-      } else {
-        // Root level — show folders that exist in the target env, then root-level keys
-        for (const folderPath of Object.keys(targetEnvFolders)) {
-          // Only show top-level folders (no slash in the path)
-          if (folderPath.includes('/')) continue
-          if (folderPath.toLowerCase().includes(filter)) {
-            suggestions.push({
-              label: `${folderPath}/`,
-              insertText: `${insertPrefix}${folderPath}/`,
-              type: 'folder',
-              description: 'Folder',
-              closesReference: false,
-            })
-          }
-        }
-
-        const envKeys = context.envRootKeys[token.env!.toLowerCase()] ?? []
-        for (const key of envKeys) {
-          if (context.deletedKeys.includes(key)) continue
-          if (key.toLowerCase().includes(filter)) {
-            suggestions.push({
-              label: key,
-              insertText: `${insertPrefix}${key}`,
-              type: 'key',
-              description: token.env,
-              closesReference: true,
-            })
-          }
-        }
-      }
+      const envKey = token.env!.toLowerCase()
+      const envId = context.envIds[envKey]
+      // The target env as the caller's copy has it, else as the org-wide snapshot does
+      const keys =
+        (envId ? context.keysOf?.(envId) : undefined) ??
+        keysFromSnapshot(context.envRootKeys[envKey], context.envFolderKeys[envKey]).filter(
+          notDeleted
+        )
+      suggestions.push(
+        ...suggestionsWithin(keys, token.filterText, unfiltered, `${token.env}.`, {
+          key: (folder) => (folder ? `${token.env} / ${folder}` : token.env),
+          rootFolder: 'Folder',
+        })
+      )
       break
     }
 
@@ -489,79 +567,20 @@ export function computeSuggestions(
         (a) => a.name.toLowerCase() === token.app!.toLowerCase()
       )
       if (crossApp) {
-        const insertPrefix = `${token.app}::${token.env}.`
-        const slashIdx = filter.indexOf('/')
-        const targetEnvFolders = crossApp.envFolderKeys?.[token.env!.toLowerCase()] ?? {}
-
-        if (slashIdx !== -1) {
-          // User is inside a folder, e.g. ${app::env.backend/...
-          const folderPath = token.filterText.slice(0, slashIdx)
-          const keyFilter = filter.slice(slashIdx + 1)
-
-          const folderKeys = targetEnvFolders[folderPath.toLowerCase()] ?? []
-          for (const key of folderKeys) {
-            if (key.toLowerCase().includes(keyFilter)) {
-              suggestions.push({
-                label: key,
-                insertText: `${insertPrefix}${folderPath}/${key}`,
-                type: 'key',
-                description: `${token.app} / ${token.env} / ${folderPath}`,
-                closesReference: true,
-              })
+        const envKey = token.env!.toLowerCase()
+        suggestions.push(
+          ...suggestionsWithin(
+            keysFromSnapshot(crossApp.envRootKeys[envKey], crossApp.envFolderKeys?.[envKey]),
+            token.filterText,
+            unfiltered,
+            `${token.app}::${token.env}.`,
+            {
+              key: (folder) =>
+                folder ? `${token.app} / ${token.env} / ${folder}` : `${token.app} / ${token.env}`,
+              rootFolder: `${token.app} folder`,
             }
-          }
-
-          // Sub-folders scoped to the target env
-          const subPrefix = folderPath.toLowerCase() + '/'
-          const seenSub = new Set<string>()
-          for (const fp of Object.keys(targetEnvFolders)) {
-            if (fp.startsWith(subPrefix)) {
-              const rest = fp.slice(subPrefix.length)
-              const seg = rest.includes('/') ? rest.slice(0, rest.indexOf('/')) : rest
-              if (seenSub.has(seg)) continue
-              seenSub.add(seg)
-              if (seg.includes(keyFilter)) {
-                suggestions.push({
-                  label: `${seg}/`,
-                  insertText: `${insertPrefix}${folderPath}/${seg}/`,
-                  type: 'folder',
-                  description: 'Subfolder',
-                  closesReference: false,
-                })
-              }
-            }
-          }
-        } else {
-          // Root level — show folders that exist in the target env, then root-level keys
-          const seenFolders = new Set<string>()
-          for (const fp of Object.keys(targetEnvFolders)) {
-            const topLevel = fp.includes('/') ? fp.slice(0, fp.indexOf('/')) : fp
-            if (seenFolders.has(topLevel)) continue
-            seenFolders.add(topLevel)
-            if (topLevel.includes(filter)) {
-              suggestions.push({
-                label: `${topLevel}/`,
-                insertText: `${insertPrefix}${topLevel}/`,
-                type: 'folder',
-                description: `${token.app} folder`,
-                closesReference: false,
-              })
-            }
-          }
-
-          const keys = crossApp.envRootKeys[token.env!.toLowerCase()] ?? []
-          for (const key of keys) {
-            if (key.toLowerCase().includes(filter)) {
-              suggestions.push({
-                label: key,
-                insertText: `${insertPrefix}${key}`,
-                type: 'key',
-                description: `${token.app} / ${token.env}`,
-                closesReference: true,
-              })
-            }
-          }
-        }
+          )
+        )
       }
       break
     }
@@ -640,9 +659,12 @@ export function buildInsertionText(
 export function getSuggestionUrl(
   suggestion: ReferenceSuggestion,
   token: ActiveReferenceToken,
-  context: ReferenceContext
+  context: ReferenceContext,
+  origin: ReferenceOrigin = {}
 ): string | null {
-  const { teamSlug, appId, envId, envIds } = context
+  const { teamSlug, appId, envIds } = context
+  // A local suggestion opens in the env of the value it is offered to
+  const envId = origin.envId ?? context.envId
 
   const buildEnvUrl = (
     targetAppId: string,
@@ -688,15 +710,15 @@ export function getSuggestionUrl(
         targetEnvId = app.envIds[token.env.toLowerCase()]
         // insertText is like "app::env.folder/" — extract folder part
         const dotIdx = suggestion.insertText.indexOf('.')
-        folderPath = suggestion.insertText.slice(dotIdx + 1).replace(/\/$/, '')
+        folderPath = trimSlashes(suggestion.insertText.slice(dotIdx + 1))
       } else if (token.stage === 'cross-env-key' && token.env) {
         targetEnvId = envIds[token.env.toLowerCase()]
         // insertText is like "env.folder/" — extract folder part
         const dotIdx = suggestion.insertText.indexOf('.')
-        folderPath = suggestion.insertText.slice(dotIdx + 1).replace(/\/$/, '')
+        folderPath = trimSlashes(suggestion.insertText.slice(dotIdx + 1))
       } else {
         // Local folder — insertText is like "folder/" or "parent/folder/"
-        folderPath = suggestion.insertText.replace(/\/$/, '')
+        folderPath = trimSlashes(suggestion.insertText)
       }
 
       if (!targetEnvId) return null
@@ -704,11 +726,14 @@ export function getSuggestionUrl(
     }
 
     case 'key': {
-      // Extract the folder path from the suggestion's insertText
-      const extractPathFromInsert = (insertText: string, prefix: string): string => {
+      // The folder and the key the suggestion's insertText names, past its app and env
+      const placeOf = (insertText: string, prefix: string) => {
         const afterPrefix = prefix ? insertText.slice(prefix.length) : insertText
         const lastSlash = afterPrefix.lastIndexOf('/')
-        return lastSlash === -1 ? '/' : '/' + afterPrefix.slice(0, lastSlash)
+        return {
+          secretPath: lastSlash === -1 ? '/' : `/${trimSlashes(afterPrefix.slice(0, lastSlash))}`,
+          key: afterPrefix.slice(lastSlash + 1),
+        }
       }
 
       if (token.stage === 'cross-app-key' && token.app && token.env) {
@@ -717,28 +742,27 @@ export function getSuggestionUrl(
         const targetEnvId = app.envIds[token.env.toLowerCase()]
         if (!targetEnvId) return null
         const insertPrefix = `${token.app}::${token.env}.`
-        const secretPath = extractPathFromInsert(suggestion.insertText, insertPrefix)
+        const { secretPath, key } = placeOf(suggestion.insertText, insertPrefix)
         const folderPath = secretPath === '/' ? undefined : secretPath.slice(1)
-        const sid = app.secretIdLookup[secretIdKey(token.env, secretPath, suggestion.label)]
+        const sid = app.secretIdLookup[secretIdKey(token.env, secretPath, key)]
         return buildEnvUrl(app.id, targetEnvId, folderPath, sid)
       }
       if (token.stage === 'cross-env-key' && token.env) {
         const targetEnvId = envIds[token.env.toLowerCase()]
         if (!targetEnvId) return null
         const insertPrefix = `${token.env}.`
-        const secretPath = extractPathFromInsert(suggestion.insertText, insertPrefix)
+        const { secretPath, key } = placeOf(suggestion.insertText, insertPrefix)
         const folderPath = secretPath === '/' ? undefined : secretPath.slice(1)
-        const sid = context.secretIdLookup[secretIdKey(token.env, secretPath, suggestion.label)]
+        const sid = context.secretIdLookup[secretIdKey(token.env, secretPath, key)]
         return buildEnvUrl(appId, targetEnvId, folderPath, sid)
       }
-      // Local key or folder-key — navigate to current env if available
+      // A local key, at the root or in the folder its insertText names
       if (!envId) return null
-      const secretPath =
-        token.stage === 'folder-key' && token.folderPath ? '/' + token.folderPath : '/'
+      const { secretPath, key } = placeOf(suggestion.insertText, '')
       const folderPath = secretPath === '/' ? undefined : secretPath.slice(1)
       // Determine env name from envId
       const envName = Object.entries(envIds).find(([, id]) => id === envId)?.[0] ?? ''
-      const sid = context.secretIdLookup[secretIdKey(envName, secretPath, suggestion.label)]
+      const sid = context.secretIdLookup[secretIdKey(envName, secretPath, key)]
       return buildEnvUrl(appId, envId, folderPath, sid)
     }
   }

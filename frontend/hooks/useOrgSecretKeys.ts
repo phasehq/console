@@ -74,21 +74,22 @@ export function useOrgSecretKeys(): { orgApps: OrgApp[]; loading: boolean } {
                   // Map secret to its ID for navigation URLs
                   secretIdLookupMap[secretIdKey(env.name, secret.path || '/', decryptedKey)] = secret.id
 
-                  // Group by folder path for folder-qualified references
+                  // Group by folder path for folder-qualified references. The path keeps its
+                  // case: a reference resolves only if it spells the folder as it is stored
                   const secretPath = (secret.path || '/').replace(/^\/+/, '').replace(/\/+$/, '')
                   if (secretPath) {
-                    if (!folderKeysMap[secretPath.toLowerCase()]) {
-                      folderKeysMap[secretPath.toLowerCase()] = new Set()
+                    if (!folderKeysMap[secretPath]) {
+                      folderKeysMap[secretPath] = new Set()
                     }
-                    folderKeysMap[secretPath.toLowerCase()].add(decryptedKey)
+                    folderKeysMap[secretPath].add(decryptedKey)
 
                     // Also track per-env folder keys
                     const envKey = env.name.toLowerCase()
                     if (!envFolderKeysMap[envKey]) envFolderKeysMap[envKey] = {}
-                    if (!envFolderKeysMap[envKey][secretPath.toLowerCase()]) {
-                      envFolderKeysMap[envKey][secretPath.toLowerCase()] = new Set()
+                    if (!envFolderKeysMap[envKey][secretPath]) {
+                      envFolderKeysMap[envKey][secretPath] = new Set()
                     }
-                    envFolderKeysMap[envKey][secretPath.toLowerCase()].add(decryptedKey)
+                    envFolderKeysMap[envKey][secretPath].add(decryptedKey)
                   } else {
                     // Root-level key
                     const envKey = env.name.toLowerCase()

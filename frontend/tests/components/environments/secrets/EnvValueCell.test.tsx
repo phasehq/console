@@ -11,19 +11,23 @@ jest.mock('@/components/environments/secrets/OverrideDialog', () => ({
 jest.mock('@/components/environments/secrets/ShareSecretDialog', () => ({
   ShareSecretDialog: () => null,
 }))
+const mockAutocompleteOptions = jest.fn()
 jest.mock('@/hooks/useSecretReferenceAutocomplete', () => ({
-  useSecretReferenceAutocomplete: () => ({
-    suggestions: [],
-    activeIndex: 0,
-    isOpen: false,
-    handleChange: () => {},
-    handleKeyDown: () => {},
-    handleSelect: () => {},
-    handleBlur: () => {},
-    handleFocus: () => {},
-    acceptSuggestion: () => {},
-    navigateToSuggestion: () => {},
-  }),
+  useSecretReferenceAutocomplete: (options: unknown) => {
+    mockAutocompleteOptions(options)
+    return {
+      suggestions: [],
+      activeIndex: 0,
+      isOpen: false,
+      handleChange: () => {},
+      handleKeyDown: () => {},
+      handleSelect: () => {},
+      handleBlur: () => {},
+      handleFocus: () => {},
+      acceptSuggestion: () => {},
+      navigateToSuggestion: () => {},
+    }
+  },
 }))
 
 import { EnvValueCell, EnvValueCellProps } from '@/app/[team]/apps/[app]/_components/EnvValueCell'
@@ -89,6 +93,14 @@ describe('EnvValueCell', () => {
   afterEach(async () => {
     await act(async () => root.unmount())
     container.remove()
+  })
+
+  it('tells the reference dropdown which environment and folder the value is in', async () => {
+    const inFolder = { ...saved('s3cret'), path: '/Payments' } as SecretType
+    await render(inFolder, inFolder)
+    expect(mockAutocompleteOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ currentSecretKey: 'TOKEN', envId: 'staging', path: '/Payments' })
+    )
   })
 
   describe('when a value saved elsewhere arrives', () => {

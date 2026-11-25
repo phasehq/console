@@ -135,6 +135,7 @@ import {
   carryRowKeys,
   DeployedChanges,
   deployReferenceErrors,
+  referenceKeysOf,
   dirtyEnvIds,
   duplicateKeyRowIds,
   dynamicKeyNames,
@@ -657,6 +658,21 @@ export const AppSecrets = ({
   // Fetch and decrypt all org secret keys for cross-app reference autocomplete/validation
   const { orgApps: allOrgApps } = useOrgSecretKeys()
 
+  // What a reference into one of this app's envs can point at, read from the rows a deploy is
+  // checked against as they are when asked: new keys count, ones staged for deletion don't.
+  // An env that is still decrypting has no rows to answer from
+  const pendingEnvIdsRef = useRef(pendingEnvIds)
+  useEffect(() => {
+    pendingEnvIdsRef.current = pendingEnvIds
+  }, [pendingEnvIds])
+  const referenceKeysIn = useCallback(
+    (envId: string) =>
+      pendingEnvIdsRef.current.includes(envId)
+        ? undefined
+        : referenceKeysOf(clientRowsRef.current, envId),
+    []
+  )
+
   const secretKeysFingerprint = clientAppSecrets.map((s) => s.key).join('\0')
   const deletedKeysFingerprint = secretsToDelete.join('\0')
   const referenceContext: ReferenceContext = useMemo(() => {
@@ -693,6 +709,7 @@ export const AppSecrets = ({
       envFolderKeys: currentAppData?.envFolderKeys ?? {},
       // Exclude the current app from cross-app suggestions
       orgApps: allOrgApps.filter((a) => a.name.toLowerCase() !== currentAppName),
+      keysOf: referenceKeysIn,
       deletedKeys: clientAppSecrets
         .filter((row) =>
           row.envs.some((entry) => (entry.secret as SecretWithFlags | null)?.stagedForDelete)
@@ -702,7 +719,7 @@ export const AppSecrets = ({
     // Keyed on the key fingerprint: value keystrokes must not churn the context,
     // which re-renders every cell that reads it
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [secretKeysFingerprint, deletedKeysFingerprint, checkedEnvironments, environments, appFolders, allOrgApps, appName])
+  }, [secretKeysFingerprint, deletedKeysFingerprint, checkedEnvironments, environments, appFolders, allOrgApps, appName, referenceKeysIn])
 
   // Cells only read the reference data while autocompleting, so they get one stable object
   // that reads the latest copy: a new context value would re-render every cell (thousands
