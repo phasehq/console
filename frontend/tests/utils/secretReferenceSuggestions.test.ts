@@ -294,6 +294,78 @@ describe('a closing brace further on in the value', () => {
   })
 })
 
+describe('an app name with spaces or quotes in it', () => {
+  const named = (id: string, name: string) => ({
+    id,
+    name,
+    envNames: ['Production'],
+    envIds: { production: `${id}-prod` },
+    envSecretKeys: { production: ['LEDGER_URL'] },
+    envRootKeys: { production: ['LEDGER_URL'] },
+    folderKeys: {},
+    envFolderKeys: {},
+    secretIdLookup: {},
+  })
+  const ctx = context({
+    orgApps: [
+      named('app-2', 'Billing API'),
+      named('app-3', `Tom's "edge" API`),
+      named('app-4', 'ledger'),
+    ],
+  })
+  const spaced = '${Billing API::Production.LEDGER_URL}'
+  const quoted = `\${Tom's "edge" API::Production.LEDGER_URL}`
+
+  /** The reference under the cursor when it sits right after `upTo` */
+  const tokenAfter = (value: string, upTo: string) => {
+    if (!value.startsWith(upTo)) throw new Error(`${value} does not start with ${upTo}`)
+    return getActiveReferenceToken(value, upTo.length)!
+  }
+  const acceptAfter = (value: string, upTo: string, pick: string) => {
+    const token = tokenAfter(value, upTo)
+    const suggestion = computeSuggestions(token, ctx).find((s) => s.label === pick)
+    if (!suggestion) throw new Error(`"${pick}" is not offered after ${upTo}`)
+    return buildInsertionText(suggestion, token, value).newValue
+  }
+
+  test('is part of the reference the cursor is in', () => {
+    expect(tokenAfter(spaced, '${Bill').insideClosedRef).toBe(true)
+    expect(tokenAfter(quoted, '${Tom').insideClosedRef).toBe(true)
+    expect(tokenAfter(quoted, `\${Tom's "ed`).insideClosedRef).toBe(true)
+  })
+
+  test('so accepting that app leaves the reference as it was', () => {
+    expect(acceptAfter(spaced, '${Bill', 'Billing API')).toBe(spaced)
+    expect(acceptAfter(quoted, '${Tom', `Tom's "edge" API`)).toBe(quoted)
+  })
+
+  test('and accepting another app replaces the name alone', () => {
+    expect(acceptAfter(spaced, '${Bill', 'ledger')).toBe('${ledger::Production.LEDGER_URL}')
+    expect(acceptAfter(quoted, `\${Tom's "ed`, 'Billing API')).toBe(spaced)
+    expect(acceptAfter(`{"url": "${spaced}"}`, '{"url": "${Bill', 'ledger')).toBe(
+      '{"url": "${ledger::Production.LEDGER_URL}"}'
+    )
+  })
+
+  test('while a brace that belongs to something else is still left alone', () => {
+    // What follows the `::` cannot be the rest of a reference
+    expect(acceptAfter('{"app": "${Bill", "note": "a::b"}', '{"app": "${Bill', 'Billing API')).toBe(
+      '{"app": "${Billing API::", "note": "a::b"}'
+    )
+    // The brace closes another reference
+    const two = `{"a": "\${Bill", "b": "${spaced}"}`
+    expect(tokenAfter(two, '{"a": "${Bill').insideClosedRef).toBe(false)
+    // A name does not run over a line break
+    expect(tokenAfter('${Bill\nledger::Production.LEDGER_URL}', '${Bill').insideClosedRef).toBe(
+      false
+    )
+    // Past the name, a quote is not part of a reference
+    expect(
+      tokenAfter('{"app": "${Billing API::Prod"}', '{"app": "${Billing API::Prod').insideClosedRef
+    ).toBe(false)
+  })
+})
+
 describe('a reference by app name', () => {
   const billing = {
     id: 'app-2',
