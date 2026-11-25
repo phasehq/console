@@ -166,6 +166,7 @@ type Documents = {
     "query GetDeletedApps($organisationId: ID!) {\n  deletedApps(organisationId: $organisationId) {\n    id\n    name\n    deletedAt\n    deletionScheduledFor\n    deletionDelayed\n    canRestore\n    viewerCanDelete\n  }\n}": typeof types.GetDeletedAppsDocument,
     "query VerifyPassword($authHash: String!) {\n  verifyPassword(authHash: $authHash)\n}": typeof types.VerifyPasswordDocument,
     "query GetCheckoutDetails($stripeSessionId: String!, $organisationId: ID!) {\n  stripeCheckoutDetails(\n    stripeSessionId: $stripeSessionId\n    organisationId: $organisationId\n  ) {\n    paymentStatus\n    customerEmail\n    billingStartDate\n    billingEndDate\n    subscriptionId\n    planName\n  }\n}": typeof types.GetCheckoutDetailsDocument,
+    "query GetOrganisationBillingIssue($organisationId: ID!) {\n  organisationBillingIssue(organisationId: $organisationId) {\n    status\n    invoiceUrl\n  }\n}": typeof types.GetOrganisationBillingIssueDocument,
     "query GetCustomerPortalLink($organisationId: ID!) {\n  stripeCustomerPortalUrl(organisationId: $organisationId)\n}": typeof types.GetCustomerPortalLinkDocument,
     "query GetSubscriptionDetails($organisationId: ID!) {\n  stripeSubscriptionDetails(organisationId: $organisationId) {\n    subscriptionId\n    planName\n    planType\n    billingPeriod\n    status\n    nextPaymentAmount\n    currentPeriodStart\n    currentPeriodEnd\n    renewalDate\n    cancelAt\n    cancelAtPeriodEnd\n    paymentMethods {\n      id\n      brand\n      last4\n      expMonth\n      expYear\n      isDefault\n    }\n  }\n}": typeof types.GetSubscriptionDetailsDocument,
     "query GetStripeSubscriptionEstimate($organisationId: ID!, $planType: PlanTypeEnum!, $billingPeriod: BillingPeriodEnum!, $previewV2: Boolean) {\n  estimateStripeSubscription(\n    organisationId: $organisationId\n    planType: $planType\n    billingPeriod: $billingPeriod\n    previewV2: $previewV2\n  ) {\n    estimatedTotal\n    seatCount\n    unitPrice\n    currency\n    priceId\n  }\n}": typeof types.GetStripeSubscriptionEstimateDocument,
@@ -232,6 +233,7 @@ type Documents = {
     "query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n      optionalCredentials\n    }\n    syncCount\n  }\n}": typeof types.GetSavedCredentialsDocument,
     "query GetServerKey {\n  serverPublicKey\n}": typeof types.GetServerKeyDocument,
     "query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}": typeof types.GetServiceListDocument,
+    "query GetSyncPathStats($envId: ID!) {\n  folders(envId: $envId) {\n    id\n    name\n    path\n  }\n  secretCountsByPath(envId: $envId) {\n    path\n    secretCount\n  }\n}": typeof types.GetSyncPathStatsDocument,
     "query GetGithubEnvironments($credentialId: ID!, $owner: String!, $repoName: String!) {\n  githubEnvironments(\n    credentialId: $credentialId\n    owner: $owner\n    repoName: $repoName\n  )\n}": typeof types.GetGithubEnvironmentsDocument,
     "query GetGithubOrgs($credentialId: ID!) {\n  githubOrgs(credentialId: $credentialId) {\n    name\n    role\n  }\n}": typeof types.GetGithubOrgsDocument,
     "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}": typeof types.GetGithubReposDocument,
@@ -401,6 +403,7 @@ const documents: Documents = {
     "query GetDeletedApps($organisationId: ID!) {\n  deletedApps(organisationId: $organisationId) {\n    id\n    name\n    deletedAt\n    deletionScheduledFor\n    deletionDelayed\n    canRestore\n    viewerCanDelete\n  }\n}": types.GetDeletedAppsDocument,
     "query VerifyPassword($authHash: String!) {\n  verifyPassword(authHash: $authHash)\n}": types.VerifyPasswordDocument,
     "query GetCheckoutDetails($stripeSessionId: String!, $organisationId: ID!) {\n  stripeCheckoutDetails(\n    stripeSessionId: $stripeSessionId\n    organisationId: $organisationId\n  ) {\n    paymentStatus\n    customerEmail\n    billingStartDate\n    billingEndDate\n    subscriptionId\n    planName\n  }\n}": types.GetCheckoutDetailsDocument,
+    "query GetOrganisationBillingIssue($organisationId: ID!) {\n  organisationBillingIssue(organisationId: $organisationId) {\n    status\n    invoiceUrl\n  }\n}": types.GetOrganisationBillingIssueDocument,
     "query GetCustomerPortalLink($organisationId: ID!) {\n  stripeCustomerPortalUrl(organisationId: $organisationId)\n}": types.GetCustomerPortalLinkDocument,
     "query GetSubscriptionDetails($organisationId: ID!) {\n  stripeSubscriptionDetails(organisationId: $organisationId) {\n    subscriptionId\n    planName\n    planType\n    billingPeriod\n    status\n    nextPaymentAmount\n    currentPeriodStart\n    currentPeriodEnd\n    renewalDate\n    cancelAt\n    cancelAtPeriodEnd\n    paymentMethods {\n      id\n      brand\n      last4\n      expMonth\n      expYear\n      isDefault\n    }\n  }\n}": types.GetSubscriptionDetailsDocument,
     "query GetStripeSubscriptionEstimate($organisationId: ID!, $planType: PlanTypeEnum!, $billingPeriod: BillingPeriodEnum!, $previewV2: Boolean) {\n  estimateStripeSubscription(\n    organisationId: $organisationId\n    planType: $planType\n    billingPeriod: $billingPeriod\n    previewV2: $previewV2\n  ) {\n    estimatedTotal\n    seatCount\n    unitPrice\n    currency\n    priceId\n  }\n}": types.GetStripeSubscriptionEstimateDocument,
@@ -467,6 +470,7 @@ const documents: Documents = {
     "query GetSavedCredentials($orgId: ID!) {\n  savedCredentials(orgId: $orgId) {\n    id\n    name\n    credentials\n    createdAt\n    provider {\n      id\n      name\n      expectedCredentials\n      optionalCredentials\n    }\n    syncCount\n  }\n}": types.GetSavedCredentialsDocument,
     "query GetServerKey {\n  serverPublicKey\n}": types.GetServerKeyDocument,
     "query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}": types.GetServiceListDocument,
+    "query GetSyncPathStats($envId: ID!) {\n  folders(envId: $envId) {\n    id\n    name\n    path\n  }\n  secretCountsByPath(envId: $envId) {\n    path\n    secretCount\n  }\n}": types.GetSyncPathStatsDocument,
     "query GetGithubEnvironments($credentialId: ID!, $owner: String!, $repoName: String!) {\n  githubEnvironments(\n    credentialId: $credentialId\n    owner: $owner\n    repoName: $repoName\n  )\n}": types.GetGithubEnvironmentsDocument,
     "query GetGithubOrgs($credentialId: ID!) {\n  githubOrgs(credentialId: $credentialId) {\n    name\n    role\n  }\n}": types.GetGithubOrgsDocument,
     "query GetGithubRepos($credentialId: ID!) {\n  githubRepos(credentialId: $credentialId) {\n    name\n    owner\n    type\n  }\n}": types.GetGithubReposDocument,
@@ -1109,6 +1113,10 @@ export function graphql(source: "query GetCheckoutDetails($stripeSessionId: Stri
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "query GetOrganisationBillingIssue($organisationId: ID!) {\n  organisationBillingIssue(organisationId: $organisationId) {\n    status\n    invoiceUrl\n  }\n}"): (typeof documents)["query GetOrganisationBillingIssue($organisationId: ID!) {\n  organisationBillingIssue(organisationId: $organisationId) {\n    status\n    invoiceUrl\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "query GetCustomerPortalLink($organisationId: ID!) {\n  stripeCustomerPortalUrl(organisationId: $organisationId)\n}"): (typeof documents)["query GetCustomerPortalLink($organisationId: ID!) {\n  stripeCustomerPortalUrl(organisationId: $organisationId)\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -1370,6 +1378,10 @@ export function graphql(source: "query GetServerKey {\n  serverPublicKey\n}"): (
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}"): (typeof documents)["query GetServiceList {\n  services {\n    id\n    name\n    provider {\n      id\n    }\n  }\n}"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "query GetSyncPathStats($envId: ID!) {\n  folders(envId: $envId) {\n    id\n    name\n    path\n  }\n  secretCountsByPath(envId: $envId) {\n    path\n    secretCount\n  }\n}"): (typeof documents)["query GetSyncPathStats($envId: ID!) {\n  folders(envId: $envId) {\n    id\n    name\n    path\n  }\n  secretCountsByPath(envId: $envId) {\n    path\n    secretCount\n  }\n}"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

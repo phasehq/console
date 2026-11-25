@@ -532,6 +532,11 @@ class SecretFolderType(DjangoObjectType):
         )
 
 
+class SecretPathCountType(ObjectType):
+    path = graphene.String(required=True)
+    secret_count = graphene.Int(required=True)
+
+
 def attach_keys_when_read(events):
     """Give each read the key its version's write event holds, in one query."""
     reads = [

@@ -23,6 +23,7 @@ import { FaDotCircle, FaAngleDoubleDown } from 'react-icons/fa'
 import { FaCircle, FaChevronDown } from 'react-icons/fa6'
 import { Button } from '@/components/common/Button'
 import { Alert } from '@/components/common/Alert'
+import { SyncPathInput } from '@/components/syncing/SyncPathInput'
 
 export const CreateRenderSync = ({
   appId,
@@ -229,7 +230,7 @@ export const CreateRenderSync = ({
                 </div>
               </RadioGroup>
 
-              <Input value={path} setValue={setPath} label="Path" />
+              <SyncPathInput appId={appId} env={phaseEnv} path={path} setPath={setPath} />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-8">

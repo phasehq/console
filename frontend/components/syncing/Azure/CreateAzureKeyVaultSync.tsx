@@ -20,6 +20,7 @@ import { VscAzure } from 'react-icons/vsc'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
 import { organisationContext } from '@/contexts/organisationContext'
 import { Input } from '@/components/common/Input'
+import { SyncPathInput } from '@/components/syncing/SyncPathInput'
 
 const AZ_KV_SECRET_NAME_REGEX = /^[a-zA-Z0-9-]+$/
 
@@ -237,7 +238,7 @@ export const CreateAzureKeyVaultSync = (props: { appId: string; closeModal: () =
                 </div>
               </RadioGroup>
 
-              <Input value={path} setValue={setPath} label="Path" />
+              <SyncPathInput appId={appId} env={phaseEnv} path={path} setPath={setPath} />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-4">

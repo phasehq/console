@@ -581,6 +581,14 @@ export type AzureKeyVaultSecretType = {
   updatedOn?: Maybe<Scalars['DateTime']['output']>;
 };
 
+/** The Stripe status of a paid subscription that is awaiting payment. */
+export enum BillingIssueEnum {
+  Incomplete = 'INCOMPLETE',
+  PastDue = 'PAST_DUE',
+  Paused = 'PAUSED',
+  Unpaid = 'UNPAID'
+}
+
 export enum BillingPeriodEnum {
   Monthly = 'MONTHLY',
   Yearly = 'YEARLY'
@@ -2871,6 +2879,12 @@ export type OrgKeyringInput = {
   wrappedRecovery: Scalars['String']['input'];
 };
 
+export type OrganisationBillingIssueType = {
+  __typename?: 'OrganisationBillingIssueType';
+  invoiceUrl?: Maybe<Scalars['String']['output']>;
+  status: BillingIssueEnum;
+};
+
 export type OrganisationMemberInviteType = {
   __typename?: 'OrganisationMemberInviteType';
   apps: Array<AppMembershipType>;
@@ -3078,6 +3092,7 @@ export type Query = {
   mfaStatus?: Maybe<MfaStatusType>;
   networkAccessPolicies?: Maybe<Array<Maybe<NetworkAccessPolicyType>>>;
   openaiProjects?: Maybe<Array<Maybe<OpenAiProjectType>>>;
+  organisationBillingIssue?: Maybe<OrganisationBillingIssueType>;
   organisationGlobalAccessUsers?: Maybe<Array<Maybe<OrganisationMemberType>>>;
   organisationHasPendingInvoices?: Maybe<Scalars['Boolean']['output']>;
   organisationInvites?: Maybe<Array<Maybe<OrganisationMemberInviteType>>>;
@@ -3099,6 +3114,8 @@ export type Query = {
   savedCredentials?: Maybe<Array<Maybe<ProviderCredentialsType>>>;
   scimEvents?: Maybe<ScimEventsResponseType>;
   scimTokens?: Maybe<Array<Maybe<ScimTokenType>>>;
+  /** The number of secrets stored directly at each path in an environment, counting only static secrets that haven't been deleted: the secrets a sync from that path sends. */
+  secretCountsByPath?: Maybe<Array<SecretPathCountType>>;
   secretHistory?: Maybe<Array<Maybe<SecretEventType>>>;
   secretLogs?: Maybe<SecretLogsResponseType>;
   secretTags?: Maybe<Array<Maybe<SecretTagType>>>;
@@ -3320,6 +3337,11 @@ export type QueryOpenaiProjectsArgs = {
 };
 
 
+export type QueryOrganisationBillingIssueArgs = {
+  organisationId: Scalars['ID']['input'];
+};
+
+
 export type QueryOrganisationGlobalAccessUsersArgs = {
   organisationId?: InputMaybe<Scalars['ID']['input']>;
 };
@@ -3415,6 +3437,11 @@ export type QueryScimEventsArgs = {
 
 export type QueryScimTokensArgs = {
   organisationId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QuerySecretCountsByPathArgs = {
+  envId: Scalars['ID']['input'];
 };
 
 
@@ -3891,6 +3918,12 @@ export type SecretLogsResponseType = {
   __typename?: 'SecretLogsResponseType';
   count?: Maybe<Scalars['Int']['output']>;
   logs?: Maybe<Array<Maybe<SecretEventType>>>;
+};
+
+export type SecretPathCountType = {
+  __typename?: 'SecretPathCountType';
+  path: Scalars['String']['output'];
+  secretCount: Scalars['Int']['output'];
 };
 
 export type SecretTagType = {
@@ -5698,6 +5731,13 @@ export type GetCheckoutDetailsQueryVariables = Exact<{
 
 export type GetCheckoutDetailsQuery = { __typename?: 'Query', stripeCheckoutDetails?: { __typename?: 'StripeCheckoutDetails', paymentStatus?: string | null, customerEmail?: string | null, billingStartDate?: string | null, billingEndDate?: string | null, subscriptionId?: string | null, planName?: string | null } | null };
 
+export type GetOrganisationBillingIssueQueryVariables = Exact<{
+  organisationId: Scalars['ID']['input'];
+}>;
+
+
+export type GetOrganisationBillingIssueQuery = { __typename?: 'Query', organisationBillingIssue?: { __typename?: 'OrganisationBillingIssueType', status: BillingIssueEnum, invoiceUrl?: string | null } | null };
+
 export type GetCustomerPortalLinkQueryVariables = Exact<{
   organisationId: Scalars['ID']['input'];
 }>;
@@ -6192,6 +6232,13 @@ export type GetServiceListQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type GetServiceListQuery = { __typename?: 'Query', services?: Array<{ __typename?: 'ServiceType', id?: string | null, name?: string | null, provider?: { __typename?: 'ProviderType', id: string } | null } | null> | null };
 
+export type GetSyncPathStatsQueryVariables = Exact<{
+  envId: Scalars['ID']['input'];
+}>;
+
+
+export type GetSyncPathStatsQuery = { __typename?: 'Query', folders?: Array<{ __typename?: 'SecretFolderType', id: string, name: string, path: string } | null> | null, secretCountsByPath?: Array<{ __typename?: 'SecretPathCountType', path: string, secretCount: number }> | null };
+
 export type GetGithubEnvironmentsQueryVariables = Exact<{
   credentialId: Scalars['ID']['input'];
   owner: Scalars['String']['input'];
@@ -6456,6 +6503,7 @@ export const GetAppServiceAccountsDocument = {"kind":"Document","definitions":[{
 export const GetDeletedAppsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetDeletedApps"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deletedApps"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"deletedAt"}},{"kind":"Field","name":{"kind":"Name","value":"deletionScheduledFor"}},{"kind":"Field","name":{"kind":"Name","value":"deletionDelayed"}},{"kind":"Field","name":{"kind":"Name","value":"canRestore"}},{"kind":"Field","name":{"kind":"Name","value":"viewerCanDelete"}}]}}]}}]} as unknown as DocumentNode<GetDeletedAppsQuery, GetDeletedAppsQueryVariables>;
 export const VerifyPasswordDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"VerifyPassword"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"authHash"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"verifyPassword"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"authHash"},"value":{"kind":"Variable","name":{"kind":"Name","value":"authHash"}}}]}]}}]} as unknown as DocumentNode<VerifyPasswordQuery, VerifyPasswordQueryVariables>;
 export const GetCheckoutDetailsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetCheckoutDetails"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"stripeSessionId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"stripeCheckoutDetails"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"stripeSessionId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"stripeSessionId"}}},{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"paymentStatus"}},{"kind":"Field","name":{"kind":"Name","value":"customerEmail"}},{"kind":"Field","name":{"kind":"Name","value":"billingStartDate"}},{"kind":"Field","name":{"kind":"Name","value":"billingEndDate"}},{"kind":"Field","name":{"kind":"Name","value":"subscriptionId"}},{"kind":"Field","name":{"kind":"Name","value":"planName"}}]}}]}}]} as unknown as DocumentNode<GetCheckoutDetailsQuery, GetCheckoutDetailsQueryVariables>;
+export const GetOrganisationBillingIssueDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetOrganisationBillingIssue"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"organisationBillingIssue"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"invoiceUrl"}}]}}]}}]} as unknown as DocumentNode<GetOrganisationBillingIssueQuery, GetOrganisationBillingIssueQueryVariables>;
 export const GetCustomerPortalLinkDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetCustomerPortalLink"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"stripeCustomerPortalUrl"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}}]}]}}]} as unknown as DocumentNode<GetCustomerPortalLinkQuery, GetCustomerPortalLinkQueryVariables>;
 export const GetSubscriptionDetailsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetSubscriptionDetails"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"stripeSubscriptionDetails"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"subscriptionId"}},{"kind":"Field","name":{"kind":"Name","value":"planName"}},{"kind":"Field","name":{"kind":"Name","value":"planType"}},{"kind":"Field","name":{"kind":"Name","value":"billingPeriod"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"nextPaymentAmount"}},{"kind":"Field","name":{"kind":"Name","value":"currentPeriodStart"}},{"kind":"Field","name":{"kind":"Name","value":"currentPeriodEnd"}},{"kind":"Field","name":{"kind":"Name","value":"renewalDate"}},{"kind":"Field","name":{"kind":"Name","value":"cancelAt"}},{"kind":"Field","name":{"kind":"Name","value":"cancelAtPeriodEnd"}},{"kind":"Field","name":{"kind":"Name","value":"paymentMethods"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"brand"}},{"kind":"Field","name":{"kind":"Name","value":"last4"}},{"kind":"Field","name":{"kind":"Name","value":"expMonth"}},{"kind":"Field","name":{"kind":"Name","value":"expYear"}},{"kind":"Field","name":{"kind":"Name","value":"isDefault"}}]}}]}}]}}]} as unknown as DocumentNode<GetSubscriptionDetailsQuery, GetSubscriptionDetailsQueryVariables>;
 export const GetStripeSubscriptionEstimateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetStripeSubscriptionEstimate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"planType"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"PlanTypeEnum"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"billingPeriod"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"BillingPeriodEnum"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"previewV2"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"estimateStripeSubscription"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"organisationId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"organisationId"}}},{"kind":"Argument","name":{"kind":"Name","value":"planType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"planType"}}},{"kind":"Argument","name":{"kind":"Name","value":"billingPeriod"},"value":{"kind":"Variable","name":{"kind":"Name","value":"billingPeriod"}}},{"kind":"Argument","name":{"kind":"Name","value":"previewV2"},"value":{"kind":"Variable","name":{"kind":"Name","value":"previewV2"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"estimatedTotal"}},{"kind":"Field","name":{"kind":"Name","value":"seatCount"}},{"kind":"Field","name":{"kind":"Name","value":"unitPrice"}},{"kind":"Field","name":{"kind":"Name","value":"currency"}},{"kind":"Field","name":{"kind":"Name","value":"priceId"}}]}}]}}]} as unknown as DocumentNode<GetStripeSubscriptionEstimateQuery, GetStripeSubscriptionEstimateQueryVariables>;
@@ -6522,6 +6570,7 @@ export const GetSavedCredentialIdsDocument = {"kind":"Document","definitions":[{
 export const GetSavedCredentialsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetSavedCredentials"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"savedCredentials"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"orgId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"orgId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"credentials"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"provider"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"expectedCredentials"}},{"kind":"Field","name":{"kind":"Name","value":"optionalCredentials"}}]}},{"kind":"Field","name":{"kind":"Name","value":"syncCount"}}]}}]}}]} as unknown as DocumentNode<GetSavedCredentialsQuery, GetSavedCredentialsQueryVariables>;
 export const GetServerKeyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetServerKey"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverPublicKey"}}]}}]} as unknown as DocumentNode<GetServerKeyQuery, GetServerKeyQueryVariables>;
 export const GetServiceListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetServiceList"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"services"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"provider"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]}}]} as unknown as DocumentNode<GetServiceListQuery, GetServiceListQueryVariables>;
+export const GetSyncPathStatsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetSyncPathStats"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"envId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"folders"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"path"}}]}},{"kind":"Field","name":{"kind":"Name","value":"secretCountsByPath"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"envId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"envId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"secretCount"}}]}}]}}]} as unknown as DocumentNode<GetSyncPathStatsQuery, GetSyncPathStatsQueryVariables>;
 export const GetGithubEnvironmentsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetGithubEnvironments"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"owner"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"repoName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"githubEnvironments"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}},{"kind":"Argument","name":{"kind":"Name","value":"owner"},"value":{"kind":"Variable","name":{"kind":"Name","value":"owner"}}},{"kind":"Argument","name":{"kind":"Name","value":"repoName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"repoName"}}}]}]}}]} as unknown as DocumentNode<GetGithubEnvironmentsQuery, GetGithubEnvironmentsQueryVariables>;
 export const GetGithubOrgsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetGithubOrgs"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"githubOrgs"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"role"}}]}}]}}]} as unknown as DocumentNode<GetGithubOrgsQuery, GetGithubOrgsQueryVariables>;
 export const GetGithubReposDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"GetGithubRepos"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"githubRepos"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"credentialId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"credentialId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"owner"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}}]}}]} as unknown as DocumentNode<GetGithubReposQuery, GetGithubReposQueryVariables>;

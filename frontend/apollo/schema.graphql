@@ -30,6 +30,11 @@ type Query {
   appServiceAccounts(appId: ID): [ServiceAccountType]
   secrets(envId: ID, path: String, id: ID): [SecretType]
   folders(envId: ID, path: String): [SecretFolderType]
+
+  """
+  The number of secrets stored directly at each path in an environment, counting only static secrets that haven't been deleted: the secrets a sync from that path sends.
+  """
+  secretCountsByPath(envId: ID!): [SecretPathCountType!]
   secretHistory(secretId: ID): [SecretEventType]
   secretTags(orgId: ID): [SecretTagType]
   environmentKeys(appId: ID, environmentId: ID, memberId: ID, memberType: MemberType): [EnvironmentKeyType]
@@ -72,6 +77,7 @@ type Query {
   stripeCheckoutDetails(stripeSessionId: String!, organisationId: ID!): StripeCheckoutDetails
   stripeSubscriptionDetails(organisationId: ID): StripeSubscriptionDetails
   organisationHasPendingInvoices(organisationId: ID!): Boolean
+  organisationBillingIssue(organisationId: ID!): OrganisationBillingIssueType
   stripeCustomerPortalUrl(organisationId: ID!): String
   estimateStripeSubscription(organisationId: ID!, planType: PlanTypeEnum!, billingPeriod: BillingPeriodEnum!, previewV2: Boolean = false): StripePlanEstimate
   dynamicSecretProviders: [DynamicSecretProviderType]
@@ -1081,6 +1087,11 @@ type DeletedEnvironmentType {
   canRestore: Boolean!
 }
 
+type SecretPathCountType {
+  path: String!
+  secretCount: Int!
+}
+
 type EnvironmentKeyType {
   id: String!
   environment: EnvironmentType!
@@ -1334,6 +1345,19 @@ enum BillingPeriodEnum {
 enum PlanTypeEnum {
   PRO
   ENTERPRISE
+}
+
+type OrganisationBillingIssueType {
+  status: BillingIssueEnum!
+  invoiceUrl: String
+}
+
+"""The Stripe status of a paid subscription that is awaiting payment."""
+enum BillingIssueEnum {
+  PAST_DUE
+  UNPAID
+  INCOMPLETE
+  PAUSED
 }
 
 type StripePlanEstimate {

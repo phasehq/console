@@ -16,7 +16,15 @@ import { GetOrganisations } from '@/graphql/queries/getOrganisations.gql'
 import { relativeTimeFromDates } from '@/utils/time'
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client'
 import { useContext, useRef } from 'react'
-import { FaCheckCircle, FaCreditCard, FaPlay, FaTimes, FaTrash } from 'react-icons/fa'
+import {
+  FaCheckCircle,
+  FaCreditCard,
+  FaExclamationTriangle,
+  FaExternalLinkAlt,
+  FaPlay,
+  FaTimes,
+  FaTrash,
+} from 'react-icons/fa'
 import {
   SiAmericanexpress,
   SiDinersclub,
@@ -34,6 +42,7 @@ import { Elements } from '@stripe/react-stripe-js'
 import { AddPaymentMethodDialog, AddPaymentMethodForm } from './AddPaymentMethodForm'
 import { ModifySubscriptionDialog } from './ModifySubscriptionDialog'
 import { StripeCustomerPortalLink } from './StripeCustomerPortalLink'
+import { BILLING_ISSUE_MESSAGES, useBillingIssue } from './billingIssue'
 
 const BrandIcon = ({ brand }: { brand?: string }) => {
   switch (brand) {
@@ -412,6 +421,8 @@ export const StripeBillingInfo = () => {
     skip: !activeOrganisation || !userCanReadBilling,
   })
 
+  const billingIssue = useBillingIssue()
+
   const subscriptionData: StripeSubscriptionDetails | undefined =
     data?.stripeSubscriptionDetails ?? undefined
 
@@ -427,6 +438,8 @@ export const StripeBillingInfo = () => {
       enterprise_active: 'border-t-emerald-500', // For active pro plan
       cancelled: 'border-t-amber-500', // For cancelled pro plan
     }
+
+    if (billingIssue) return 'border-t-red-500'
 
     if (activeOrganisation?.plan === ApiOrganisationPlanChoices.Fr) {
       return classMap.free
@@ -469,7 +482,11 @@ export const StripeBillingInfo = () => {
             {subscriptionData.planName}{' '}
             {activeOrganisation?.plan !== ApiOrganisationPlanChoices.Fr && (
               <span className="capitalize">
-                ({subscriptionData.cancelAtPeriodEnd ? 'Cancelled' : subscriptionData.status})
+                (
+                {subscriptionData.cancelAtPeriodEnd
+                  ? 'Cancelled'
+                  : subscriptionData.status?.replace(/_/g, ' ')}
+                )
               </span>
             )}
           </div>
@@ -483,18 +500,28 @@ export const StripeBillingInfo = () => {
                 {new Date(subscriptionData.currentPeriodEnd! * 1000).toDateString()}
               </div>
 
-              <div className="text-neutral-500 text-sm flex items-center gap-1 font-semibold">
-                {!subscriptionData.cancelAtPeriodEnd
-                  ? `Next payment ${relativeTimeFromDates(new Date(subscriptionData.renewalDate! * 1000))} for $${(subscriptionData.nextPaymentAmount! / 100).toFixed(2)}`
-                  : `Ends ${relativeTimeFromDates(new Date(subscriptionData.cancelAt! * 1000))}`}
+              {billingIssue ? (
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-red-600 dark:text-red-400">
+                  <FaExclamationTriangle className="shrink-0" />
+                  <span>
+                    {BILLING_ISSUE_MESSAGES[billingIssue.status].title}.{' '}
+                    {BILLING_ISSUE_MESSAGES[billingIssue.status].detail}
+                  </span>
+                </div>
+              ) : (
+                <div className="text-neutral-500 text-sm flex items-center gap-1 font-semibold">
+                  {!subscriptionData.cancelAtPeriodEnd
+                    ? `Next payment ${relativeTimeFromDates(new Date(subscriptionData.renewalDate! * 1000))} for $${(subscriptionData.nextPaymentAmount! / 100).toFixed(2)}`
+                    : `Ends ${relativeTimeFromDates(new Date(subscriptionData.cancelAt! * 1000))}`}
 
-                {!subscriptionData.cancelAtPeriodEnd && (
-                  <div className="flex items-center gap-2">
-                    {defaultPaymentMethod && ` on card ending in ${defaultPaymentMethod.last4}`}
-                    {defaultPaymentMethod && <BrandIcon brand={defaultPaymentMethod.brand!} />}
-                  </div>
-                )}
-              </div>
+                  {!subscriptionData.cancelAtPeriodEnd && (
+                    <div className="flex items-center gap-2">
+                      {defaultPaymentMethod && ` on card ending in ${defaultPaymentMethod.last4}`}
+                      {defaultPaymentMethod && <BrandIcon brand={defaultPaymentMethod.brand!} />}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -525,6 +552,17 @@ export const StripeBillingInfo = () => {
                 )}
               </div>
               <div className="flex items-center gap-2">
+                {billingIssue?.invoiceUrl && (
+                  <Button
+                    variant="danger"
+                    icon={FaExternalLinkAlt}
+                    onClick={() =>
+                      window.open(billingIssue.invoiceUrl!, '_blank', 'noopener,noreferrer')
+                    }
+                  >
+                    Pay invoice
+                  </Button>
+                )}
                 <StripeCustomerPortalLink />
               </div>
             </div>
