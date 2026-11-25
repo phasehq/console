@@ -264,3 +264,31 @@ describe("with the caller's own copy of each environment", () => {
     expect(urlOf('backend/')).toBe('/team/apps/app-1/backend?envs=dev')
   })
 })
+
+describe('a closing brace further on in the value', () => {
+  const ctx = context({ secretKeys: ['DB_HOST', 'DB_PORT'] })
+  const acceptAt = (value: string, cursor: number, pick: string) => {
+    const token = getActiveReferenceToken(value, cursor)!
+    const suggestion = computeSuggestions(token, ctx).find((s) => s.label === pick)!
+    return buildInsertionText(suggestion, token, value).newValue
+  }
+
+  test('is not the end of the reference being typed', () => {
+    const json = '{"host": "${DB_"}'
+    const token = getActiveReferenceToken(json, 15)!
+    expect(token.insideClosedRef).toBe(false)
+    // So what is typed still filters
+    expect(computeSuggestions(token, ctx).map((s) => s.label)).toEqual(['DB_HOST', 'DB_PORT'])
+  })
+
+  test('and stays where it is when a suggestion is accepted', () => {
+    expect(acceptAt('{"host": "${DB_"}', 15, 'DB_HOST')).toBe('{"host": "${DB_HOST}"}')
+    expect(acceptAt('${DB_ and {braces}', 5, 'DB_PORT')).toBe('${DB_PORT} and {braces}')
+    expect(acceptAt("export A='${DB_' B='{}'", 15, 'DB_HOST')).toBe("export A='${DB_HOST}' B='{}'")
+  })
+
+  test('while the rest of a reference that is closed is still replaced', () => {
+    expect(getActiveReferenceToken('${DB_HOST}', 5)!.insideClosedRef).toBe(true)
+    expect(acceptAt('{"host": "${DB_HOST}"}', 15, 'DB_PORT')).toBe('{"host": "${DB_PORT}"}')
+  })
+})

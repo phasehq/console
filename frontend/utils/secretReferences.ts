@@ -189,6 +189,16 @@ export function parseAllReferences(value: string): ParsedReference[] {
 
 // --- Active reference detection (for autocomplete) ---
 
+/**
+ * Where the reference being typed closes, counted from the cursor, or -1 while it is still open.
+ * Only what can be the rest of a reference counts: a `}` further on in a JSON value, past a
+ * quote or a space, belongs to something else and must be left alone.
+ */
+function closingBraceAfter(afterCursor: string): number {
+  const at = afterCursor.indexOf('}')
+  return at !== -1 && /^[^\s{}$"'`]*$/.test(afterCursor.slice(0, at)) ? at : -1
+}
+
 export function getActiveReferenceToken(
   value: string,
   cursorPos: number
@@ -215,10 +225,7 @@ export function getActiveReferenceToken(
     const raw = textBetween
 
     // Check if cursor is inside a closed reference (} after cursor belongs to this ref)
-    const afterCursor = value.slice(cursorPos)
-    const closingIdx = afterCursor.indexOf('}')
-    const insideClosedRef =
-      closingIdx !== -1 && !afterCursor.slice(0, closingIdx).includes('${')
+    const insideClosedRef = closingBraceAfter(value.slice(cursorPos)) !== -1
 
     // Determine stage based on what's been typed
     const doubleColonIdx = raw.indexOf('::')
@@ -601,7 +608,7 @@ export function buildInsertionText(
   const afterCursor = fullValue.slice(cursorPos)
 
   // Check if cursor is inside a complete (closed) reference
-  const closingBraceRelIdx = afterCursor.indexOf('}')
+  const closingBraceRelIdx = closingBraceAfter(afterCursor)
 
   let consumeAfterCursor = 0
 
