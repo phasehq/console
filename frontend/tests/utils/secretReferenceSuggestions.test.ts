@@ -6,6 +6,7 @@ import {
   computeSuggestions,
   getActiveReferenceToken,
   getSuggestionUrl,
+  validateSecretReferences,
 } from '@/utils/secretReferences'
 
 const context = (overrides: Partial<ReferenceContext> = {}): ReferenceContext => ({
@@ -290,5 +291,47 @@ describe('a closing brace further on in the value', () => {
   test('while the rest of a reference that is closed is still replaced', () => {
     expect(getActiveReferenceToken('${DB_HOST}', 5)!.insideClosedRef).toBe(true)
     expect(acceptAt('{"host": "${DB_HOST}"}', 15, 'DB_PORT')).toBe('{"host": "${DB_PORT}"}')
+  })
+})
+
+describe('a reference by app name', () => {
+  const billing = {
+    id: 'app-2',
+    name: 'billing',
+    envNames: ['Production'],
+    envIds: { production: 'billing-prod' },
+    envSecretKeys: { production: ['LEDGER_URL'] },
+    envRootKeys: { production: ['LEDGER_URL'] },
+    folderKeys: {},
+    envFolderKeys: {},
+    secretIdLookup: {},
+  }
+  const inDev = (value: string) => [
+    { key: 'URL', envs: [{ env: { id: 'dev', name: 'Development' }, secret: { value } }] },
+  ]
+  const errorsFor = (value: string, ctx: ReferenceContext) =>
+    validateSecretReferences(inDev(value), ctx).map((error) => error.error)
+
+  test('to this app is checked like one into another of its environments', () => {
+    const ctx = context({
+      appName: 'storefront',
+      orgApps: [billing],
+      keyStateAt: (envId, path, key) =>
+        envId === 'prod' ? (path === '/' && key === 'DB_HOST' ? 'present' : 'missing') : undefined,
+    })
+    expect(errorsFor('${storefront::Production.DB_HOST}', ctx)).toEqual([])
+    expect(errorsFor('${Storefront::production.NOT_THERE}', ctx)).toEqual([
+      'Referenced key "NOT_THERE" does not exist in "production"',
+    ])
+    expect(errorsFor('${storefront::Preview.DB_HOST}', ctx)).toEqual([
+      'Referenced environment "Preview" does not exist in app "storefront"',
+    ])
+  })
+
+  test('that two apps share is flagged: it resolves to neither', () => {
+    const ctx = context({ appName: 'storefront', orgApps: [], ambiguousAppNames: ['billing'] })
+    expect(errorsFor('${Billing::Production.LEDGER_URL}', ctx)).toEqual([
+      'Referenced app "Billing" is ambiguous: more than one app in this organisation has that name',
+    ])
   })
 })

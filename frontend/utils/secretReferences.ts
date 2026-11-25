@@ -85,7 +85,12 @@ export type ReferenceContext = {
   folderPaths: string[]
   folderSecretKeys: Record<string, string[]> // folder path → keys at that path
   envFolderKeys: Record<string, Record<string, string[]>> // env name (lowercase) → { folder path → keys }
+  /** The other apps a reference can name: one whose name another app shares is left out */
   orgApps: OrgApp[]
+  /** This app's name: a reference may name its own app */
+  appName?: string
+  /** Names (lowercase) that more than one app of the organisation has: a reference by one resolves to neither */
+  ambiguousAppNames?: string[]
   deletedKeys: string[]
   /**
    * The keys an env of this app holds in the caller's own copy, each with its folder. What is
@@ -875,8 +880,34 @@ export function validateSecretReferences(
 ): ReferenceValidationError[] {
   const errors: ReferenceValidationError[] = []
 
+  /** A key in another env of this app: looked up where the reference points, in the caller's copy if it has one */
+  const checkKeyInThisApp = (secretKey: string, envName: string, ref: ParsedReference) => {
+    const { path, key } = decomposePathAndKey(ref.pathAndKey)
+    const targetEnv = ref.env!.toLowerCase()
+    const state = context.keyStateAt?.(context.envIds[targetEnv], path, key)
+    const targetEnvKeys = context.envSecretKeys[targetEnv] ?? []
+    if (state ? state === 'missing' : !targetEnvKeys.includes(key)) {
+      errors.push({
+        secretKey,
+        envName,
+        reference: ref.fullMatch,
+        error: `Referenced key "${key}" does not exist in "${ref.env}"`,
+      })
+    } else if (state === 'deleted') {
+      errors.push({
+        secretKey,
+        envName,
+        reference: ref.fullMatch,
+        error: `Referenced key "${key}" is staged for deletion in "${ref.env}"`,
+        deleted: true,
+      })
+    }
+  }
+
   const envNameSet = new Set(context.envNames.map((n) => n.toLowerCase()))
   const orgAppNameSet = new Set(context.orgApps.map((a) => a.name.toLowerCase()))
+  const ambiguousAppNames = new Set(context.ambiguousAppNames ?? [])
+  const ownAppName = context.appName?.toLowerCase()
 
   for (const secret of secrets) {
     for (const envEntry of secret.envs) {
@@ -927,32 +958,33 @@ export function validateSecretReferences(
                 error: `Referenced environment "${ref.env}" does not exist`,
               })
             } else {
-              const { path, key } = decomposePathAndKey(ref.pathAndKey)
-              const targetEnv = ref.env!.toLowerCase()
-              const state = context.keyStateAt?.(context.envIds[targetEnv], path, key)
-              const targetEnvKeys = context.envSecretKeys[targetEnv] ?? []
-              if (state ? state === 'missing' : !targetEnvKeys.includes(key)) {
-                errors.push({
-                  secretKey: secret.key,
-                  envName,
-                  reference: ref.fullMatch,
-                  error: `Referenced key "${key}" does not exist in "${ref.env}"`,
-                })
-              } else if (state === 'deleted') {
-                errors.push({
-                  secretKey: secret.key,
-                  envName,
-                  reference: ref.fullMatch,
-                  error: `Referenced key "${key}" is staged for deletion in "${ref.env}"`,
-                  deleted: true,
-                })
-              }
+              checkKeyInThisApp(secret.key, envName, ref)
             }
             break
           }
 
           case 'cross-app': {
-            if (!orgAppNameSet.has(ref.app!.toLowerCase())) {
+            const appName = ref.app!.toLowerCase()
+            if (ambiguousAppNames.has(appName)) {
+              errors.push({
+                secretKey: secret.key,
+                envName,
+                reference: ref.fullMatch,
+                error: `Referenced app "${ref.app}" is ambiguous: more than one app in this organisation has that name`,
+              })
+            } else if (appName === ownAppName) {
+              // This app, named in full: its envs and keys are the ones at hand
+              if (!envNameSet.has(ref.env!.toLowerCase())) {
+                errors.push({
+                  secretKey: secret.key,
+                  envName,
+                  reference: ref.fullMatch,
+                  error: `Referenced environment "${ref.env}" does not exist in app "${ref.app}"`,
+                })
+              } else {
+                checkKeyInThisApp(secret.key, envName, ref)
+              }
+            } else if (!orgAppNameSet.has(appName)) {
               errors.push({
                 secretKey: secret.key,
                 envName,
