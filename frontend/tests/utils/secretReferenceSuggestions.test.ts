@@ -334,4 +334,33 @@ describe('a reference by app name', () => {
       'Referenced app "Billing" is ambiguous: more than one app in this organisation has that name',
     ])
   })
+
+  test('is left alone until the apps of the organisation have been read', () => {
+    const unread = context({ appName: 'storefront', orgApps: [], orgAppsKnown: false })
+    expect(errorsFor('${billing::Production.LEDGER_URL}', unread)).toEqual([])
+    const read = context({ appName: 'storefront', orgApps: [], orgAppsKnown: true })
+    expect(errorsFor('${billing::Production.LEDGER_URL}', read)).toEqual([
+      'Referenced app "billing" does not exist in this organisation',
+    ])
+  })
+})
+
+describe('an environment there is nothing to tell about', () => {
+  const inDev = [
+    {
+      key: 'URL',
+      envs: [
+        { env: { id: 'dev', name: 'Development' }, secret: { value: '${Production.DB_HOST}' } },
+      ],
+    },
+  ]
+
+  test('is not judged: neither a copy of it nor a list of its keys', () => {
+    expect(validateSecretReferences(inDev, context())).toEqual([])
+  })
+
+  test('while a list that lacks the key still flags the reference', () => {
+    const listed = context({ envSecretKeys: { production: [] } })
+    expect(validateSecretReferences(inDev, listed)).toHaveLength(1)
+  })
 })

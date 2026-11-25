@@ -12,13 +12,19 @@ import { OrgApp, secretIdKey } from '@/utils/secretReferences'
  * Returns structured data for cross-app reference autocomplete and validation.
  * Caches the result so decryption only happens once per session.
  */
-export function useOrgSecretKeys(): { orgApps: OrgApp[]; loading: boolean } {
+export function useOrgSecretKeys(): {
+  orgApps: OrgApp[]
+  loading: boolean
+  /** The apps have been read: until then, and if the read fails, there is nothing to tell */
+  known: boolean
+} {
   const client = useApolloClient()
   const { keyring } = useContext(KeyringContext)
   const { activeOrganisation: organisation } = useContext(organisationContext)
   const cacheRef = useRef<OrgApp[] | null>(null)
   const [orgApps, setOrgApps] = useState<OrgApp[]>([])
   const [loading, setLoading] = useState(false)
+  const [known, setKnown] = useState(false)
 
   useEffect(() => {
     if (!organisation?.id || !keyring) return
@@ -28,11 +34,13 @@ export function useOrgSecretKeys(): { orgApps: OrgApp[]; loading: boolean } {
     const fetchAndDecrypt = async () => {
       if (cacheRef.current) {
         setOrgApps(cacheRef.current)
+        setKnown(true)
         return
       }
 
       setLoading(true)
       const apps: OrgApp[] = []
+      let read = false
 
       try {
         const { data } = await client.query({
@@ -130,13 +138,15 @@ export function useOrgSecretKeys(): { orgApps: OrgApp[]; loading: boolean } {
 
           apps.push({ id: app.id, name: app.name, envNames, envIds, envSecretKeys, envRootKeys, folderKeys, envFolderKeys, secretIdLookup: secretIdLookupMap })
         }
+        read = true
       } catch (error) {
         console.error('Failed to fetch org secret keys for reference autocomplete', error)
       }
 
       if (cancelled) return
-      cacheRef.current = apps
+      if (read) cacheRef.current = apps
       setOrgApps(apps)
+      setKnown(read)
       setLoading(false)
     }
 
@@ -147,5 +157,5 @@ export function useOrgSecretKeys(): { orgApps: OrgApp[]; loading: boolean } {
     }
   }, [organisation?.id, keyring, client])
 
-  return { orgApps, loading }
+  return { orgApps, loading, known }
 }

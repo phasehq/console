@@ -87,6 +87,8 @@ export type ReferenceContext = {
   envFolderKeys: Record<string, Record<string, string[]>> // env name (lowercase) → { folder path → keys }
   /** The other apps a reference can name: one whose name another app shares is left out */
   orgApps: OrgApp[]
+  /** False until the org's apps have been read: there is then nothing to judge a cross-app reference by */
+  orgAppsKnown?: boolean
   /** This app's name: a reference may name its own app */
   appName?: string
   /** Names (lowercase) that more than one app of the organisation has: a reference by one resolves to neither */
@@ -885,8 +887,10 @@ export function validateSecretReferences(
     const { path, key } = decomposePathAndKey(ref.pathAndKey)
     const targetEnv = ref.env!.toLowerCase()
     const state = context.keyStateAt?.(context.envIds[targetEnv], path, key)
-    const targetEnvKeys = context.envSecretKeys[targetEnv] ?? []
-    if (state ? state === 'missing' : !targetEnvKeys.includes(key)) {
+    const targetEnvKeys = context.envSecretKeys[targetEnv]
+    // Neither a copy of that env nor a list of its keys: nothing to judge the reference by
+    if (state === undefined && targetEnvKeys === undefined) return
+    if (state ? state === 'missing' : !targetEnvKeys!.includes(key)) {
       errors.push({
         secretKey,
         envName,
@@ -964,6 +968,8 @@ export function validateSecretReferences(
           }
 
           case 'cross-app': {
+            // The org's apps have not been read (yet): nothing to judge the reference by
+            if (context.orgAppsKnown === false) break
             const appName = ref.app!.toLowerCase()
             if (ambiguousAppNames.has(appName)) {
               errors.push({
