@@ -206,10 +206,8 @@ class CreateEnvironmentMutation(graphene.Mutation):
             max_index = Environment.all_objects.filter(app=app).aggregate(
                 Max("index")
             )["index__max"]
-            if max_index:
-                index = max_index + 1
-            else:
-                index = 0
+            # An App whose only environment is at 0 has a max index of 0, not None
+            index = 0 if max_index is None else max_index + 1
 
         org_owner = OrganisationMember.objects.get(
             organisation=app.organisation,

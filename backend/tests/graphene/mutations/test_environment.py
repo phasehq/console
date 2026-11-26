@@ -1,4 +1,5 @@
-"""CreateEnvironmentMutation: custom environments on every plan.
+"""CreateEnvironmentMutation: custom environments on every plan, and the place
+a new environment takes in its App's order.
 
 Custom environments used to need a paid plan. They are open to every plan
 now: the only limit is the per-App count quota (can_add_environment), as on
@@ -95,3 +96,25 @@ def test_the_per_app_quota_is_the_only_limit(create, env_type):
         create.run(env_type)
 
     create.Environment.objects.create.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "max_index,expected",
+    [
+        (None, 0),  # the App's first environment
+        (0, 1),  # after an App whose only environment is at 0
+        (2, 3),  # after Development, Staging and Production
+        (6, 7),
+    ],
+)
+def test_a_custom_environment_goes_after_the_last_one(create, max_index, expected):
+    create.run("custom", max_index=max_index)
+
+    assert create.Environment.objects.create.call_args.kwargs["index"] == expected
+
+
+@pytest.mark.parametrize("env_type,expected", [("dev", 0), ("staging", 1), ("prod", 2)])
+def test_the_standard_environments_keep_their_places(create, env_type, expected):
+    create.run(env_type, name="Renamed", max_index=5)
+
+    assert create.Environment.objects.create.call_args.kwargs["index"] == expected
