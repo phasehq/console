@@ -7,8 +7,10 @@ export const ToggleSwitch = (props: {
   asBoolean?: boolean
   theme?: 'emerald' | 'red'
   size?: 'sm' | 'md'
+  /** For a <label htmlFor> to name the switch */
+  id?: string
 }) => {
-  const { value, onToggle, disabled, asBoolean = true, theme = 'emerald', size = 'md' } = props
+  const { value, onToggle, disabled, asBoolean = true, theme = 'emerald', size = 'md', id } = props
 
   const getThemeColors = (isActive: boolean) => {
     if (theme === 'red') {
@@ -51,6 +53,7 @@ export const ToggleSwitch = (props: {
 
   return (
     <Switch
+      id={id}
       checked={value}
       onChange={onToggle}
       disabled={disabled}

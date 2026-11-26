@@ -23,6 +23,7 @@ import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { defaultEnvColor, sanitizeInput } from '@/utils/environment'
 import { ColorPicker } from '../common/ColorPicker'
+import { ToggleSwitch } from '../common/ToggleSwitch'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   // Team-aware, as the grid's own checks are: access through a team can carry its own role in this app
@@ -32,21 +33,42 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
   const allowRename = userCanUpdateEnvironments
 
   const nameId = useId()
+  const primaryId = useId()
   const [name, setName] = useState(props.environment?.name || '')
   // '' = auto: the server stores null and clients derive a color from the name
   const [color, setColor] = useState(props.environment?.color || '')
+  const wasPrimary = Boolean(props.environment.isPrimary)
+  const [isPrimary, setIsPrimary] = useState(wasPrimary)
+
+  // The App's current primary environment, which this one would take over from
+  const { data: appEnvsData } = useQuery(GetAppEnvironments, {
+    variables: { appId: props.environment.app.id },
+  })
+  const currentPrimary = ((appEnvsData?.appEnvironments ?? []) as EnvironmentType[]).find(
+    (env) => env.isPrimary && env.id !== props.environment.id
+  )
 
   const [renameEnvironment] = useMutation(RenameEnv)
 
   const unchanged =
-    name === props.environment.name && (color || '') === (props.environment.color || '')
+    name === props.environment.name &&
+    (color || '') === (props.environment.color || '') &&
+    isPrimary === wasPrimary
 
   const handleSubmit = async (event: { preventDefault: () => void }) => {
     event.preventDefault()
     const { data } = await renameEnvironment({
-      variables: { environmentId: props.environment?.id, name, color: color || null },
+      variables: {
+        environmentId: props.environment?.id,
+        name,
+        color: color || null,
+        // Unchanged is left out, so the server doesn't touch the designation
+        isPrimary: isPrimary === wasPrimary ? null : isPrimary,
+      },
       refetchQueries: [
         { query: GetAppEnvironments, variables: { appId: props.environment.app.id } },
+        // The secrets grid's marker for values repeating the primary environment's, when it's mounted
+        'GetAppSecrets',
       ],
     })
 
@@ -60,7 +82,10 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
     <form className="space-y-4 py-4" onSubmit={handleSubmit}>
       <div>
         <h4 className="font-medium text-zinc-900 dark:text-zinc-100">Environment settings</h4>
-        <p className="text-neutral-500 text-sm">Update the name and color of this Environment</p>
+        <p className="text-neutral-500 text-sm">
+          Update the name and color of this Environment, and whether it is the App&apos;s primary
+          one
+        </p>
       </div>
       <Alert variant="info" size="sm">
         {allowRename
@@ -99,6 +124,32 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
             Use up to 32 characters. Only letters, numbers, hyphens, and underscores are allowed.
           </p>
         )}
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-md p-3 ring-1 ring-inset ring-neutral-500/20">
+        <div className="space-y-1">
+          <label
+            htmlFor={primaryId}
+            className="block text-sm font-medium text-zinc-900 dark:text-zinc-100"
+          >
+            Primary environment
+          </label>
+          <p className="text-xs text-neutral-500">
+            The App&apos;s main environment, like a repository&apos;s main branch. Secret values
+            that other Environments share with it are marked in the editor.
+            {isPrimary && !wasPrimary && currentPrimary
+              ? ` This takes over from ${currentPrimary.name}.`
+              : ''}
+          </p>
+        </div>
+        <div className="shrink-0 pt-0.5">
+          <ToggleSwitch
+            id={primaryId}
+            value={isPrimary}
+            onToggle={() => setIsPrimary((on) => !on)}
+            disabled={!userCanUpdateEnvironments}
+          />
+        </div>
       </div>
 
       {userCanUpdateEnvironments && (

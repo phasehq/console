@@ -73,8 +73,8 @@ export type EnvValueCellProps = {
   /** The row's current key (autocomplete, share and override labels) */
   rowKey: string
   keyIsStagedForDelete: boolean
-  /** The production env whose value this one repeats, if it does */
-  sameAsProd: EnvironmentType | null
+  /** The App's primary env, when this value repeats its own */
+  sameAsPrimary: EnvironmentType | null
   /** Rows owned by a rotation label missing values "Add static value" */
   inRotatingGroup: boolean
   /** This env's values are shown, from its header menu or "Reveal all" */
@@ -103,7 +103,7 @@ const EnvValueCellBase = ({
   serverEntry,
   rowKey,
   keyIsStagedForDelete,
-  sameAsProd,
+  sameAsPrimary,
   inRotatingGroup,
   envRevealed,
   revealOnHover,
@@ -419,11 +419,11 @@ const EnvValueCellBase = ({
           />
         </div>
 
-        {sameAsProd && value !== '' && (
+        {sameAsPrimary && value !== '' && (
           <FaCheckCircle
             className="mt-2 shrink-0 text-2xs"
-            style={{ color: envColor(sameAsProd) }}
-            title={`This value is the same as ${sameAsProd.name}`}
+            style={{ color: envColor(sameAsPrimary) }}
+            title={`This value is the same as ${sameAsPrimary.name}, the primary environment`}
           />
         )}
 
@@ -548,7 +548,7 @@ const areEnvValueCellsEqual = (prev: EnvValueCellProps, next: EnvValueCellProps)
   prev.entry.env.id === next.entry.env.id &&
   prev.entry.env.name === next.entry.env.name &&
   prev.keyIsStagedForDelete === next.keyIsStagedForDelete &&
-  prev.sameAsProd === next.sameAsProd &&
+  prev.sameAsPrimary === next.sameAsPrimary &&
   prev.inRotatingGroup === next.inRotatingGroup &&
   prev.envRevealed === next.envRevealed &&
   prev.revealOnHover === next.revealOnHover &&

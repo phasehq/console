@@ -297,6 +297,18 @@ describe('columnsSignature', () => {
     expect(signature({ deletionDelayed: true })).not.toBe(waiting)
     expect(signature({ deletionScheduledFor: '2026-11-24T12:00:00Z' })).not.toBe(waiting)
   })
+
+  it('changes when another env is made primary: rows mark the values repeating its own', () => {
+    const primary = (id: string) =>
+      columnsSignature(
+        [live('dev', 0), live('prod', 1)].map((column) => ({
+          ...column,
+          env: { ...column.env, isPrimary: column.env.id === id },
+        }))
+      )
+    expect(primary('prod')).toBe(primary('prod'))
+    expect(primary('dev')).not.toBe(primary('prod'))
+  })
 })
 
 describe('canMoveColumn', () => {

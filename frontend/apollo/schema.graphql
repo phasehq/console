@@ -226,6 +226,7 @@ type EnvironmentType {
   wrappedSalt: String
   createdAt: DateTime
   updatedAt: DateTime!
+  isPrimary: Boolean!
   folders(path: String): [SecretFolderType]!
   secrets(path: String): [SecretType]!
   dynamicSecrets(path: String): [DynamicSecretType]!
@@ -1824,7 +1825,7 @@ type Mutation {
   or later while a credential that can't be revoked blocks the purge.
   """
   restoreEnvironment(environmentId: ID!): RestoreEnvironmentMutation
-  renameEnvironment(color: String, environmentId: ID!, name: String!): RenameEnvironmentMutation
+  renameEnvironment(color: String, environmentId: ID!, isPrimary: Boolean, name: String!): RenameEnvironmentMutation
   updateEnvironmentOrder(appId: ID!, environmentOrder: [ID]!): UpdateEnvironmentOrderMutation
   createEnvironmentToken(envId: ID!, identityKey: String!, name: String!, token: String!, wrappedKeyShare: String!): CreateEnvironmentTokenMutation
   createCustomRole(color: String, description: String, name: String, organisationId: ID!, permissions: JSONString): CreateCustomRoleMutation
@@ -2216,6 +2217,7 @@ input EnvironmentInput {
   wrappedSalt: String!
   identityKey: String!
   color: String
+  isPrimary: Boolean
 }
 
 """
