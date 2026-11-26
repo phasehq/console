@@ -537,6 +537,30 @@ class SecretPathCountType(ObjectType):
     secret_count = graphene.Int(required=True)
 
 
+def attach_keys_when_read(events):
+    """Give each read the key its version's write event holds, in one query."""
+    reads = [
+        event
+        for event in events
+        if event.event_type == SecretEvent.READ and not event.key and event.secret_id
+    ]
+    if not reads:
+        return
+    # By time, so the latest write wins if two share a version
+    keys = {
+        (secret_id, version): key
+        for secret_id, version, key in SecretEvent.objects.filter(
+            secret_id__in={event.secret_id for event in reads},
+            version__in={event.version for event in reads},
+            event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
+        )
+        .order_by("timestamp")
+        .values_list("secret_id", "version", "key")
+    }
+    for event in reads:
+        event._key_when_read = keys.get((event.secret_id, event.version))
+
+
 class SecretEventType(DjangoObjectType):
     actor_deleted = graphene.Boolean()
 
@@ -561,6 +585,14 @@ class SecretEventType(DjangoObjectType):
             "environment",
             "path",
             "type",
+        )
+
+    def resolve_key(self, info):
+        # Reads keep no copy: the key they read if attached, else the current key
+        return (
+            self.key
+            or getattr(self, "_key_when_read", None)
+            or (self.secret.key if self.secret_id else "")
         )
 
     def resolve_value(self, info):
