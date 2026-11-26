@@ -21,16 +21,20 @@ REDUNDANT_INDEXES = {
     ("api_secretevent_tags", "secrettag_id", "text_pattern_ops"),
 }
 
-SINGLE_COLUMN_INDEXES = """
-    SELECT t.relname, a.attname, oc.opcname, i.relname, pg_relation_size(i.oid)
+# Every index on the two tables: table, leading column and its operator class,
+# name, size, whether it is a plain single-column index, and whether queries
+# can use it for that column
+INDEXES = """
+    SELECT t.relname, a.attname, oc.opcname, i.relname, pg_relation_size(i.oid),
+           x.indnatts = 1 AND x.indexprs IS NULL AND x.indpred IS NULL
+               AND NOT x.indisprimary AND NOT x.indisunique,
+           x.indisvalid AND x.indpred IS NULL
     FROM pg_index x
     JOIN pg_class i ON i.oid = x.indexrelid
     JOIN pg_class t ON t.oid = x.indrelid
     JOIN pg_attribute a ON a.attrelid = x.indrelid AND a.attnum = x.indkey[0]
     JOIN pg_opclass oc ON oc.oid = x.indclass[0]
     WHERE x.indrelid IN ('api_secretevent'::regclass, 'api_secretevent_tags'::regclass)
-      AND x.indnatts = 1 AND x.indexprs IS NULL AND x.indpred IS NULL
-      AND NOT x.indisprimary AND NOT x.indisunique
 """
 
 FOREIGN_KEY_INDEXES = {
@@ -43,9 +47,25 @@ FOREIGN_KEY_INDEXES = {
 def drop_redundant_indexes(apps, schema_editor):
     # By definition, not name, so installs whose names differ are covered too
     with schema_editor.connection.cursor() as cursor:
-        cursor.execute(SINGLE_COLUMN_INDEXES)
-        indexes = [row for row in cursor.fetchall() if row[:3] in REDUNDANT_INDEXES]
-    for table, _, _, index, size in indexes:
+        cursor.execute(INDEXES)
+        indexes = cursor.fetchall()
+    drops = [row for row in indexes if row[5] and row[:3] in REDUNDANT_INDEXES]
+    dropping = {row[3] for row in drops}
+    # A covering index whose concurrent build failed is invalid and never read
+    covered = {
+        (table, column)
+        for table, column, _, index, _, _, usable in indexes
+        if usable and index not in dropping
+    }
+    for table, column, _, index, size, _, _ in drops:
+        if (table, column) not in covered:
+            print(
+                f"\n  Keeping {index} on {table}: "
+                f"no other valid index starts with {column}",
+                end="",
+                flush=True,
+            )
+            continue
         print(
             f"\n  Dropping {index} on {table} ({size / 1024**3:.2f} GiB)",
             end="",
