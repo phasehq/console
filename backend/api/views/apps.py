@@ -25,7 +25,7 @@ from api.utils.rest import (
 )
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
-from backend.quotas import can_add_app, can_add_environments, can_use_custom_envs
+from backend.quotas import can_add_app, can_add_environments
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -160,13 +160,8 @@ class PublicAppsView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 seen.add(lower)
-            if not can_use_custom_envs(org):
-                return Response(
-                    {"error": "Custom environments are not available on the Free plan."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            # Enforce the per-app environment quota (Free=3, Pro=10,
-            # Enterprise/licensed=unlimited) on the requested environment list.
+            # Enforce the per-app environment quota (Free=3 on Cloud, Pro=10,
+            # Enterprise/licensed/self-hosted Free=unlimited) on the requested list.
             if not can_add_environments(org, len(custom_envs)):
                 return Response(
                     {"error": "Environment quota exceeded for this app's plan."},

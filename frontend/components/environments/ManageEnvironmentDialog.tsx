@@ -1,10 +1,6 @@
 import { FaClock, FaCog, FaEdit, FaTimes, FaTrash, FaUserCog } from 'react-icons/fa'
 import GenericDialog from '../common/GenericDialog'
-import {
-  ApiOrganisationPlanChoices,
-  EnvironmentType,
-  OrganisationMemberType,
-} from '@/apollo/graphql'
+import { EnvironmentType, OrganisationMemberType } from '@/apollo/graphql'
 import { Input } from '../common/Input'
 import { Fragment, useContext, useId, useState } from 'react'
 import { Button } from '../common/Button'
@@ -24,21 +20,16 @@ import Link from 'next/link'
 import { organisationContext } from '@/contexts/organisationContext'
 import { isCloudHosted } from '@/utils/appConfig'
 import { UpgradeRequestForm } from '../forms/UpgradeRequestForm'
-import { UpsellDialog } from '../settings/organisation/UpsellDialog'
 import { useAppPermissions } from '@/hooks/useAppPermissions'
 import { defaultEnvColor, sanitizeInput } from '@/utils/environment'
 import { ColorPicker } from '../common/ColorPicker'
 
 const RenameEnvironment = (props: { environment: EnvironmentType }) => {
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-
   // Team-aware, as the grid's own checks are: access through a team can carry its own role in this app
   const { hasPermission } = useAppPermissions(props.environment.app.id)
   const userCanUpdateEnvironments = hasPermission('Environments', 'update', true)
 
-  // Renaming is plan-gated (custom envs); color is cosmetic and available on any plan
-  const allowRename =
-    organisation?.plan !== ApiOrganisationPlanChoices.Fr && userCanUpdateEnvironments
+  const allowRename = userCanUpdateEnvironments
 
   const nameId = useId()
   const [name, setName] = useState(props.environment?.name || '')
@@ -74,9 +65,7 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
       <Alert variant="info" size="sm">
         {allowRename
           ? 'Changing the name of this Environment will affect how you construct references to secrets.'
-          : organisation?.plan === ApiOrganisationPlanChoices.Fr
-            ? 'Upgrade to Pro to rename Environments'
-            : "You don't have the permissions required to rename this Environment"}
+          : "You don't have the permissions required to rename this Environment"}
       </Alert>
 
       <div className="space-y-2">
@@ -124,16 +113,8 @@ const RenameEnvironment = (props: { environment: EnvironmentType }) => {
 }
 
 export const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
-  const { activeOrganisation: organisation } = useContext(organisationContext)
-
   const { hasPermission } = useAppPermissions(props.environment.app.id)
   const userCanDeleteEnvironments = hasPermission('Environments', 'delete', true)
-
-  const planDisplay = {
-    planName: 'Free',
-    dialogTitle: 'Upgrade to Pro',
-    description: `The Free plan does not have access to custom environments. To delete, rename or create Environments, please upgrade to Pro.`,
-  }
 
   const [isOpen, setIsOpen] = useState<boolean>(false)
   const [name, setName] = useState('')
@@ -151,8 +132,6 @@ export const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
     setScheduledFor(scheduledDeletionDate())
     setIsOpen(true)
   }
-
-  const allowedByPlan = organisation?.plan !== ApiOrganisationPlanChoices.Fr
 
   const [deleteEnvironment, { loading }] = useMutation(DeleteEnv)
 
@@ -174,21 +153,6 @@ export const DeleteEnvironment = (props: { environment: EnvironmentType }) => {
     )
     closeModal()
   }
-
-  if (!allowedByPlan)
-    return (
-      <div className="flex justify-end pt-4">
-        <UpsellDialog
-          title="Upgrade to Pro to customize environments"
-          buttonLabel={
-            <>
-              <FaTrash /> Delete
-            </>
-          }
-          buttonVariant="danger"
-        />
-      </div>
-    )
 
   if (!userCanDeleteEnvironments) return <></>
 

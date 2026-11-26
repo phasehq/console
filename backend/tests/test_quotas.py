@@ -1,8 +1,10 @@
 """Unit tests for backend.quotas helpers."""
 
+import importlib
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.test import override_settings
 
 from backend.quotas import can_add_environments
 from ee.licensing.utils import organisation_has_valid_license
@@ -17,6 +19,20 @@ def _org(plan):
     return org
 
 
+@pytest.fixture
+def hosted(request):
+    """backend.quotas as loaded on Cloud ("cloud") or self-hosted ("self"): the
+    plan limits are worked out once, when the module is imported."""
+    import backend.quotas as quotas
+
+    try:
+        with override_settings(APP_HOST=request.param):
+            yield importlib.reload(quotas)
+    finally:
+        importlib.reload(quotas)
+
+
+@pytest.mark.parametrize("hosted", ["cloud"], indirect=True)
 @pytest.mark.parametrize(
     "plan,count,expected",
     [
@@ -27,10 +43,27 @@ def _org(plan):
         ("EN", 999, True), # Enterprise: unlimited
     ],
 )
-def test_can_add_environments_enforces_plan_limits(plan, count, expected):
+def test_can_add_environments_enforces_plan_limits(hosted, plan, count, expected):
     # No valid license -> plan limits apply.
     with patch(f"{_Q}.organisation_has_valid_license", return_value=False):
-        assert can_add_environments(_org(plan), count) is expected
+        assert hosted.can_add_environments(_org(plan), count) is expected
+
+
+@pytest.mark.parametrize(
+    "hosted,limit,many_allowed",
+    [("cloud", 3, False), ("self", None, True)],
+    indirect=["hosted"],
+)
+def test_the_free_plan_environment_limit_is_for_cloud_only(hosted, limit, many_allowed):
+    assert hosted.PLAN_CONFIG["FR"]["max_envs_per_app"] == limit
+    with patch(f"{_Q}.organisation_has_valid_license", return_value=False):
+        assert hosted.can_add_environments(_org("FR"), 50) is many_allowed
+
+
+@pytest.mark.parametrize("hosted", ["cloud", "self"], indirect=True)
+def test_the_paid_plan_environment_limits_do_not_depend_on_hosting(hosted):
+    assert hosted.PLAN_CONFIG["PR"]["max_envs_per_app"] == 10
+    assert hosted.PLAN_CONFIG["EN"]["max_envs_per_app"] is None
 
 
 def test_can_add_environments_valid_license_bypasses_limit():

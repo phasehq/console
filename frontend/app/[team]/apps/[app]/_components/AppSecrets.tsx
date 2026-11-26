@@ -1629,8 +1629,7 @@ export const AppSecrets = ({
   const handleToggleEnv = useCallback((envId: string) => toggleEnv(envId, allEnvIds), [toggleEnv, allEnvIds])
   const handleSoloEnv = useCallback((envId: string) => soloEnv(envId, allEnvIds), [soloEnv, allEnvIds])
 
-  const canReorderEnvs =
-    organisation?.plan !== ApiOrganisationPlanChoices.Fr && userCanUpdateEnvironments
+  const canReorderEnvs = userCanUpdateEnvironments
   const allowEnvReordering = canReorderEnvs && orderedEnvironments.length > 1
 
   const saveEnvOrder = useCallback(

@@ -30,7 +30,7 @@ from api.tasks.resource_deletion import (
     enqueue_environment_restored,
 )
 from api.utils.secrets import create_environment_folder_structure, normalize_path_string
-from backend.quotas import can_add_environment, can_use_custom_envs
+from backend.quotas import can_add_environment
 import graphene
 from graphql import GraphQLError
 from api.models import (
@@ -192,18 +192,6 @@ class CreateEnvironmentMutation(graphene.Mutation):
         if color and not re.match(HEX_COLOR_REGEX, color):
             raise GraphQLError("Environment color must be a hex value like #10b981")
 
-        # Custom environments require a paid plan. The default dev/staging/prod
-        # environments provisioned during app setup are exempt.
-        is_custom_env = environment_data.env_type.lower() not in (
-            "dev",
-            "staging",
-            "prod",
-        )
-        if is_custom_env and not can_use_custom_envs(app.organisation):
-            raise GraphQLError(
-                "Custom environments are not available on the Free plan. Upgrade to Pro to create custom environments."
-            )
-
         if not can_add_environment(app):
             raise GraphQLError("You cannot add any more Environments to this App!")
 
@@ -363,14 +351,7 @@ class RenameEnvironmentMutation(graphene.Mutation):
 
         name_changed = name != environment.name
 
-        # Renaming is a custom-envs feature; color changes are cosmetic and
-        # available on any plan
         if name_changed:
-            if not can_use_custom_envs(org):
-                raise GraphQLError(
-                    "Your Organisation doesn't have access to Custom Environments"
-                )
-
             if not re.match(r"^[a-zA-Z0-9\-_]{1,32}$", name):
                 raise GraphQLError(
                     "Environment name is invalid! Environment names can only includes letters, numbers, hyphens and underscores, and must be 32 characters or less."
@@ -522,14 +503,8 @@ class DeleteEnvironmentMutation(graphene.Mutation):
     def mutate(cls, root, info, environment_id, immediately=False):
         user = info.context.user
         environment = Environment.objects.get(id=environment_id)
-        org = environment.app.organisation
 
         _check_may_delete_environment(user, environment)
-
-        if not can_use_custom_envs(org):
-            raise GraphQLError(
-                "Your Organisation doesn't have access to Custom Environments"
-            )
 
         try:
             schedule_environment_deletion(environment, immediately=bool(immediately))
@@ -652,11 +627,6 @@ class UpdateEnvironmentOrderMutation(graphene.Mutation):
 
         if not user_has_permission(user, "update", "Environments", org, True, app=app):
             raise GraphQLError("You do not have permission to update environments")
-
-        if not can_use_custom_envs(org):
-            raise GraphQLError(
-                "Your Organisation doesn't have access to Custom Environments"
-            )
 
         with transaction.atomic():
             # Read once and locked until the indexes are written, in the same

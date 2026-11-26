@@ -571,7 +571,7 @@ export const CreateEnvironmentDialog = forwardRef<
     )
 
   if (!allowNewEnv()) {
-    // Custom environments are a Pro feature (up to 10/app); Enterprise is unlimited.
+    // The plan's per-App limit is reached: Free allows 3 on Cloud, Pro 10, Enterprise any number.
     // The upgrade target tracks the org's current plan, not the hosting mode.
     const isFreePlan = organisation?.plan === ApiOrganisationPlanChoices.Fr
     const targetPlan = isFreePlan
@@ -583,7 +583,7 @@ export const CreateEnvironmentDialog = forwardRef<
         ref={upsellRef}
         title={
           isFreePlan
-            ? 'Upgrade to Pro to create custom environments'
+            ? 'Upgrade to Pro for more environments'
             : 'Upgrade to Enterprise for unlimited environments'
         }
         targetPlan={targetPlan}

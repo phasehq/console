@@ -45,9 +45,7 @@ def _reorder(live, pending, order, calls=None):
 
     with patch(f"{_M}.App"), patch(f"{_M}.Environment") as environments, patch(
         f"{_M}.user_has_permission", return_value=True
-    ), patch(f"{_M}.can_use_custom_envs", return_value=True), patch(
-        f"{_M}.transaction"
-    ) as transaction:
+    ), patch(f"{_M}.transaction") as transaction:
         locked = environments.all_objects.select_for_update.return_value
         locked.filter.return_value.order_by.return_value = [*live, *pending]
         environments.all_objects.filter.side_effect = rows

@@ -1,5 +1,5 @@
-"""An environment's colour: validated on create and on update, changeable on
-any plan, and written without re-running the environment's syncs.
+"""An environment's colour: validated on create and on update, and written
+without re-running the environment's syncs.
 """
 
 from contextlib import ExitStack
@@ -34,8 +34,6 @@ def _create(color):
         f"{_M}.user_has_permission", return_value=True
     ), patch(f"{_M}.App"), patch(f"{_M}.Environment") as environments, patch(
         f"{_M}.environment_name_conflict", return_value=None
-    ), patch(
-        f"{_M}.can_use_custom_envs", return_value=True
     ), patch(
         f"{_M}.can_add_environment", return_value=False
     ):
@@ -72,9 +70,6 @@ def update():
         m = MagicMock()
         m.Environment = stack.enter_context(patch(f"{_M}.Environment"))
         m.log_audit_event = stack.enter_context(patch(f"{_M}.log_audit_event"))
-        m.can_use_custom_envs = stack.enter_context(
-            patch(f"{_M}.can_use_custom_envs", return_value=True)
-        )
         stack.enter_context(patch(f"{_M}.user_has_permission", return_value=True))
         stack.enter_context(patch(f"{_M}.user_can_access_environment", return_value=True))
         stack.enter_context(
@@ -121,14 +116,6 @@ def test_a_colour_alone_is_written_without_saving_the_environment(update):
     assert event["new_values"] == {"name": "Production", "color": "#10b981"}
 
 
-def test_a_colour_alone_needs_no_custom_environments(update):
-    update.can_use_custom_envs.return_value = False
-
-    update.run(name="Production", color="#10b981")
-
-    update.Environment.objects.filter.return_value.update.assert_called_once()
-
-
 def test_a_blank_colour_goes_back_to_the_default(update):
     update.run(name="Production", color="")
 
@@ -153,12 +140,3 @@ def test_a_rename_saves_the_environment_and_takes_the_colour_along(update):
         "Renamed environment 'Production' to 'Live'"
     )
 
-
-def test_a_rename_still_needs_custom_environments(update):
-    update.can_use_custom_envs.return_value = False
-
-    with pytest.raises(GraphQLError, match="Custom Environments"):
-        update.run(name="Live", color="#10b981")
-
-    update.env.save.assert_not_called()
-    update.Environment.objects.filter.return_value.update.assert_not_called()

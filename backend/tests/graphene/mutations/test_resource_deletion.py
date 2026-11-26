@@ -96,7 +96,6 @@ def env_mocks():
         m.Environment = stack.enter_context(patch(f"{ENV}.Environment"))
         m.RotatingSecret = stack.enter_context(patch(f"{ENV}.RotatingSecret"))
         m.RotatingSecret.objects.filter.return_value.exists.return_value = False
-        stack.enter_context(patch(f"{ENV}.can_use_custom_envs", return_value=True))
         m.access = stack.enter_context(
             patch(f"{ENV}.user_can_access_environment", return_value=True)
         )
