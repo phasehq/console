@@ -551,6 +551,7 @@ def attach_keys_when_read(events):
         (secret_id, version): key
         for secret_id, version, key in SecretEvent.objects.filter(
             secret_id__in={event.secret_id for event in reads},
+            version__in={event.version for event in reads},
             event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
         )
         .order_by("timestamp")

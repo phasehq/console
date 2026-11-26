@@ -60,8 +60,10 @@ def test_a_page_of_reads_takes_one_query():
         [("sec-1", 1, "ph:v1:one"), ("sec-1", 2, "ph:v1:two")],
     )
 
+    # Only the versions read, so a secret rotated many times stays cheap
     objects.filter.assert_called_once_with(
         secret_id__in={"sec-1"},
+        version__in={1, 2, 3},
         event_type__in=[SecretEvent.CREATE, SecretEvent.UPDATE],
     )
     objects.filter.return_value.order_by.assert_called_once_with("timestamp")
