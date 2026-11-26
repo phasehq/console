@@ -394,7 +394,7 @@ from itertools import chain
 import time
 import logging
 import heapq
-from django.db.models import Count, Exists, OuterRef, Q, prefetch_related_objects
+from django.db.models import Count, Exists, OuterRef, Q
 
 logger = logging.getLogger(__name__)
 
@@ -1435,8 +1435,7 @@ class Query(graphene.ObjectType):
             logs_qs = list(
                 SecretEvent.objects.filter(environment_id=env_ids[0], **base_filter)
                 .select_related("secret")
-                .order_by("-timestamp", "-id")
-                .prefetch_related("tags")[:PAGE_SIZE]
+                .order_by("-timestamp", "-id")[:PAGE_SIZE]
             )
 
         else:
@@ -1453,7 +1452,6 @@ class Query(graphene.ObjectType):
             logs_qs = heapq.nlargest(
                 PAGE_SIZE, combined, key=lambda e: e.timestamp
             )  # Efficiently select the newest 25 events overall
-            prefetch_related_objects(logs_qs, "tags")
 
         attach_keys_when_read(logs_qs)
 
