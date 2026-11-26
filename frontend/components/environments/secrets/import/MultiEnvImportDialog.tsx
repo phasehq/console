@@ -1,21 +1,14 @@
-import { EnvironmentType, SecretType } from '@/apollo/graphql'
+import { EnvironmentType } from '@/apollo/graphql'
 import { Button } from '@/components/common/Button'
 import GenericDialog from '@/components/common/GenericDialog'
-import { Textarea } from '@/components/common/TextArea'
-import { ToggleSwitch } from '@/components/common/ToggleSwitch'
-import {
-  duplicateKeysExist,
-  envFilePlaceholder,
-  processEnvFile,
-  readEnvFile,
-} from '@/utils/secrets'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { EnvFileDropHint } from './EnvFileDropHint'
 import { useFileDrop } from '@/hooks/useFileDrop'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
 import { ImportEnvOptions } from '@/utils/appSecrets'
-import clsx from 'clsx'
+import { envColor } from '@/utils/environment'
 import { toast } from 'react-toastify'
+import { EnvFileInput, readEnvFileInto } from './EnvFileInput'
+import { EnvImportOptions, secretsForEnvs, useImportChoices } from './EnvImportOptions'
 
 export type ImportDialogHandle = {
   openModal: () => void
@@ -34,33 +27,25 @@ interface MultiEnvImportDialogProps {
 const MultiEnvImportDialog = forwardRef(
   ({ environments, path = '/', addSecrets }: MultiEnvImportDialogProps, ref) => {
     const [envFileString, setEnvFileString] = useState('')
-    const [envConfigs, setEnvConfigs] = useState(
-      environments.reduce(
-        (acc, env, index) => {
-          acc[env.id] = { withValues: index === 0, withComments: index === 0 }
-          return acc
-        },
-        {} as Record<string, { withValues: boolean; withComments: boolean }>
-      )
-    )
     // By id: a data refresh hands over new objects for the same environments
-    const [selectedEnvIds, setSelectedEnvIds] = useState(() => environments.map((env) => env.id))
-    const isSelected = (env: EnvironmentType) => selectedEnvIds.includes(env.id)
+    const envIds = environments.map((env) => env.id)
+    const {
+      selectedIds,
+      configs,
+      toggleEnv,
+      setConfig,
+      reset: resetChoices,
+    } = useImportChoices(envIds)
 
     const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
-    const fileInputRef = useRef<HTMLInputElement>(null)
 
     const openModal = () => dialogRef.current?.openModal()
     const closeModal = () => dialogRef.current?.closeModal()
 
-    const importFile = (file: File) =>
-      readEnvFile(file).then(
-        (text) => {
-          setEnvFileString(text)
-          openModal()
-        },
-        (error: Error) => toast.error(error.message)
-      )
+    const importFile = readEnvFileInto((text) => {
+      setEnvFileString(text)
+      openModal()
+    })
     const { over, dropTarget } = useFileDrop(importFile)
 
     useImperativeHandle(ref, () => ({
@@ -69,44 +54,17 @@ const MultiEnvImportDialog = forwardRef(
       importFile,
     }))
 
-    const handleToggleEnv = (env: EnvironmentType) => {
-      setSelectedEnvIds((prev) => {
-        const newSelection = prev.includes(env.id)
-          ? prev.filter((id) => id !== env.id) // Remove env
-          : [...prev, env.id] // Add env
-
-        // Reset envConfigs when the environment is unselected
-        if (!newSelection.includes(env.id)) {
-          setEnvConfigs((prevConfigs) => ({
-            ...prevConfigs,
-            [env.id]: { withValues: false, withComments: false },
-          }))
-        }
-
-        return newSelection
-      })
-    }
-
     const processImport = () => {
       const secretsByKey = new Map<string, AppSecret>()
 
       try {
-        // First pass: Process only selected environments
-        environments.forEach((env) => {
-          if (!isSelected(env)) return
-
-          const secrets = processEnvFile(
-            envFileString,
-            env,
-            path,
-            envConfigs[env.id].withValues,
-            envConfigs[env.id].withComments
-          )
-
-          if (duplicateKeysExist(secrets)) {
-            throw 'File contains duplicate keys!'
-          }
-
+        for (const { env, secrets } of secretsForEnvs(
+          envFileString,
+          environments,
+          selectedIds,
+          configs,
+          path
+        )) {
           secrets.forEach((secret) => {
             if (!secretsByKey.has(secret.key)) {
               secretsByKey.set(secret.key, {
@@ -118,9 +76,9 @@ const MultiEnvImportDialog = forwardRef(
             }
             secretsByKey.get(secret.key)?.envs.push({ env, secret })
           })
-        })
+        }
 
-        // Second pass: Ensure all environments exist (including unselected)
+        // Every row has a place for each environment, the ones left out too
         environments.forEach((env) => {
           secretsByKey.forEach((appSecret) => {
             if (!appSecret.envs.some((e) => e.env === env)) {
@@ -129,13 +87,14 @@ const MultiEnvImportDialog = forwardRef(
           })
         })
       } catch (error) {
-        toast.error(error as string)
+        secretsByKey.clear()
+        toast.error((error as Error).message)
       }
 
       const newSecrets = Array.from(secretsByKey.values())
 
       if (newSecrets.length) {
-        addSecrets(newSecrets, envConfigs)
+        addSecrets(newSecrets, configs)
         setEnvFileString('') // Clear textarea after import
         if (dialogRef.current) dialogRef.current.closeModal()
       }
@@ -143,148 +102,42 @@ const MultiEnvImportDialog = forwardRef(
 
     const reset = () => {
       setEnvFileString('')
-      setSelectedEnvIds(environments.map((env) => env.id))
-      setEnvConfigs(
-        environments.reduce(
-          (acc, env, index) => {
-            acc[env.id] = { withValues: index === 0, withComments: index === 0 }
-            return acc
-          },
-          {} as Record<string, { withValues: boolean; withComments: boolean }>
-        )
-      )
+      resetChoices()
     }
 
-    // Reset when the environments themselves change, not when a refresh re-creates their objects
-    const envIds = environments.map((env) => env.id).join(',')
+    // When the environments themselves change, not when a refresh re-creates their objects
+    const envIdsKey = envIds.join(',')
     useEffect(() => {
-      reset()
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [envIds])
+      setEnvFileString('')
+    }, [envIdsKey])
 
-    const disabled = !envFileString || selectedEnvIds.length === 0
+    const disabled = !envFileString || selectedIds.length === 0
 
     return (
       <GenericDialog title="Import secrets" ref={dialogRef} onClose={reset}>
         {/* A file dropped anywhere on the dialog lands in the box */}
         <div className="space-y-4" {...dropTarget}>
-          <p className="text-neutral-500 text-sm">
-            Type or paste your secrets, drop a .env file onto the box, or{' '}
-            <button
-              type="button"
-              className="text-emerald-600 hover:underline dark:text-emerald-400"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              choose a file
-            </button>
-            .
-          </p>
-          <input
-            type="file"
-            hidden
-            ref={fileInputRef}
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              // Lets the same file be chosen again
-              event.target.value = ''
-              if (file) importFile(file)
-            }}
+          <EnvFileInput
+            value={envFileString}
+            setValue={setEnvFileString}
+            onFile={importFile}
+            over={over}
           />
-
-          <div className="relative">
-            <Textarea
-              value={envFileString}
-              setValue={setEnvFileString}
-              placeholder={envFilePlaceholder}
-              rows={12}
-              className="block font-mono text-zinc-700 dark:text-zinc-300 text-sm placeholder:text-zinc-500"
-            />
-            {over && <EnvFileDropHint>Drop your .env file here</EnvFileDropHint>}
-          </div>
 
           {envFileString && (
             <>
               <hr className="border-neutral-500/40" />
-              <table className="table-auto min-w-full divide-y divide-zinc-500/40 text-sm">
-                <thead>
-                  <tr className="bg-neutral-100 dark:bg-neutral-800 text-neutral-500">
-                    <th className="border-b border-neutral-500/20 p-2 text-left">Environment</th>
-                    <th className="border-b border-neutral-500/20 p-2 text-center">
-                      Import Values
-                    </th>
-                    <th className="border-b border-neutral-500/20 p-2 text-center">
-                      Import Comments
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-500/40">
-                  {environments.map((env) => (
-                    <tr key={env.id}>
-                      <td>
-                        <div
-                          className="flex p-2 items-center justify-between border-r border-neutral-500/20"
-                          title={
-                            isSelected(env)
-                              ? "Don't import secrets into this environment"
-                              : 'Import secrets into this environment'
-                          }
-                        >
-                          <span
-                            className={clsx(
-                              isSelected(env)
-                                ? 'text-neutral-800 dark:text-neutral-200 font-medium'
-                                : 'text-neutral-500'
-                            )}
-                          >
-                            {env.name}
-                          </span>
-
-                          <ToggleSwitch
-                            value={isSelected(env)}
-                            onToggle={() => handleToggleEnv(env)}
-                          />
-                        </div>
-                      </td>
-
-                      <td>
-                        <div className="flex p-2 items-center justify-center">
-                          <ToggleSwitch
-                            value={envConfigs[env.id].withValues}
-                            disabled={!isSelected(env)}
-                            onToggle={() =>
-                              setEnvConfigs((prev) => ({
-                                ...prev,
-                                [env.id]: {
-                                  ...prev[env.id],
-                                  withValues: !prev[env.id].withValues,
-                                },
-                              }))
-                            }
-                          />
-                        </div>
-                      </td>
-
-                      <td>
-                        <div className="flex p-2 items-center justify-center">
-                          <ToggleSwitch
-                            value={envConfigs[env.id].withComments}
-                            disabled={!isSelected(env)}
-                            onToggle={() =>
-                              setEnvConfigs((prev) => ({
-                                ...prev,
-                                [env.id]: {
-                                  ...prev[env.id],
-                                  withComments: !prev[env.id].withComments,
-                                },
-                              }))
-                            }
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <EnvImportOptions
+                environments={environments.map((env) => ({
+                  id: env.id,
+                  name: env.name,
+                  color: envColor(env),
+                }))}
+                selectedIds={selectedIds}
+                configs={configs}
+                onToggleEnv={toggleEnv}
+                onChangeConfig={setConfig}
+              />
             </>
           )}
 
