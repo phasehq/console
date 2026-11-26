@@ -1,6 +1,7 @@
 import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
 import { AppSecret } from '@/app/[team]/apps/[app]/types'
 import {
+  KeyAt,
   KeyState,
   ReferenceContext,
   ReferenceValidationError,
@@ -734,6 +735,19 @@ export const repeatedKeyToFix = (
       return { key: at.key, path: at.path }
   return null
 }
+
+/**
+ * The keys one env holds in a copy of the rows, each with its folder: what a reference into that
+ * env can point at. A value staged for deletion is left out, and so is a row with no key yet.
+ */
+export const referenceKeysOf = (rows: AppSecret[], envId: string): KeyAt[] =>
+  rows.flatMap((row) => {
+    const secret = entryFor(row, envId)?.secret as SecretWithFlags | null | undefined
+    const key = secret ? secret.key || row.key : ''
+    return secret && key !== '' && !secret.stagedForDelete
+      ? [{ path: secret.path || row.path || '/', key }]
+      : []
+  })
 
 type KeyStates = { states: Map<string, KeyState>; envIds: Set<string> }
 

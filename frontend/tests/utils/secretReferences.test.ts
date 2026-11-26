@@ -348,7 +348,7 @@ describe('computeSuggestions', () => {
       insideClosedRef: false,
       filterText: '',
     }
-    const suggestions = computeSuggestions(token, ctx, 'DB_HOST')
+    const suggestions = computeSuggestions(token, ctx, { key: 'DB_HOST' })
     const keyLabels = suggestions.filter((s) => s.type === 'key').map((s) => s.label)
     expect(keyLabels).not.toContain('DB_HOST')
     expect(keyLabels).toContain('DB_PORT')
