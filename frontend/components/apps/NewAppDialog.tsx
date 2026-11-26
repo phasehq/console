@@ -1,6 +1,14 @@
 'use client'
 
-import { forwardRef, useContext, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useContext,
+  useId,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useQuery } from '@apollo/client'
 import { useParams, useRouter } from 'next/navigation'
 import clsx from 'clsx'
@@ -181,16 +189,43 @@ const Steps = ({ steps, current }: { steps: string[]; current: string }) => {
   )
 }
 
+/** How the App's secrets are encrypted: E2EE unless server-side encryption is chosen */
+const ENCRYPTION_OPTIONS = [
+  {
+    sse: false,
+    icon: FaArrowDownUpLock,
+    title: 'End-to-end encryption',
+    description:
+      'Secrets are only decrypted client-side, never on the server. You can turn on server-side encryption later.',
+    selected: 'bg-emerald-400/10 ring-emerald-500/40',
+    accent: 'text-emerald-600 dark:text-emerald-400',
+    radio: 'border-emerald-500',
+    dot: 'bg-emerald-500',
+  },
+  {
+    sse: true,
+    icon: FaServer,
+    title: 'Server-side encryption',
+    description:
+      'The server can decrypt secrets, for integrations, dynamic secrets, API access and teams.',
+    selected: 'bg-sky-400/10 ring-sky-500/40',
+    accent: 'text-sky-600 dark:text-sky-400',
+    radio: 'border-sky-500',
+    dot: 'bg-sky-500',
+  },
+]
+
 interface NewAppDialogProps {
   organisation: OrganisationType
   showButton: boolean
 }
 
 /**
- * Creates an App, a step at a time: its name and the Environments it starts with (Development,
- * Staging and Production to begin with, each one renamed, recoloured or removed, others added up
- * to the plan's limit, and one of them primary), then any secrets to import into them, then which
- * members, service accounts and teams can reach which of them. Opens the new App once it exists.
+ * Creates an App, a step at a time: its name, how it's encrypted and the Environments it starts
+ * with (Development, Staging and Production to begin with, each one renamed, recoloured or removed,
+ * others added up to the plan's limit, and one of them primary), then any secrets to import into
+ * them, then which members, service accounts and teams can reach which of them. Opens the new App
+ * once it exists.
  */
 const NewAppDialog = forwardRef(({ organisation, showButton }: NewAppDialogProps, ref) => {
   const router = useRouter()
@@ -205,11 +240,12 @@ const NewAppDialog = forwardRef(({ organisation, showButton }: NewAppDialogProps
   const canAssignServiceAccounts =
     userHasPermission(permissions, 'ServiceAccounts', 'create', true) &&
     userHasPermission(permissions, 'ServiceAccounts', 'read')
+  const canChooseEncryption = userHasPermission(permissions, 'EncryptionMode', 'update', true)
   // Teams get their keys from the server, so the App's encryption mode has to change for them
   const canAssignTeams =
     userHasPermission(permissions, 'Teams', 'read') &&
     userHasPermission(permissions, 'Teams', 'update') &&
-    userHasPermission(permissions, 'EncryptionMode', 'update', true)
+    canChooseEncryption
 
   const dialogRef = useRef<{ openModal: () => void; closeModal: () => void }>(null)
   const nameInputRef = useRef(null)
@@ -224,6 +260,8 @@ const NewAppDialog = forwardRef(({ organisation, showButton }: NewAppDialogProps
   const [envText, setEnvText] = useState('')
   const [importProblem, setImportProblem] = useState<string | null>(null)
   const [scope, setScope] = useState<AccessScope>(new Map())
+  const [serverSideEncryption, setServerSideEncryption] = useState(false)
+  const encryptionLabelId = useId()
   const [error, setError] = useState<Error | null>(null)
   // What it's doing while it creates, shown beside the button
   const [stage, setStage] = useState<string | null>(null)
@@ -359,6 +397,7 @@ const NewAppDialog = forwardRef(({ organisation, showButton }: NewAppDialogProps
 
   // Teams get their keys from the server
   const teamsChosen = teams.some((team) => (scope.get(team.id)?.size ?? 0) > 0)
+  const sse = serverSideEncryption || teamsChosen
 
   const reset = () => {
     setPage('app')
@@ -369,6 +408,7 @@ const NewAppDialog = forwardRef(({ organisation, showButton }: NewAppDialogProps
     setEnvText('')
     setImportProblem(null)
     setScope(new Map())
+    setServerSideEncryption(false)
     setError(null)
     setStage(null)
   }
@@ -466,6 +506,7 @@ const NewAppDialog = forwardRef(({ organisation, showButton }: NewAppDialogProps
         secrets,
         access,
         teams: teamAccess,
+        serverSideEncryption,
         onProgress: setStage,
       })
     } catch (err) {
@@ -479,6 +520,8 @@ const NewAppDialog = forwardRef(({ organisation, showButton }: NewAppDialogProps
     const missing = rows.filter((_, at) => !created.environments[at]).map((row) => row.name)
     const problems: string[] = []
     if (missing.length > 0) problems.push(`${listNames(missing)} couldn't be created`)
+    if ((serverSideEncryption || teamAccess.length > 0) && !created.sseEnabled)
+      problems.push("server-side encryption couldn't be turned on")
     if (!created.secretsImported) problems.push("the secrets couldn't be imported")
     if (!created.accessGiven) problems.push("the access you chose couldn't be given")
     if (!created.teamsGiven) problems.push("the teams you chose couldn't be given access")
@@ -521,10 +564,14 @@ const NewAppDialog = forwardRef(({ organisation, showButton }: NewAppDialogProps
         <h3 className="text-sm font-medium leading-6 text-zinc-800 dark:text-zinc-200">
           Create an App
         </h3>
-        {teamsChosen ? (
+        {sse ? (
           <div
             className="rounded-md px-2 text-2xs font-semibold flex items-center gap-1 text-sky-500 bg-sky-400/10 cursor-help"
-            title="Teams get their keys from the server, so this App will use server-side encryption"
+            title={
+              serverSideEncryption
+                ? "The server will hold a copy of each Environment's keys, so it can decrypt secrets"
+                : 'Teams get their keys from the server, so this App will use server-side encryption'
+            }
           >
             <FaServer />
             Server-side Encrypted
@@ -584,7 +631,9 @@ const NewAppDialog = forwardRef(({ organisation, showButton }: NewAppDialogProps
           {page === 'app' && (
             <>
               <p className="text-sm text-neutral-500">
-                Name the App and choose the Environments it starts with.
+                {canChooseEncryption
+                  ? "Name the App, and choose how it's encrypted and the Environments it starts with."
+                  : 'Name the App and choose the Environments it starts with.'}
               </p>
               <Input
                 value={name}
@@ -597,6 +646,74 @@ const NewAppDialog = forwardRef(({ organisation, showButton }: NewAppDialogProps
                 required
                 disabled={busy}
               />
+
+              {canChooseEncryption && (
+                <div className="space-y-2">
+                  <span id={encryptionLabelId} className="block text-xs text-neutral-500">
+                    Encryption
+                  </span>
+                  <div
+                    role="radiogroup"
+                    aria-labelledby={encryptionLabelId}
+                    className="grid gap-2 sm:grid-cols-2"
+                  >
+                    {ENCRYPTION_OPTIONS.map((option) => {
+                      const checked = option.sse === serverSideEncryption
+                      const Icon = option.icon
+                      return (
+                        <label
+                          key={option.title}
+                          className={clsx(
+                            'flex cursor-pointer items-start gap-3 rounded-lg p-3 ring-1 ring-inset transition-colors ease',
+                            checked
+                              ? option.selected
+                              : 'ring-neutral-500/20 hover:bg-neutral-500/5',
+                            busy && 'cursor-not-allowed opacity-60'
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name="encryption"
+                            className="peer sr-only"
+                            checked={checked}
+                            onChange={() => setServerSideEncryption(option.sse)}
+                            disabled={busy}
+                          />
+                          <span
+                            aria-hidden
+                            className={clsx(
+                              'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border peer-focus-visible:ring-2 peer-focus-visible:ring-emerald-500/50',
+                              checked ? option.radio : 'border-neutral-400'
+                            )}
+                          >
+                            <span className={clsx('size-2 rounded-full', checked && option.dot)} />
+                          </span>
+                          <span className="space-y-1">
+                            <span
+                              className={clsx(
+                                'flex items-center gap-1.5 text-sm font-medium',
+                                checked ? option.accent : 'text-zinc-900 dark:text-zinc-100'
+                              )}
+                            >
+                              <Icon className="shrink-0" />
+                              {option.title}
+                            </span>
+                            <span className="block text-xs text-neutral-500">
+                              {option.description}
+                            </span>
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  {!serverSideEncryption && teamsChosen && (
+                    <p className="text-2xs text-neutral-500">
+                      The teams you chose get their keys from the server, so server-side encryption
+                      will be turned on for them.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <div className="flex items-baseline gap-3">
@@ -831,14 +948,18 @@ const NewAppDialog = forwardRef(({ organisation, showButton }: NewAppDialogProps
                   scope={scope}
                   everywhere={everywhere}
                   unavailable={unavailable}
-                  notices={{
-                    teams: (
-                      <Alert variant="warning" icon={true} size="sm">
-                        Teams get their keys from the server. Giving a team access turns on
-                        server-side encryption (SSE) for this App.
-                      </Alert>
-                    ),
-                  }}
+                  notices={
+                    serverSideEncryption
+                      ? {}
+                      : {
+                          teams: (
+                            <Alert variant="warning" icon={true} size="sm">
+                              Teams get their keys from the server. Giving a team access turns on
+                              server-side encryption (SSE) for this App.
+                            </Alert>
+                          ),
+                        }
+                  }
                   onChange={setScope}
                 />
               )}

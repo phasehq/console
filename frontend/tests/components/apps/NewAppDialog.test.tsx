@@ -233,16 +233,19 @@ describe('NewAppDialog', () => {
     })
     mockPicker = {}
     jest.clearAllMocks()
-    mockCreateApplication.mockImplementation(async ({ environments }) => ({
-      id: 'app-9',
-      environments: environments.map((env: { name: string }) => ({
-        id: `env-${env.name}`,
-        name: env.name,
-      })),
-      secretsImported: true,
-      accessGiven: true,
-      teamsGiven: true,
-    }))
+    mockCreateApplication.mockImplementation(
+      async ({ environments, serverSideEncryption, teams }) => ({
+        id: 'app-9',
+        environments: environments.map((env: { name: string }) => ({
+          id: `env-${env.name}`,
+          name: env.name,
+        })),
+        secretsImported: true,
+        accessGiven: true,
+        teamsGiven: true,
+        sseEnabled: Boolean(serverSideEncryption || teams?.length),
+      })
+    )
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -612,6 +615,79 @@ describe('NewAppDialog', () => {
     })
   })
 
+  describe('encryption', () => {
+    beforeEach(() => {
+      mockQueries.GetOrganisationMembers = loaded({ organisationMembers: [ME] })
+      mockQueries.GetServiceAccounts = loaded({ serviceAccounts: [] })
+    })
+    const chooser = () =>
+      organisation({
+        role: {
+          name: 'Owner',
+          permissions: permissions(true, { app: { EncryptionMode: ['update'] } }),
+        },
+      } as any)
+    const modes = () =>
+      Array.from(form().querySelectorAll<HTMLInputElement>('input[name="encryption"]'))
+    const badge = () => document.body.querySelector('h3')!.parentElement!.textContent
+
+    it('is end-to-end unless server-side is chosen', async () => {
+      await open(chooser())
+      expect(modes().map((mode) => mode.checked)).toEqual([true, false])
+      expect(badge()).toContain('End-to-End Encrypted')
+
+      await click(modes()[1])
+      expect(badge()).toContain('Server-side Encrypted')
+      await name('payments')
+      await submit()
+
+      expect(sentOptions().serverSideEncryption).toBe(true)
+      expect(toast.success).toHaveBeenCalledWith('payments was created')
+    })
+
+    it('is not offered to those who may not change it: the App is end-to-end encrypted', async () => {
+      await open()
+      expect(modes()).toEqual([])
+      await name('payments')
+      await submit()
+
+      expect(sentOptions().serverSideEncryption).toBe(false)
+    })
+
+    it('starts over as end-to-end each time the dialog opens', async () => {
+      await open(chooser())
+      await click(modes()[1])
+      await act(async () => dialog.current!.openModal())
+      await settle()
+
+      expect(modes().map((mode) => mode.checked)).toEqual([true, false])
+    })
+
+    it('says when server-side encryption could not be turned on, and still opens the App', async () => {
+      mockCreateApplication.mockResolvedValueOnce({
+        id: 'app-9',
+        environments: [
+          { id: 'e1', name: 'Development' },
+          { id: 'e2', name: 'Staging' },
+          { id: 'e3', name: 'Production' },
+        ],
+        secretsImported: true,
+        accessGiven: true,
+        teamsGiven: true,
+        sseEnabled: false,
+      })
+      await open(chooser())
+      await click(modes()[1])
+      await name('payments')
+      await submit()
+
+      expect(toast.warning).toHaveBeenCalledWith(
+        "payments was created, but server-side encryption couldn't be turned on."
+      )
+      expect(mockPush).toHaveBeenCalledWith('/acme/apps/app-9')
+    })
+  })
+
   describe('teams', () => {
     beforeEach(() => {
       mockQueries.GetTeams = loaded({ teams: [PLATFORM, MOBILE, WEB] })
@@ -660,6 +736,23 @@ describe('NewAppDialog', () => {
       expect(sentOptions().access).toEqual([])
     })
 
+    it('warns that teams turn on server-side encryption only while it is off', async () => {
+      await toAccess(teamsRole(true, true))
+      expect(mockPicker.notices.teams).toBeDefined()
+
+      const [dev] = mockPicker.environments.map((env: { key: string }) => env.key)
+      await act(async () => mockPicker.onChange(new Map([['platform', new Set([dev])]])))
+      await click(button(/Back/)!)
+      expect(form().textContent).toContain(
+        'The teams you chose get their keys from the server, so server-side encryption will be turned on for them.'
+      )
+
+      await click(form().querySelectorAll<HTMLInputElement>('input[name="encryption"]')[1])
+      expect(form().textContent).not.toContain('The teams you chose get their keys')
+      await submit()
+      expect(mockPicker.notices.teams).toBeUndefined()
+    })
+
     it('says when the teams could not be given access', async () => {
       mockCreateApplication.mockResolvedValueOnce({
         id: 'app-9',
@@ -671,6 +764,7 @@ describe('NewAppDialog', () => {
         secretsImported: true,
         accessGiven: true,
         teamsGiven: false,
+        sseEnabled: true,
       })
       await toAccess(teamsRole(true, true))
       const [dev] = mockPicker.environments.map((env: { key: string }) => env.key)
