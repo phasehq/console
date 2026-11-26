@@ -1589,6 +1589,29 @@ class ReadSecretMutation(graphene.Mutation):
         return ReadSecretMutation(ok=True)
 
 
+def _get_accessible_secret_and_member(info, secret_id):
+    if not secret_id:
+        raise GraphQLError("Secret not found")
+
+    try:
+        secret = Secret.objects.get(id=secret_id, deleted_at=None)
+    except Secret.DoesNotExist:
+        raise GraphQLError("Secret not found")
+
+    if not user_can_access_environment(info.context.user.userId, secret.environment.id):
+        raise GraphQLError("You don't have access to this secret")
+
+    org = secret.environment.app.organisation
+    try:
+        org_member = OrganisationMember.objects.get(
+            organisation=org, user=info.context.user, deleted_at=None
+        )
+    except OrganisationMember.DoesNotExist:
+        raise GraphQLError("You don't have access to this secret")
+
+    return secret, org_member
+
+
 class CreatePersonalSecretMutation(graphene.Mutation):
     class Arguments:
         override_data = PersonalSecretInput(PersonalSecretInput)
@@ -1596,18 +1619,12 @@ class CreatePersonalSecretMutation(graphene.Mutation):
     override = graphene.Field(PersonalSecretType)
 
     @classmethod
-    def mutate(cls, root, info, override_data):
-        secret = Secret.objects.get(id=override_data.secret_id)
-        org = secret.environment.app.organisation
-        org_member = OrganisationMember.objects.get(
-            organisation=org, user=info.context.user, deleted_at=None
-        )
-
-        if not user_can_access_environment(info.context.user.userId, secret.environment.id):
-            raise GraphQLError("You don't have access to this secret")
+    def mutate(cls, root, info, override_data=None):
+        secret_id = override_data.secret_id if override_data else None
+        _, org_member = _get_accessible_secret_and_member(info, secret_id)
 
         override, _ = PersonalSecret.objects.get_or_create(
-            secret_id=override_data.secret_id, user=org_member
+            secret_id=secret_id, user=org_member
         )
         override.value = override_data.value
         override.is_active = override_data.is_active
@@ -1623,15 +1640,8 @@ class DeletePersonalSecretMutation(graphene.Mutation):
     ok = graphene.Boolean()
 
     @classmethod
-    def mutate(cls, root, info, secret_id):
-        secret = Secret.objects.get(id=secret_id)
-        org = secret.environment.app.organisation
-        org_member = OrganisationMember.objects.get(
-            organisation=org, user=info.context.user, deleted_at=None
-        )
-
-        if not user_can_access_environment(info.context.user.userId, secret.environment.id):
-            raise GraphQLError("You don't have access to this secret")
+    def mutate(cls, root, info, secret_id=None):
+        _, org_member = _get_accessible_secret_and_member(info, secret_id)
 
         PersonalSecret.objects.filter(secret_id=secret_id, user=org_member).delete()
 
