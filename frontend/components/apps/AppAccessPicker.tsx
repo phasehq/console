@@ -2,8 +2,8 @@
 
 import { memo, ReactNode, useCallback, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { FaCircle, FaSearch, FaTimesCircle } from 'react-icons/fa'
-import { OrganisationMemberType, RoleType, ServiceAccountType } from '@/apollo/graphql'
+import { FaCircle, FaSearch, FaTimesCircle, FaUsers } from 'react-icons/fa'
+import { OrganisationMemberType, RoleType, ServiceAccountType, TeamType } from '@/apollo/graphql'
 import { Avatar } from '@/components/common/Avatar'
 import { Checkbox } from '@/components/common/Checkbox'
 import { RoleLabel } from '@/components/users/RoleLabel'
@@ -107,16 +107,33 @@ const AccountRow = memo(function AccountRow({
   )
 })
 
+type Tab = 'members' | 'services' | 'teams'
+
 type AppAccessPickerProps = {
   members: OrganisationMemberType[]
   serviceAccounts: ServiceAccountType[]
+  teams?: TeamType[]
   environments: AccessEnvironment[]
   scope: AccessScope
   /** Accounts that get every environment whatever is chosen here, each with the reason */
   everywhere: ReadonlyMap<string, string>
   /** Accounts that can't be given any environment yet, each with the reason */
   unavailable: ReadonlyMap<string, string>
+  /** Shown above a tab's list */
+  notices?: Partial<Record<Tab, ReactNode>>
   onChange: (scope: Map<string, ReadonlySet<string>>) => void
+}
+
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
+
+/** "3 members, 1 service account": who a team gives access to */
+const teamDetail = (team: TeamType) => {
+  const people = team.members?.filter((m) => m?.orgMember).length ?? 0
+  const services = team.members?.filter((m) => m?.serviceAccount).length ?? 0
+  return [
+    plural(people, 'member'),
+    ...(services > 0 ? [plural(services, 'service account')] : []),
+  ].join(', ')
 }
 
 /**
@@ -127,13 +144,15 @@ type AppAccessPickerProps = {
 export const AppAccessPicker = ({
   members,
   serviceAccounts,
+  teams = [],
   environments,
   scope,
   everywhere,
   unavailable,
+  notices = {},
   onChange,
 }: AppAccessPickerProps) => {
-  const [pickedTab, setTab] = useState<'members' | 'services' | null>(null)
+  const [pickedTab, setTab] = useState<Tab | null>(null)
   const [query, setQuery] = useState('')
 
   const lists = useMemo(() => {
@@ -166,16 +185,26 @@ export const AppAccessPicker = ({
           unavailable: unavailable.get(account.id),
         }))
       ),
+      teams: ordered(
+        teams.map((team) => ({
+          id: team.id,
+          name: team.name,
+          detail: teamDetail(team),
+          avatar: (
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-500/20 text-[10px] text-zinc-600 dark:text-zinc-300">
+              <FaUsers />
+            </span>
+          ),
+        }))
+      ),
     }
-  }, [members, serviceAccounts, everywhere, unavailable])
+  }, [members, serviceAccounts, teams, everywhere, unavailable])
 
-  // Members unless another tab was picked: the two lists can arrive one after the other
-  const tab =
+  // Members unless another tab was picked: the lists can arrive one after another
+  const tab: Tab =
     pickedTab && lists[pickedTab].length > 0
       ? pickedTab
-      : lists.members.length > 0
-        ? 'members'
-        : 'services'
+      : (['members', 'services', 'teams'] as const).find((t) => lists[t].length > 0) ?? 'members'
   const rows = lists[tab]
   const search = query.trim().toLowerCase()
   const shown = search
@@ -221,7 +250,18 @@ export const AppAccessPicker = ({
   const tabs = [
     { id: 'members' as const, label: 'Members', rows: lists.members },
     { id: 'services' as const, label: 'Service Accounts', rows: lists.services },
+    { id: 'teams' as const, label: 'Teams', rows: lists.teams },
   ].filter((t) => t.rows.length > 0)
+  const searchLabel = { members: 'Members', services: 'Service Accounts', teams: 'Teams' }[tab]
+  const columnLabel = { members: 'Member', services: 'Service Account', teams: 'Team' }[tab]
+  // Who the whole-row and whole-column ticks act on
+  const every = search
+    ? {
+        members: 'Every member shown',
+        services: 'Every service account shown',
+        teams: 'Every team shown',
+      }[tab]
+    : { members: 'Everyone', services: 'Every service account', teams: 'Every team' }[tab]
 
   // The account column takes what's left; each environment gets a fixed column, scrolling sideways
   // past what the dialog fits. The floor is set outright: sized to its content, a long line under an
@@ -259,13 +299,15 @@ export const AppAccessPicker = ({
         </div>
       </div>
 
+      {notices[tab] && <div className="mt-2">{notices[tab]}</div>}
+
       {rows.length > SEARCH_FROM && (
         <div className="relative mt-2 flex items-center gap-2 rounded-md bg-zinc-100 px-2 ring-1 ring-inset ring-neutral-500/40 dark:bg-zinc-800">
           <FaSearch className="shrink-0 text-xs text-neutral-500" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={tab === 'members' ? 'Search Members' : 'Search Service Accounts'}
+            placeholder={`Search ${searchLabel}`}
             className="custom w-full bg-transparent text-sm text-zinc-900 placeholder:text-neutral-500 dark:text-zinc-100"
           />
           {query && (
@@ -283,7 +325,7 @@ export const AppAccessPicker = ({
 
       <div
         role="grid"
-        aria-label={tab === 'members' ? 'Members' : 'Service Accounts'}
+        aria-label={searchLabel}
         // A border, not an inset ring: the sticky column's background would paint over a ring
         className="mt-2 max-h-[22rem] overflow-auto rounded-md border border-neutral-500/20"
       >
@@ -309,11 +351,11 @@ export const AppAccessPicker = ({
                     on
                   )
                 }
-                aria-label="Every account shown: every Environment"
-                title={search ? 'Every account shown, every Environment' : 'Everyone, every Environment'}
+                aria-label={`${every}: every Environment`}
+                title={`${every}, every Environment`}
               />
               <span className="text-2xs font-medium uppercase tracking-wide text-neutral-500">
-                {search ? `${shown.length} of ${rows.length}` : tab === 'members' ? 'Member' : 'Service Account'}
+                {search ? `${shown.length} of ${rows.length}` : columnLabel}
               </span>
             </div>
             {environments.map((env) => {
@@ -343,8 +385,8 @@ export const AppAccessPicker = ({
                         on
                       )
                     }
-                    aria-label={`Every account shown: ${env.name}`}
-                    title={`${search ? 'Every account shown' : 'Everyone'}: ${env.name}`}
+                    aria-label={`${every}: ${env.name}`}
+                    title={`${every}: ${env.name}`}
                   />
                 </div>
               )

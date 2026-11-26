@@ -6,7 +6,7 @@ jest.mock('@/components/users/RoleLabel', () => ({
   RoleLabel: ({ role }: { role: { name: string } }) => <span>{role.name}</span>,
 }))
 
-import { OrganisationMemberType, ServiceAccountType } from '@/apollo/graphql'
+import { OrganisationMemberType, ServiceAccountType, TeamType } from '@/apollo/graphql'
 import { AccessScope, AppAccessPicker } from '@/components/apps/AppAccessPicker'
 ;(
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -157,5 +157,52 @@ describe('AppAccessPicker', () => {
     await click(boxes(rowOf('ci-deployer'))[3])
     expect(given()).toEqual({ zed: 'dev', ci: 'prd' })
     expect(tabs()).toEqual([`Members2/${MEMBERS.length}`, 'Service Accounts1/1'])
+  })
+
+  it('lists teams on a tab of their own, with who is in each and the notice for teams', async () => {
+    const teams = [
+      {
+        id: 'platform',
+        name: 'Platform',
+        members: [
+          { id: 't1', orgMember: { id: 'alice' } },
+          { id: 't2', orgMember: { id: 'zed' } },
+          { id: 't3', serviceAccount: { id: 'ci' } },
+        ],
+      },
+      { id: 'design', name: 'Design', members: [{ id: 't4', orgMember: { id: 'alice' } }] },
+    ] as TeamType[]
+    const onChange = jest.fn()
+    await act(async () =>
+      root.render(
+        <AppAccessPicker
+          members={MEMBERS}
+          serviceAccounts={SERVICE_ACCOUNTS}
+          teams={teams}
+          environments={ENVS}
+          scope={new Map()}
+          everywhere={EVERYWHERE}
+          unavailable={UNAVAILABLE}
+          notices={{ teams: <p>Teams turn on server-side encryption</p> }}
+          onChange={onChange}
+        />
+      )
+    )
+    const teamsTab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find(
+      (tab) => tab.textContent!.startsWith('Teams')
+    )!
+    expect(teamsTab.textContent).toBe('Teams0/2')
+    expect(container.textContent).not.toContain('Teams turn on server-side encryption')
+
+    await click(teamsTab)
+    expect(container.textContent).toContain('Teams turn on server-side encryption')
+    expect(
+      rows().map((row) => row.querySelector('[role="rowheader"] span span')!.textContent)
+    ).toEqual(['Design', 'Platform'])
+    expect(rowOf('Platform').textContent).toContain('2 members, 1 service account')
+    expect(rowOf('Design').textContent).toContain('1 member')
+
+    await click(boxes(rowOf('Platform'))[3])
+    expect(onChange).toHaveBeenLastCalledWith(new Map([['platform', new Set(['prd'])]]))
   })
 })
