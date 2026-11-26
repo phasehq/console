@@ -351,6 +351,7 @@ from .graphene.types import (
     IdentityProviderType,
     RoleType,
     SecretEventType,
+    attach_keys_when_read,
     SecretFolderType,
     SecretPathCountType,
     SecretTagType,
@@ -393,7 +394,7 @@ from itertools import chain
 import time
 import logging
 import heapq
-from django.db.models import Count, Exists, OuterRef, Q, prefetch_related_objects
+from django.db.models import Count, Exists, OuterRef, Q
 
 logger = logging.getLogger(__name__)
 
@@ -1141,13 +1142,14 @@ class Query(graphene.ObjectType):
 
         # select_related("secret") avoids a per-event query in
         # resolve_actor_deleted's rotating-secret check.
-        qs = (
+        events = list(
             SecretEvent.objects.filter(secret_id=secret_id)
             .select_related("secret")
             .order_by("-timestamp")
         )
+        attach_keys_when_read(events)
 
-        return qs
+        return events
 
     def resolve_secret_tags(root, info, org_id):
         if not user_is_org_member(info.context.user.userId, org_id):
@@ -1430,11 +1432,10 @@ class Query(graphene.ObjectType):
 
         if len(env_ids) == 1:
             # Single environment → simple fast path
-            logs_qs = (
+            logs_qs = list(
                 SecretEvent.objects.filter(environment_id=env_ids[0], **base_filter)
                 .select_related("secret")
-                .order_by("-timestamp", "-id")
-                .prefetch_related("tags")[:PAGE_SIZE]
+                .order_by("-timestamp", "-id")[:PAGE_SIZE]
             )
 
         else:
@@ -1451,7 +1452,8 @@ class Query(graphene.ObjectType):
             logs_qs = heapq.nlargest(
                 PAGE_SIZE, combined, key=lambda e: e.timestamp
             )  # Efficiently select the newest 25 events overall
-            prefetch_related_objects(logs_qs, "tags")
+
+        attach_keys_when_read(logs_qs)
 
         # Approximate count (on combined filter)
         count_qs = SecretEvent.objects.filter(environment_id__in=env_ids, **base_filter)

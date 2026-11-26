@@ -23,7 +23,7 @@ def designate_production(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("api", "0147_secretevent_folder_set_null"),
+        ("api", "0148_secretevent_drop_redundant_indexes"),
     ]
 
     operations = [

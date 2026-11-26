@@ -4,7 +4,7 @@ editor compared every environment with it before."""
 import importlib
 from unittest.mock import MagicMock
 
-migration = importlib.import_module("api.migrations.0148_environment_is_primary")
+migration = importlib.import_module("api.migrations.0149_environment_is_primary")
 
 
 def test_the_first_production_environment_of_each_app_becomes_primary():

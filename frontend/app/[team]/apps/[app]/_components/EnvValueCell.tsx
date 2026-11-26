@@ -238,6 +238,8 @@ const EnvValueCellBase = ({
     textareaRef,
     onChange: handleValueChange,
     currentSecretKey: rowKey,
+    envId: env.id,
+    path: secret?.path || '/',
   })
 
   const highlightContent =

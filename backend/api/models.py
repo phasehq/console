@@ -1392,8 +1392,11 @@ class SecretEvent(models.Model):
         ]
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
-    secret = models.ForeignKey(Secret, on_delete=models.CASCADE)
-    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    # db_index=False (also on service_account_token): covered by the Meta indexes
+    secret = models.ForeignKey(Secret, on_delete=models.CASCADE, db_index=False)
+    environment = models.ForeignKey(
+        Environment, on_delete=models.CASCADE, db_index=False
+    )
     # SET_NULL: a secret moved out of a folder keeps its history when that folder is deleted
     folder = models.ForeignKey(SecretFolder, on_delete=models.SET_NULL, null=True)
     path = models.TextField(default="/")
@@ -1407,7 +1410,11 @@ class SecretEvent(models.Model):
         ServiceAccount, on_delete=models.SET_NULL, blank=True, null=True
     )
     service_account_token = models.ForeignKey(
-        ServiceAccountToken, on_delete=models.SET_NULL, blank=True, null=True
+        ServiceAccountToken,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        db_index=False,
     )
     key = models.TextField()
     key_digest = models.TextField()

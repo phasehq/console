@@ -16,6 +16,7 @@ import {
   mergeImportedRows,
   moveAppSecretRows,
   readBackDeploy,
+  referenceKeysOf,
   repeatedKeyToFix,
   restoreAppSecretEntries,
   revertAppSecretEntries,
@@ -26,7 +27,12 @@ import {
   snapshotHasDeploy,
   staleAppSecretEntries,
 } from '@/utils/appSecrets'
-import { ReferenceContext } from '@/utils/secretReferences'
+import {
+  ReferenceContext,
+  buildInsertionText,
+  computeSuggestions,
+  getActiveReferenceToken,
+} from '@/utils/secretReferences'
 
 const dev = { id: 'dev', name: 'Development' } as EnvironmentType
 const staging = { id: 'staging', name: 'Staging' } as EnvironmentType
@@ -929,6 +935,90 @@ describe('deployReferenceErrors', () => {
       context
     )
     expect(references(errors)).toEqual(['URL in Production: ${development.HOST}'])
+  })
+})
+
+describe('referenceKeysOf', () => {
+  const inFolder = (key: string, path: string, values: Record<string, SecretType | null>) => ({
+    ...row(key, values),
+    id: `app:${path}:${key}`,
+    path,
+  })
+  const rows = [
+    row('HOST', { dev: secret('d1', 'HOST', 'db'), prod: secret('p1', 'HOST', 'db') }),
+    inFolder('STRIPE_KEY', '/Payments', {
+      prod: secret('p2', 'STRIPE_KEY', 'sk', { path: '/Payments' }),
+    }),
+  ]
+
+  it('lists the keys an env holds, each with its folder as it is named', () => {
+    expect(referenceKeysOf(rows, 'prod')).toEqual([
+      { path: '/', key: 'HOST' },
+      { path: '/Payments', key: 'STRIPE_KEY' },
+    ])
+    expect(referenceKeysOf(rows, 'dev')).toEqual([{ path: '/', key: 'HOST' }])
+    expect(referenceKeysOf(rows, 'staging')).toEqual([])
+  })
+
+  it("goes by a value's own key and folder, and leaves out the unnamed and the staged for deletion", () => {
+    const edited = [
+      // Renamed and moved where dev is shown: prod, not shown, keeps its own
+      {
+        ...row('DB_HOST', {
+          dev: secret('d1', 'DB_HOST', 'db', { path: '/db' }),
+          prod: secret('p1', 'HOST', 'db'),
+        }),
+        path: '/db',
+      },
+      row('OLD', { dev: { ...secret('d2', 'OLD', 'x'), stagedForDelete: true } as SecretType }),
+      row('', { dev: secret('d3', '', '') }),
+    ]
+    expect(referenceKeysOf(edited, 'dev')).toEqual([{ path: '/db', key: 'DB_HOST' }])
+    expect(referenceKeysOf(edited, 'prod')).toEqual([{ path: '/', key: 'HOST' }])
+  })
+
+  it('offers what a deploy then accepts: the same rows answer both', () => {
+    const context: ReferenceContext = {
+      teamSlug: 'team',
+      appId: 'app',
+      envIds: { development: 'dev', staging: 'staging', production: 'prod' },
+      secretIdLookup: {},
+      secretKeys: [],
+      envSecretKeys: {},
+      envRootKeys: {},
+      envNames: ['Development', 'Staging', 'Production'],
+      folderPaths: [],
+      folderSecretKeys: {},
+      envFolderKeys: {},
+      orgApps: [],
+      deletedKeys: [],
+      keysOf: (envId) => referenceKeysOf(rows, envId),
+    }
+    // Typed in lowercase, then the folder and the key are picked from the dropdown
+    let value = '${production.pay'
+    for (const pick of ['Payments/', 'STRIPE_KEY']) {
+      const token = getActiveReferenceToken(value, value.length)!
+      const origin = { key: 'CHECKOUT_KEY', envId: 'dev', path: '/' }
+      const suggestion = computeSuggestions(token, context, origin).find((s) => s.label === pick)!
+      value = buildInsertionText(suggestion, token, value).newValue
+    }
+    expect(value).toBe('${production.Payments/STRIPE_KEY}')
+
+    const withReference = [
+      ...rows,
+      row('CHECKOUT_KEY', { dev: secret('d9', 'CHECKOUT_KEY', value) }),
+    ]
+    expect(deployReferenceErrors(withReference, rows, new Set(['dev']), context)).toEqual([])
+    // Spelled in lowercase it points at a folder that is not there
+    const lowercase = [
+      ...rows,
+      row('CHECKOUT_KEY', {
+        dev: secret('d9', 'CHECKOUT_KEY', '${production.payments/STRIPE_KEY}'),
+      }),
+    ]
+    expect(
+      deployReferenceErrors(lowercase, rows, new Set(['dev']), context).map((e) => e.error)
+    ).toEqual(['Referenced key "STRIPE_KEY" does not exist in "production"'])
   })
 })
 
