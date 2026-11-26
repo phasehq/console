@@ -2,14 +2,19 @@ import {
   ApiEnvironmentEnvTypeChoices,
   ApiSecretTypeChoices,
   AppType,
+  EnvironmentKeyInput,
   EnvironmentType,
+  MemberType,
   MutationCreateAppArgs,
+  OrganisationMemberType,
   OrganisationType,
   SecretInput,
   SecretType,
+  ServiceAccountType,
 } from '@/apollo/graphql'
 import { CreateApplication } from '@/graphql/mutations/createApp.gql'
-import { InitAppEnvironments } from '@/graphql/mutations/environments/initAppEnvironments.gql'
+import { CreateEnv } from '@/graphql/mutations/environments/createEnvironment.gql'
+import { BulkAddMembersToApp } from '@/graphql/mutations/apps/bulkAddAppMembers.gql'
 import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
@@ -21,6 +26,7 @@ import {
   encryptAsymmetric,
   digest,
   createNewEnv,
+  wrapEnvSecretsForAccount,
 } from '@/utils/crypto'
 import { graphQlClient as client } from '@/apollo/client'
 
@@ -61,12 +67,45 @@ export interface KeyringType {
   symmetricKey: string
 }
 
+/** An environment a new App starts with */
+export type NewAppEnvironment = {
+  name: string
+  envType: ApiEnvironmentEnvTypeChoices
+  /** Unset: clients show the default, stoplight for the standard three and from the name for others */
+  color?: string | null
+}
+
+export const DEFAULT_APP_ENVIRONMENTS: NewAppEnvironment[] = [
+  { name: 'Development', envType: ApiEnvironmentEnvTypeChoices.Dev },
+  { name: 'Staging', envType: ApiEnvironmentEnvTypeChoices.Staging },
+  { name: 'Production', envType: ApiEnvironmentEnvTypeChoices.Prod },
+]
+
+/** An account to give access to some of a new App's environments, given by their place in its list */
+export type NewAppAccess = {
+  account: OrganisationMemberType | ServiceAccountType
+  memberType: MemberType
+  environments: number[]
+}
+
+/** What was created. An environment that couldn't be is null, in its place */
+export type CreatedApp = {
+  id: string
+  environments: ({ id: string; name: string } | null)[]
+  /** Whether the access asked for was given, to the environments that were created */
+  accessGiven: boolean
+}
+
 interface CreateAppOptions {
   name: string
   organisation: OrganisationType
   keyring: KeyringType
   globalAccessUsers: any[]
   createExampleSecrets?: boolean
+  environments?: NewAppEnvironment[]
+  access?: NewAppAccess[]
+  /** Told what is being done, for a progress line */
+  onProgress?: (stage: string) => void
 }
 
 export const DEV_SECRETS = [
@@ -315,47 +354,77 @@ async function processSecrets(
   })
 }
 
-/**
- * Initialize application environments for a given application ID.
- *
- * @param {string} appId - The ID of the application for which environments will be initialized.
- * @returns {Promise<boolean>} A Promise that resolves to `true` when initialization is complete.
- *
- * @throws {Error} If there are any errors during the environment initialization process.
- */
-async function initAppEnvs(appId: string, globalAccessUsers: any[]) {
-  const mutationPayload = {
-    devEnv: await createNewEnv(
-      appId,
-      'Development',
-      ApiEnvironmentEnvTypeChoices.Dev,
-      globalAccessUsers
-    ),
-    stagingEnv: await createNewEnv(
-      appId,
-      'Staging',
-      ApiEnvironmentEnvTypeChoices.Staging,
-      globalAccessUsers
-    ),
-    prodEnv: await createNewEnv(
-      appId,
-      'Production',
-      ApiEnvironmentEnvTypeChoices.Prod,
-      globalAccessUsers
-    ),
-  }
+type CreatedEnvironment = {
+  id: string
+  name: string
+  identityKey: string
+  envSecrets: { seed: string; salt: string }
+}
 
-  await client.mutate({
-    mutation: InitAppEnvironments,
+/** Creates one environment, its keys wrapped for the Owner, the global-access members and the creator */
+async function createAppEnvironment(
+  appId: string,
+  env: NewAppEnvironment,
+  globalAccessUsers: any[]
+): Promise<CreatedEnvironment> {
+  const { createEnvPayload, adminKeysPayload, envSecrets } = await createNewEnv(
+    appId,
+    env.name,
+    env.envType,
+    globalAccessUsers
+  )
+  const { data } = await client.mutate({
+    mutation: CreateEnv,
     variables: {
-      devEnv: mutationPayload.devEnv.createEnvPayload,
-      stagingEnv: mutationPayload.stagingEnv.createEnvPayload,
-      prodEnv: mutationPayload.prodEnv.createEnvPayload,
-      devAdminKeys: mutationPayload.devEnv.adminKeysPayload,
-      stagAdminKeys: mutationPayload.stagingEnv.adminKeysPayload,
-      prodAdminKeys: mutationPayload.prodEnv.adminKeysPayload,
+      envInput: { ...createEnvPayload, color: env.color || null },
+      adminKeys: adminKeysPayload,
     },
   })
+  const created = data?.createEnvironment?.environment
+  if (!created) throw new Error(`${env.name} was not created`)
+  return { id: created.id, name: created.name, identityKey: created.identityKey, envSecrets }
+}
+
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
+
+/** Adds the accounts to the App with their environments' keys, all in one request */
+async function giveAccess(
+  appId: string,
+  created: (CreatedEnvironment | null)[],
+  access: NewAppAccess[],
+  onProgress?: (stage: string) => void
+): Promise<boolean> {
+  const grants = access
+    .map(({ account, memberType, environments }) => ({
+      account,
+      memberType,
+      envs: environments.map((at) => created[at]).filter((env): env is CreatedEnvironment => !!env),
+    }))
+    .filter(({ envs }) => envs.length > 0)
+  if (grants.length === 0) return true
+
+  onProgress?.(`Giving access to ${plural(grants.length, 'account')}…`)
+  try {
+    const members = await Promise.all(
+      grants.map(async ({ account, memberType, envs }) => ({
+        memberId: account.id,
+        memberType,
+        envKeys: await Promise.all(
+          envs.map(async (env): Promise<EnvironmentKeyInput> => {
+            const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount(env.envSecrets, account)
+            return { envId: env.id, userId: account.id, identityKey: env.identityKey, wrappedSeed, wrappedSalt }
+          })
+        ),
+      }))
+    )
+    const { data } = await client.mutate({
+      mutation: BulkAddMembersToApp,
+      variables: { appId, members },
+    })
+    return Boolean(data?.bulkAddAppMembers?.app)
+  } catch {
+    return false
+  }
 }
 
 async function createExampleSecrets(appId: string, keyring: KeyringType) {
@@ -389,15 +458,24 @@ async function createExampleSecrets(appId: string, keyring: KeyringType) {
   await processSecrets(validEnvsToProcess, keyring)
 }
 
+/**
+ * Creates an App with its environments, one at a time in the order given so each goes after the
+ * last, then gives the accounts in `access` their environments. Once the App exists, an environment
+ * or access that fails is reported in the result rather than thrown: the App is there to fix it in.
+ */
 export async function createApplication({
   name,
   organisation,
   keyring,
   globalAccessUsers,
   createExampleSecrets: withExampleSecrets = false, // Explicitly false by default
-}: CreateAppOptions): Promise<string> {
+  environments = DEFAULT_APP_ENVIRONMENTS,
+  access = [],
+  onProgress,
+}: CreateAppOptions): Promise<CreatedApp> {
   const id = crypto.randomUUID()
 
+  onProgress?.('Creating the App…')
   const { data } = await client.mutate({
     mutation: CreateApplication,
     variables: {
@@ -409,7 +487,17 @@ export async function createApplication({
 
   const newAppId = data.createApp.app.id
 
-  await initAppEnvs(newAppId, globalAccessUsers)
+  const created: (CreatedEnvironment | null)[] = []
+  for (const [at, env] of environments.entries()) {
+    onProgress?.(
+      environments.length > 1
+        ? `Creating Environments (${at + 1} of ${environments.length})…`
+        : 'Creating the Environment…'
+    )
+    created.push(await createAppEnvironment(newAppId, env, globalAccessUsers).catch(() => null))
+  }
+
+  const accessGiven = await giveAccess(newAppId, created, access, onProgress)
 
   if (withExampleSecrets) {
     await createExampleSecrets(newAppId, keyring)
@@ -419,13 +507,20 @@ export async function createApplication({
     })
   }
 
-  await client.query({
-    query: GetApps,
-    variables: { organisationId: organisation.id },
-    fetchPolicy: 'network-only',
-  })
+  // The App exists whether or not the list catches up now
+  await client
+    .query({
+      query: GetApps,
+      variables: { organisationId: organisation.id },
+      fetchPolicy: 'network-only',
+    })
+    .catch(() => {})
 
-  return newAppId
+  return {
+    id: newAppId,
+    environments: created.map((env) => env && { id: env.id, name: env.name }),
+    accessGiven,
+  }
 }
 
 export type AppSortOption =
