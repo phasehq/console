@@ -114,6 +114,8 @@ export type CreatedApp = {
   accessGiven: boolean
   /** Whether the teams asked for were given access, server-side encryption turned on for them */
   teamsGiven: boolean
+  /** Whether server-side encryption is on: asked for, or turned on for teams */
+  sseEnabled: boolean
 }
 
 interface CreateAppOptions {
@@ -127,6 +129,8 @@ interface CreateAppOptions {
   access?: NewAppAccess[]
   /** Teams get their keys from the server, so asking for any turns server-side encryption on */
   teams?: NewAppTeamAccess[]
+  /** Turns server-side encryption on once the environments exist */
+  serverSideEncryption?: boolean
   /** Told what is being done, for a progress line */
   onProgress?: (stage: string) => void
 }
@@ -445,41 +449,51 @@ async function importSecrets(
   }
 }
 
-/**
- * Turns server-side encryption on, with the server's copy of each environment's keys, then gives
- * each team its environments: the server wraps the keys for the team's members.
- */
-async function giveTeamsAccess(
-  appId: string,
-  created: (CreatedEnvironment | null)[],
-  teams: NewAppTeamAccess[],
-  onProgress?: (stage: string) => void
-): Promise<boolean> {
-  const grants = teams
+/** The environments each team is given, by id: a team left with none is dropped */
+const teamGrants = (created: (CreatedEnvironment | null)[], teams: NewAppTeamAccess[]) =>
+  teams
     .map(({ teamId, environments }) => ({
       teamId,
       envIds: environments.flatMap((at) => (created[at] ? [created[at]!.id] : [])),
     }))
     .filter(({ envIds }) => envIds.length > 0)
-  if (grants.length === 0) return true
 
+/**
+ * Turns server-side encryption on, as the App's settings do: the keys made here for each
+ * environment are wrapped for the server, which then holds a copy of them.
+ */
+async function enableServerSideEncryption(
+  appId: string,
+  created: (CreatedEnvironment | null)[],
+  onProgress?: (stage: string) => void
+): Promise<boolean> {
+  const environments = created.filter((env): env is CreatedEnvironment => !!env)
+  // The server needs a key for every environment, and turns nothing on for an App with none
+  if (environments.length === 0) return false
+
+  onProgress?.('Turning on server-side encryption…')
   try {
-    onProgress?.('Turning on server-side encryption…')
     const { data } = await client.query({ query: GetServerKey, fetchPolicy: 'network-only' })
     const envKeys = await Promise.all(
-      created
-        .filter((env): env is CreatedEnvironment => !!env)
-        .map(async (env) => ({
-          envId: env.id,
-          identityKey: env.identityKey,
-          ...(await wrapEnvSecretsForServer(env.envSecrets, data.serverPublicKey)),
-        }))
+      environments.map(async (env) => ({
+        envId: env.id,
+        identityKey: env.identityKey,
+        ...(await wrapEnvSecretsForServer(env.envSecrets, data.serverPublicKey)),
+      }))
     )
     await client.mutate({ mutation: InitAppSyncing, variables: { appId, envKeys } })
+    return true
   } catch {
     return false
   }
+}
 
+/** Gives each team its environments: the server wraps their keys for the team's members */
+async function giveTeamsAccess(
+  appId: string,
+  grants: ReturnType<typeof teamGrants>,
+  onProgress?: (stage: string) => void
+): Promise<boolean> {
   onProgress?.(`Giving ${plural(grants.length, 'team')} access…`)
   let given = true
   for (const { teamId, envIds } of grants) {
@@ -590,6 +604,7 @@ export async function createApplication({
   secrets = [],
   access = [],
   teams = [],
+  serverSideEncryption = false,
   onProgress,
 }: CreateAppOptions): Promise<CreatedApp> {
   const id = crypto.randomUUID()
@@ -616,9 +631,16 @@ export async function createApplication({
     created.push(await createAppEnvironment(newAppId, env, globalAccessUsers).catch(() => null))
   }
 
+  // The encryption mode is settled before anything goes into the App. Teams need it on
+  const grants = teamGrants(created, teams)
+  const sseEnabled =
+    (serverSideEncryption || grants.length > 0) &&
+    (await enableServerSideEncryption(newAppId, created, onProgress))
+
   const secretsImported = await importSecrets(created, secrets, onProgress)
   const accessGiven = await giveAccess(newAppId, created, access, onProgress)
-  const teamsGiven = await giveTeamsAccess(newAppId, created, teams, onProgress)
+  const teamsGiven =
+    grants.length === 0 || (sseEnabled && (await giveTeamsAccess(newAppId, grants, onProgress)))
 
   if (withExampleSecrets) {
     await createExampleSecrets(newAppId, keyring)
@@ -643,6 +665,7 @@ export async function createApplication({
     secretsImported,
     accessGiven,
     teamsGiven,
+    sseEnabled,
   }
 }
 

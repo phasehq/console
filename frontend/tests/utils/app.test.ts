@@ -184,6 +184,7 @@ describe('createApplication', () => {
         secretsImported: true,
         accessGiven: true,
         teamsGiven: true,
+        sseEnabled: false,
       })
       expect(sent('BulkAddMembersToApp')).toEqual([])
       expect(sent('BulkProcessSecrets')).toEqual([])
@@ -443,6 +444,7 @@ describe('createApplication', () => {
 
     expect(sent('AddTeamAppsOp')).toEqual([])
     expect(created.teamsGiven).toBe(false)
+    expect(created.sseEnabled).toBe(false)
   })
 
   it('still gives the other teams access when one fails', async () => {
@@ -464,23 +466,87 @@ describe('createApplication', () => {
     expect(created.teamsGiven).toBe(false)
   })
 
-  it('imports secrets before giving anyone access', async () => {
+  it('turns on server-side encryption when asked, with the keys it made wrapped for the server', async () => {
+    const stages: string[] = []
+    const created = await create({
+      serverSideEncryption: true,
+      onProgress: (stage) => stages.push(stage),
+    })
+
+    expect(mockQuery).toHaveBeenCalledWith({ query: 'GetServerKey', fetchPolicy: 'network-only' })
+    expect(sent('InitAppSyncing')).toEqual([
+      {
+        appId: 'app-1',
+        envKeys: ['Development', 'Staging', 'Production'].map((env) => ({
+          envId: `env-${env}`,
+          identityKey: `ik-${env}`,
+          wrappedSeed: `seed-${env}>server-pk`,
+          wrappedSalt: `salt-${env}>server-pk`,
+        })),
+      },
+    ])
+    // Made here, as for any App: the server is only handed a copy
+    expect(mockCreateNewEnv).toHaveBeenCalledTimes(3)
+    expect(stages.at(-1)).toBe('Turning on server-side encryption…')
+    expect(sent('AddTeamAppsOp')).toEqual([])
+    expect(created.sseEnabled).toBe(true)
+  })
+
+  it('turns it on for the environments that were created, and not at all without one', async () => {
+    const plain = mockMutate.getMockImplementation()!
+    mockMutate.mockImplementation(async (options) => {
+      if (options.mutation === 'CreateEnv' && options.variables.envInput.name !== 'Staging')
+        throw new Error('An Environment with this name already exists in this App!')
+      return plain(options)
+    })
+
+    await create({ serverSideEncryption: true })
+    expect(sent('InitAppSyncing')[0].envKeys.map((key: { envId: string }) => key.envId)).toEqual([
+      'env-Staging',
+    ])
+
+    mockMutate.mockClear()
+    mockMutate.mockImplementation(async (options) => {
+      if (options.mutation === 'CreateEnv') throw new Error('Environment limit reached')
+      return plain(options)
+    })
+    const created = await create({ serverSideEncryption: true })
+
+    // The server needs a key for every environment, so there's nothing to send
+    expect(sent('InitAppSyncing')).toEqual([])
+    expect(created.sseEnabled).toBe(false)
+  })
+
+  it('reports server-side encryption it could not turn on, and carries on', async () => {
+    const plain = mockMutate.getMockImplementation()!
+    mockMutate.mockImplementation(async (options) => {
+      if (options.mutation === 'InitAppSyncing')
+        throw new Error("You don't have permission to change the encryption mode of this App")
+      return plain(options)
+    })
+
+    const created = await create({
+      serverSideEncryption: true,
+      secrets: [{ environment: 0, secrets: [secretOf('API_KEY', 'v')] }],
+    })
+
+    expect(created.id).toBe('app-1')
+    expect(created.sseEnabled).toBe(false)
+    expect(created.secretsImported).toBe(true)
+  })
+
+  it('settles the encryption mode before importing secrets or giving anyone access', async () => {
     await create({
-      secrets: [
-        {
-          environment: 0,
-          secrets: [secretOf('API_KEY', 'v')],
-        },
-      ],
+      secrets: [{ environment: 0, secrets: [secretOf('API_KEY', 'v')] }],
       access: [{ account: priya, memberType: MemberType.User, environments: [0] }],
       teams: [{ teamId: 'platform', environments: [0] }],
     })
 
     const order = mockMutate.mock.calls.map(([{ mutation }]) => mutation)
-    expect(order.slice(order.indexOf('BulkProcessSecrets'))).toEqual([
+    expect(order.slice(order.indexOf('InitAppSyncing'))).toEqual([
+      'InitAppSyncing',
       'BulkProcessSecrets',
       'BulkAddMembersToApp',
-      'InitAppSyncing',
       'AddTeamAppsOp',
     ])
   })
