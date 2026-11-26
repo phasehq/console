@@ -15,6 +15,9 @@ import {
 import { CreateApplication } from '@/graphql/mutations/createApp.gql'
 import { CreateEnv } from '@/graphql/mutations/environments/createEnvironment.gql'
 import { BulkAddMembersToApp } from '@/graphql/mutations/apps/bulkAddAppMembers.gql'
+import { AddTeamAppsOp } from '@/graphql/mutations/teams/addTeamApps.gql'
+import InitAppSyncing from '@/graphql/mutations/syncing/initAppSync.gql'
+import GetServerKey from '@/graphql/queries/syncing/getServerKey.gql'
 import { BulkProcessSecrets } from '@/graphql/mutations/environments/bulkProcessSecrets.gql'
 import { GetAppEnvironments } from '@/graphql/queries/secrets/getAppEnvironments.gql'
 import { GetApps } from '@/graphql/queries/getApps.gql'
@@ -26,7 +29,9 @@ import {
   encryptAsymmetric,
   digest,
   createNewEnv,
+  encryptSecretsForEnv,
   wrapEnvSecretsForAccount,
+  wrapEnvSecretsForServer,
 } from '@/utils/crypto'
 import { graphQlClient as client } from '@/apollo/client'
 
@@ -73,6 +78,8 @@ export type NewAppEnvironment = {
   envType: ApiEnvironmentEnvTypeChoices
   /** Unset: clients show the default, stoplight for the standard three and from the name for others */
   color?: string | null
+  /** The App's primary environment. Unset: the server makes Production its primary one */
+  isPrimary?: boolean | null
 }
 
 export const DEFAULT_APP_ENVIRONMENTS: NewAppEnvironment[] = [
@@ -88,12 +95,25 @@ export type NewAppAccess = {
   environments: number[]
 }
 
+/** A team to give access to some of a new App's environments, given by their place in its list */
+export type NewAppTeamAccess = { teamId: string; environments: number[] }
+
+/** Secrets for one of a new App's environments, given by its place in the list */
+export type NewAppSecrets = {
+  environment: number
+  secrets: Array<Pick<SecretType, 'key' | 'value' | 'comment' | 'path' | 'type' | 'tags'>>
+}
+
 /** What was created. An environment that couldn't be is null, in its place */
 export type CreatedApp = {
   id: string
   environments: ({ id: string; name: string } | null)[]
+  /** Whether the secrets were imported, into the environments that were created */
+  secretsImported: boolean
   /** Whether the access asked for was given, to the environments that were created */
   accessGiven: boolean
+  /** Whether the teams asked for were given access, server-side encryption turned on for them */
+  teamsGiven: boolean
 }
 
 interface CreateAppOptions {
@@ -103,7 +123,10 @@ interface CreateAppOptions {
   globalAccessUsers: any[]
   createExampleSecrets?: boolean
   environments?: NewAppEnvironment[]
+  secrets?: NewAppSecrets[]
   access?: NewAppAccess[]
+  /** Teams get their keys from the server, so asking for any turns server-side encryption on */
+  teams?: NewAppTeamAccess[]
   /** Told what is being done, for a progress line */
   onProgress?: (stage: string) => void
 }
@@ -376,7 +399,7 @@ async function createAppEnvironment(
   const { data } = await client.mutate({
     mutation: CreateEnv,
     variables: {
-      envInput: { ...createEnvPayload, color: env.color || null },
+      envInput: { ...createEnvPayload, color: env.color || null, isPrimary: env.isPrimary ?? null },
       adminKeys: adminKeysPayload,
     },
   })
@@ -386,6 +409,91 @@ async function createAppEnvironment(
 }
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
+
+/** Encrypts each environment's secrets under its keys and stores them all in one request */
+async function importSecrets(
+  created: (CreatedEnvironment | null)[],
+  secrets: NewAppSecrets[],
+  onProgress?: (stage: string) => void
+): Promise<boolean> {
+  const batches = secrets
+    .map(({ environment, secrets }) => ({ env: created[environment], secrets }))
+    .filter(({ env, secrets }) => env && secrets.length > 0)
+  if (batches.length === 0) return true
+
+  const keys = new Set(batches.flatMap(({ secrets }) => secrets.map((secret) => secret.key)))
+  onProgress?.(`Importing ${plural(keys.size, 'secret')}…`)
+  try {
+    const secretsToCreate = (
+      await Promise.all(
+        batches.map(({ env, secrets }) =>
+          encryptSecretsForEnv(secrets, {
+            id: env!.id,
+            identityKey: env!.identityKey,
+            salt: env!.envSecrets.salt,
+          })
+        )
+      )
+    ).flat()
+    await client.mutate({
+      mutation: BulkProcessSecrets,
+      variables: { secretsToCreate, secretsToUpdate: [], secretsToDelete: [] },
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Turns server-side encryption on, with the server's copy of each environment's keys, then gives
+ * each team its environments: the server wraps the keys for the team's members.
+ */
+async function giveTeamsAccess(
+  appId: string,
+  created: (CreatedEnvironment | null)[],
+  teams: NewAppTeamAccess[],
+  onProgress?: (stage: string) => void
+): Promise<boolean> {
+  const grants = teams
+    .map(({ teamId, environments }) => ({
+      teamId,
+      envIds: environments.flatMap((at) => (created[at] ? [created[at]!.id] : [])),
+    }))
+    .filter(({ envIds }) => envIds.length > 0)
+  if (grants.length === 0) return true
+
+  try {
+    onProgress?.('Turning on server-side encryption…')
+    const { data } = await client.query({ query: GetServerKey, fetchPolicy: 'network-only' })
+    const envKeys = await Promise.all(
+      created
+        .filter((env): env is CreatedEnvironment => !!env)
+        .map(async (env) => ({
+          envId: env.id,
+          identityKey: env.identityKey,
+          ...(await wrapEnvSecretsForServer(env.envSecrets, data.serverPublicKey)),
+        }))
+    )
+    await client.mutate({ mutation: InitAppSyncing, variables: { appId, envKeys } })
+  } catch {
+    return false
+  }
+
+  onProgress?.(`Giving ${plural(grants.length, 'team')} access…`)
+  let given = true
+  for (const { teamId, envIds } of grants) {
+    try {
+      await client.mutate({
+        mutation: AddTeamAppsOp,
+        variables: { teamId, appEnvs: [{ appId, envIds }] },
+      })
+    } catch {
+      given = false
+    }
+  }
+  return given
+}
 
 /** Adds the accounts to the App with their environments' keys, all in one request */
 async function giveAccess(
@@ -411,8 +519,17 @@ async function giveAccess(
         memberType,
         envKeys: await Promise.all(
           envs.map(async (env): Promise<EnvironmentKeyInput> => {
-            const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount(env.envSecrets, account)
-            return { envId: env.id, userId: account.id, identityKey: env.identityKey, wrappedSeed, wrappedSalt }
+            const { wrappedSeed, wrappedSalt } = await wrapEnvSecretsForAccount(
+              env.envSecrets,
+              account
+            )
+            return {
+              envId: env.id,
+              userId: account.id,
+              identityKey: env.identityKey,
+              wrappedSeed,
+              wrappedSalt,
+            }
           })
         ),
       }))
@@ -470,7 +587,9 @@ export async function createApplication({
   globalAccessUsers,
   createExampleSecrets: withExampleSecrets = false, // Explicitly false by default
   environments = DEFAULT_APP_ENVIRONMENTS,
+  secrets = [],
   access = [],
+  teams = [],
   onProgress,
 }: CreateAppOptions): Promise<CreatedApp> {
   const id = crypto.randomUUID()
@@ -497,7 +616,9 @@ export async function createApplication({
     created.push(await createAppEnvironment(newAppId, env, globalAccessUsers).catch(() => null))
   }
 
+  const secretsImported = await importSecrets(created, secrets, onProgress)
   const accessGiven = await giveAccess(newAppId, created, access, onProgress)
+  const teamsGiven = await giveTeamsAccess(newAppId, created, teams, onProgress)
 
   if (withExampleSecrets) {
     await createExampleSecrets(newAppId, keyring)
@@ -519,7 +640,9 @@ export async function createApplication({
   return {
     id: newAppId,
     environments: created.map((env) => env && { id: env.id, name: env.name }),
+    secretsImported,
     accessGiven,
+    teamsGiven,
   }
 }
 

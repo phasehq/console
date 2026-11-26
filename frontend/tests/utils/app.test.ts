@@ -6,6 +6,7 @@ const mockMutate = jest.fn()
 const mockQuery = jest.fn()
 const mockCreateNewEnv = jest.fn()
 const mockWrap = jest.fn()
+const mockEncrypt = jest.fn()
 
 jest.mock('@/apollo/client', () => ({
   graphQlClient: {
@@ -20,6 +21,15 @@ jest.mock('@/graphql/mutations/environments/createEnvironment.gql', () => ({
 jest.mock('@/graphql/mutations/apps/bulkAddAppMembers.gql', () => ({
   BulkAddMembersToApp: 'BulkAddMembersToApp',
 }))
+jest.mock('@/graphql/mutations/teams/addTeamApps.gql', () => ({ AddTeamAppsOp: 'AddTeamAppsOp' }))
+jest.mock('@/graphql/mutations/syncing/initAppSync.gql', () => ({
+  __esModule: true,
+  default: 'InitAppSyncing',
+}))
+jest.mock('@/graphql/queries/syncing/getServerKey.gql', () => ({
+  __esModule: true,
+  default: 'GetServerKey',
+}))
 jest.mock('@/graphql/mutations/environments/bulkProcessSecrets.gql', () => ({
   BulkProcessSecrets: 'BulkProcessSecrets',
 }))
@@ -33,6 +43,11 @@ jest.mock('@/graphql/mutations/apps/updateAppInfo.gql', () => ({
 jest.mock('@/utils/crypto', () => ({
   createNewEnv: (...args: unknown[]) => mockCreateNewEnv(...args),
   wrapEnvSecretsForAccount: (...args: unknown[]) => mockWrap(...args),
+  wrapEnvSecretsForServer: async (secrets: { seed: string; salt: string }, serverKey: string) => ({
+    wrappedSeed: `${secrets.seed}>${serverKey}`,
+    wrappedSalt: `${secrets.salt}>${serverKey}`,
+  }),
+  encryptSecretsForEnv: (...args: unknown[]) => mockEncrypt(...args),
   getUserKxPublicKey: async () => 'kx-pk',
   getUserKxPrivateKey: async () => 'kx-sk',
   decryptAsymmetric: async () => 'env-salt',
@@ -42,6 +57,7 @@ jest.mock('@/utils/crypto', () => ({
 
 import {
   ApiEnvironmentEnvTypeChoices,
+  ApiSecretTypeChoices,
   MemberType,
   OrganisationMemberType,
   OrganisationType,
@@ -61,6 +77,15 @@ const create = (options: Partial<Parameters<typeof createApplication>[0]> = {}) 
     globalAccessUsers: ADMINS,
     ...options,
   })
+
+const secretOf = (key: string, value: string) => ({
+  key,
+  value,
+  comment: '',
+  path: '/',
+  type: ApiSecretTypeChoices.Secret,
+  tags: [],
+})
 
 const priya = { id: 'priya', identityKey: 'pk-priya' } as OrganisationMemberType
 const deployer = { id: 'ci', identityKey: 'pk-ci' } as ServiceAccountType
@@ -89,7 +114,17 @@ beforeEach(() => {
       return { data: { bulkAddAppMembers: { app: { id: 'app-1' } } } }
     return { data: {} }
   })
-  mockQuery.mockResolvedValue({ data: {} })
+  mockQuery.mockImplementation(async ({ query }) =>
+    query === 'GetServerKey' ? { data: { serverPublicKey: 'server-pk' } } : { data: {} }
+  )
+  mockEncrypt.mockImplementation(async (secrets, env) =>
+    secrets.map((secret: { key: string; value: string }) => ({
+      envId: env.id,
+      key: `${secret.key}@${env.identityKey}`,
+      value: `${secret.value}@${env.identityKey}`,
+      keyDigest: `${secret.key}#${env.salt}`,
+    }))
+  )
   mockCreateNewEnv.mockImplementation(async (appId, name, envType) => ({
     createEnvPayload: { appId, name, envType, wrappedSeed: 'encrypted-seed' },
     adminKeysPayload: [{ userId: 'creator', wrappedSeed: 'creator-seed' }],
@@ -134,6 +169,8 @@ describe('createApplication', () => {
           envType: Dev,
           wrappedSeed: 'encrypted-seed',
           color: null,
+          // The server decides: Production is primary
+          isPrimary: null,
         },
         adminKeys: [{ userId: 'creator', wrappedSeed: 'creator-seed' }],
       })
@@ -144,9 +181,14 @@ describe('createApplication', () => {
           { id: 'env-Staging', name: 'Staging' },
           { id: 'env-Production', name: 'Production' },
         ],
+        secretsImported: true,
         accessGiven: true,
+        teamsGiven: true,
       })
       expect(sent('BulkAddMembersToApp')).toEqual([])
+      expect(sent('BulkProcessSecrets')).toEqual([])
+      // An App without teams stays end-to-end encrypted
+      expect(sent('InitAppSyncing')).toEqual([])
       expect(mockQuery).toHaveBeenCalledWith({
         query: 'GetApps',
         variables: { organisationId: 'org-1' },
@@ -277,6 +319,169 @@ describe('createApplication', () => {
       'Creating Environments (1 of 2)…',
       'Creating Environments (2 of 2)…',
       'Giving access to 1 account…',
+    ])
+  })
+
+  it('makes the environment asked for primary, and no other', async () => {
+    await create({
+      environments: [
+        { name: 'Development', envType: Dev, isPrimary: false },
+        { name: 'Production', envType: Prod, isPrimary: false },
+        { name: 'Main', envType: Custom, isPrimary: true },
+      ],
+    })
+
+    expect(sent('CreateEnv').map(({ envInput }) => [envInput.name, envInput.isPrimary])).toEqual([
+      ['Development', false],
+      ['Production', false],
+      ['Main', true],
+    ])
+  })
+
+  it("imports each environment's secrets under its own keys, in one request", async () => {
+    const stages: string[] = []
+    const created = await create({
+      secrets: [
+        {
+          environment: 0,
+          secrets: [secretOf('API_KEY', 'dev-key')],
+        },
+        {
+          environment: 2,
+          secrets: [secretOf('API_KEY', ''), secretOf('DEBUG', '')],
+        },
+      ],
+      onProgress: (stage) => stages.push(stage),
+    })
+
+    expect(mockEncrypt.mock.calls.map(([, env]) => env)).toEqual([
+      { id: 'env-Development', identityKey: 'ik-Development', salt: 'salt-Development' },
+      { id: 'env-Production', identityKey: 'ik-Production', salt: 'salt-Production' },
+    ])
+    expect(sent('BulkProcessSecrets')).toEqual([
+      {
+        secretsToCreate: [
+          expect.objectContaining({ envId: 'env-Development', value: 'dev-key@ik-Development' }),
+          expect.objectContaining({ envId: 'env-Production', key: 'API_KEY@ik-Production' }),
+          expect.objectContaining({ envId: 'env-Production', key: 'DEBUG@ik-Production' }),
+        ],
+        secretsToUpdate: [],
+        secretsToDelete: [],
+      },
+    ])
+    // Counted by key: the same key in two environments is one secret
+    expect(stages).toContain('Importing 2 secrets…')
+    expect(created.secretsImported).toBe(true)
+  })
+
+  it("leaves out an environment that wasn't created, and says when the import fails", async () => {
+    const plain = mockMutate.getMockImplementation()!
+    mockMutate.mockImplementation(async (options) => {
+      if (options.mutation === 'CreateEnv' && options.variables.envInput.name === 'Staging')
+        throw new Error('An Environment with this name already exists in this App!')
+      if (options.mutation === 'BulkProcessSecrets') throw new Error('Secrets limit reached')
+      return plain(options)
+    })
+    const secret = secretOf('API_KEY', 'v')
+
+    const created = await create({
+      secrets: [
+        { environment: 1, secrets: [secret] },
+        { environment: 2, secrets: [secret] },
+      ],
+    })
+
+    expect(mockEncrypt.mock.calls.map(([, env]) => env.id)).toEqual(['env-Production'])
+    expect(created.id).toBe('app-1')
+    expect(created.secretsImported).toBe(false)
+  })
+
+  it('turns on server-side encryption for teams, then gives each team its environments', async () => {
+    const stages: string[] = []
+    const created = await create({
+      teams: [
+        { teamId: 'platform', environments: [0, 1, 2] },
+        { teamId: 'frontend', environments: [0] },
+      ],
+      onProgress: (stage) => stages.push(stage),
+    })
+
+    // The server gets a copy of every environment's keys, wrapped for its own key
+    expect(sent('InitAppSyncing')).toEqual([
+      {
+        appId: 'app-1',
+        envKeys: ['Development', 'Staging', 'Production'].map((env) => ({
+          envId: `env-${env}`,
+          identityKey: `ik-${env}`,
+          wrappedSeed: `seed-${env}>server-pk`,
+          wrappedSalt: `salt-${env}>server-pk`,
+        })),
+      },
+    ])
+    expect(sent('AddTeamAppsOp')).toEqual([
+      {
+        teamId: 'platform',
+        appEnvs: [{ appId: 'app-1', envIds: ['env-Development', 'env-Staging', 'env-Production'] }],
+      },
+      { teamId: 'frontend', appEnvs: [{ appId: 'app-1', envIds: ['env-Development'] }] },
+    ])
+    expect(stages.slice(-2)).toEqual([
+      'Turning on server-side encryption…',
+      'Giving 2 teams access…',
+    ])
+    expect(created.teamsGiven).toBe(true)
+  })
+
+  it('gives no team access when server-side encryption could not be turned on', async () => {
+    const plain = mockMutate.getMockImplementation()!
+    mockMutate.mockImplementation(async (options) => {
+      if (options.mutation === 'InitAppSyncing') throw new Error('no permission')
+      return plain(options)
+    })
+
+    const created = await create({ teams: [{ teamId: 'platform', environments: [0] }] })
+
+    expect(sent('AddTeamAppsOp')).toEqual([])
+    expect(created.teamsGiven).toBe(false)
+  })
+
+  it('still gives the other teams access when one fails', async () => {
+    const plain = mockMutate.getMockImplementation()!
+    mockMutate.mockImplementation(async (options) => {
+      if (options.mutation === 'AddTeamAppsOp' && options.variables.teamId === 'platform')
+        throw new Error("You don't have access to this team")
+      return plain(options)
+    })
+
+    const created = await create({
+      teams: [
+        { teamId: 'platform', environments: [0] },
+        { teamId: 'frontend', environments: [0] },
+      ],
+    })
+
+    expect(sent('AddTeamAppsOp').map(({ teamId }) => teamId)).toEqual(['platform', 'frontend'])
+    expect(created.teamsGiven).toBe(false)
+  })
+
+  it('imports secrets before giving anyone access', async () => {
+    await create({
+      secrets: [
+        {
+          environment: 0,
+          secrets: [secretOf('API_KEY', 'v')],
+        },
+      ],
+      access: [{ account: priya, memberType: MemberType.User, environments: [0] }],
+      teams: [{ teamId: 'platform', environments: [0] }],
+    })
+
+    const order = mockMutate.mock.calls.map(([{ mutation }]) => mutation)
+    expect(order.slice(order.indexOf('BulkProcessSecrets'))).toEqual([
+      'BulkProcessSecrets',
+      'BulkAddMembersToApp',
+      'InitAppSyncing',
+      'AddTeamAppsOp',
     ])
   })
 
