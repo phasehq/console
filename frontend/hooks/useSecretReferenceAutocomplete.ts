@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { SecretReferenceContext } from '@/contexts/secretReferenceContext'
 import {
   ReferenceContext,
+  ReferenceOrigin,
   ReferenceSuggestion,
   getActiveReferenceToken,
   computeSuggestions,
@@ -15,6 +16,9 @@ interface UseSecretReferenceAutocompleteOptions {
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
   onChange: (newValue: string) => void
   currentSecretKey?: string
+  /** The env and folder of the value: a local reference resolves there */
+  envId?: string
+  path?: string
 }
 
 export function useSecretReferenceAutocomplete({
@@ -23,6 +27,8 @@ export function useSecretReferenceAutocomplete({
   textareaRef,
   onChange,
   currentSecretKey,
+  envId,
+  path,
 }: UseSecretReferenceAutocompleteOptions) {
   const context = useContext(SecretReferenceContext)
   const [isOpen, setIsOpen] = useState(false)
@@ -36,6 +42,9 @@ export function useSecretReferenceAutocomplete({
   // Use a ref for context so the rAF callback always reads the latest
   const contextRef = useRef<ReferenceContext>(context)
   contextRef.current = context
+
+  const originRef = useRef<ReferenceOrigin>({})
+  originRef.current = { key: currentSecretKey, envId, path }
 
   const updateSuggestions = useCallback(() => {
     if (!isRevealed || !isFocusedRef.current) {
@@ -57,7 +66,7 @@ export function useSecretReferenceAutocomplete({
       return
     }
 
-    const newSuggestions = computeSuggestions(token, contextRef.current, currentSecretKey)
+    const newSuggestions = computeSuggestions(token, contextRef.current, originRef.current)
 
     if (newSuggestions.length === 0) {
       setIsOpen(false)
@@ -67,7 +76,7 @@ export function useSecretReferenceAutocomplete({
     setSuggestions(newSuggestions)
     setActiveIndex(0)
     setIsOpen(true)
-  }, [value, isRevealed, textareaRef, currentSecretKey])
+  }, [value, isRevealed, textareaRef])
 
   // Re-compute suggestions when context data changes (e.g., orgApps loads asynchronously)
   useEffect(() => {
@@ -133,7 +142,7 @@ export function useSecretReferenceAutocomplete({
       const token = getActiveReferenceToken(value, cursorPos)
       if (!token) return
 
-      const url = getSuggestionUrl(suggestion, token, contextRef.current)
+      const url = getSuggestionUrl(suggestion, token, contextRef.current, originRef.current)
       if (url) {
         window.open(url, '_blank')
       }
