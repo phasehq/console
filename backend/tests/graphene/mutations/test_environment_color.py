@@ -79,7 +79,7 @@ def update():
             patch(f"{_M}.get_resolver_request_meta", return_value=("127.0.0.1", "pytest"))
         )
 
-        env = MagicMock(id="env-prod", color="#ef4444")
+        env = MagicMock(id="env-prod", color="#ef4444", is_primary=False)
         env.name = "Production"
         m.env = env
         m.Environment.objects.get.return_value = env
@@ -112,8 +112,8 @@ def test_a_colour_alone_is_written_without_saving_the_environment(update):
 
     event = update.log_audit_event.call_args.kwargs
     assert event["description"] == "Updated environment 'Production'"
-    assert event["old_values"] == {"name": "Production", "color": "#ef4444"}
-    assert event["new_values"] == {"name": "Production", "color": "#10b981"}
+    assert event["old_values"] == {"name": "Production", "color": "#ef4444", "is_primary": False}
+    assert event["new_values"] == {"name": "Production", "color": "#10b981", "is_primary": False}
 
 
 def test_a_blank_colour_goes_back_to_the_default(update):

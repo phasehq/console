@@ -606,10 +606,22 @@ class Environment(models.Model):
     # Deletion was asked for at once: no grace period, so no restore.
     # db_default: a backend from before this column can still insert rows.
     skip_grace_period = models.BooleanField(default=False, db_default=False)
+    # The App's primary environment, like a repository's main branch: values
+    # other environments share with it are flagged. At most one per App.
+    is_primary = models.BooleanField(default=False, db_default=False)
 
     # Declared first, so it is the default manager.
     objects = EnvironmentManager()
     all_objects = models.Manager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["app"],
+                condition=models.Q(is_primary=True),
+                name="unique_primary_environment_per_app",
+            )
+        ]
 
     def save(self, *args, **kwargs):
         kwargs["update_fields"] = _without_deletion_lock(

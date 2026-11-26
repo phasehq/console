@@ -79,6 +79,8 @@ class EnvironmentInput(graphene.InputObjectType):
     wrapped_salt = graphene.String(required=True)
     identity_key = graphene.String(required=True)
     color = graphene.String(required=False)
+    # Unset: the production environment is primary, unless the App has one
+    is_primary = graphene.Boolean(required=False)
 
 
 class EnvironmentKeyInput(graphene.InputObjectType):
@@ -146,6 +148,49 @@ def _check_environment_name_is_free(app, name, exclude_id=None):
         )
     if conflict:
         raise GraphQLError("An Environment with this name already exists in this App!")
+
+
+def _primary_on_create(app, env_type, requested):
+    """Whether a new environment is its App's primary one. Call inside the
+    transaction that creates it: the App's environments stay locked until then,
+    so two new ones can't both become primary. A client that doesn't choose
+    gets what the editor had before: the production environment, unless the
+    App already has a primary one."""
+    has_primary = any(
+        env.is_primary
+        for env in Environment.all_objects.select_for_update().filter(app=app)
+    )
+    if requested is None:
+        return (env_type or "").lower() == "prod" and not has_primary
+    if requested and has_primary:
+        raise GraphQLError(
+            "This App already has a primary environment. Change it in that environment's settings."
+        )
+    return bool(requested)
+
+
+def _set_primary(user, environment, is_primary):
+    """Makes `environment` its App's primary environment, or stops it being
+    one. Moving the designation takes it from the current primary environment,
+    so the user must hold that one too."""
+    with transaction.atomic():
+        # Locked until the commit: two moves at once can't leave two primaries
+        siblings = Environment.all_objects.select_for_update().filter(
+            app_id=environment.app_id
+        )
+        current = next(
+            (env for env in siblings if env.is_primary and env.id != environment.id),
+            None,
+        )
+        if is_primary and current is not None:
+            if not user_can_access_environment(user.userId, current.id):
+                raise GraphQLError(
+                    f"You don't have access to {current.name}, the current primary environment"
+                )
+            Environment.all_objects.filter(id=current.id).update(is_primary=False)
+        # update(), not save(): save() re-runs the environment's syncs
+        Environment.all_objects.filter(id=environment.id).update(is_primary=is_primary)
+    environment.is_primary = is_primary
 
 
 class CreateEnvironmentMutation(graphene.Mutation):
@@ -259,6 +304,9 @@ class CreateEnvironmentMutation(graphene.Mutation):
                 )
 
         with transaction.atomic():
+            is_primary = _primary_on_create(
+                app, environment_data.env_type, getattr(environment_data, "is_primary", None)
+            )
             environment = Environment.objects.create(
                 app=app,
                 name=environment_data.name,
@@ -268,6 +316,7 @@ class CreateEnvironmentMutation(graphene.Mutation):
                 identity_key=environment_data.identity_key,
                 wrapped_seed=environment_data.wrapped_seed,
                 wrapped_salt=environment_data.wrapped_salt,
+                is_primary=is_primary,
             )
 
             # Add the org owner to the environment
@@ -330,11 +379,13 @@ class RenameEnvironmentMutation(graphene.Mutation):
         environment_id = graphene.ID(required=True)
         name = graphene.String(required=True)
         color = graphene.String(required=False)
+        # None = unchanged
+        is_primary = graphene.Boolean(required=False)
 
     environment = graphene.Field(EnvironmentType)
 
     @classmethod
-    def mutate(cls, root, info, environment_id, name, color=None):
+    def mutate(cls, root, info, environment_id, name, color=None, is_primary=None):
         user = info.context.user
         environment = Environment.objects.get(id=environment_id)
         org = environment.app.organisation
@@ -357,15 +408,22 @@ class RenameEnvironmentMutation(graphene.Mutation):
 
             _check_environment_name_is_free(environment.app, name, environment_id)
 
-        old_name = environment.name
-        old_color = environment.color
-
         # None = unchanged; '' = reset to the client's name-derived default
+        new_color = environment.color
         if color is not None:
             new_color = color.strip() or None
             if new_color and not re.match(HEX_COLOR_REGEX, new_color):
                 raise GraphQLError("Environment color must be a hex value like #10b981")
-            environment.color = new_color
+
+        old_name = environment.name
+        old_color = environment.color
+        old_primary = environment.is_primary
+
+        # After every other check: a request refused there must not have moved the designation
+        if is_primary is not None and is_primary != environment.is_primary:
+            _set_primary(user, environment, is_primary)
+
+        environment.color = new_color
 
         environment.name = name
         environment.updated_at = timezone.now()
@@ -379,11 +437,16 @@ class RenameEnvironmentMutation(graphene.Mutation):
 
         actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
         ip_address, user_agent = get_resolver_request_meta(info.context)
-        description = (
-            f"Renamed environment '{old_name}' to '{name}'"
-            if name_changed
-            else f"Updated environment '{old_name}'"
-        )
+        if name_changed:
+            description = f"Renamed environment '{old_name}' to '{name}'"
+        elif environment.is_primary != old_primary:
+            description = (
+                f"Made '{old_name}' the primary environment"
+                if environment.is_primary
+                else f"'{old_name}' is no longer the primary environment"
+            )
+        else:
+            description = f"Updated environment '{old_name}'"
         log_audit_event(
             organisation=org,
             event_type="U",
@@ -393,8 +456,12 @@ class RenameEnvironmentMutation(graphene.Mutation):
             actor_id=actor_id,
             actor_metadata=actor_metadata,
             resource_metadata={"name": name},
-            old_values={"name": old_name, "color": old_color},
-            new_values={"name": name, "color": environment.color},
+            old_values={"name": old_name, "color": old_color, "is_primary": old_primary},
+            new_values={
+                "name": name,
+                "color": environment.color,
+                "is_primary": environment.is_primary,
+            },
             description=description,
             ip_address=ip_address,
             user_agent=user_agent,

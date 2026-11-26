@@ -327,6 +327,13 @@ def create_environment(
 
     # --- Persist everything atomically ---
     with transaction.atomic():
+        # The production environment is the App's primary one, unless it has
+        # one. Its environments stay locked until the commit, so two new ones
+        # can't both become primary.
+        is_primary = type_lower == "prod" and not any(
+            env.is_primary
+            for env in Environment.all_objects.select_for_update().filter(app=app)
+        )
         environment = Environment.objects.create(
             app=app,
             name=name,
@@ -335,6 +342,7 @@ def create_environment(
             identity_key=env_pub,
             wrapped_seed=owner_wrapped_seed,
             wrapped_salt=owner_wrapped_salt,
+            is_primary=is_primary,
         )
 
         # EnvironmentKey for each global-access member

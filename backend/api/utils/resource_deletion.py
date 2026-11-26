@@ -260,7 +260,9 @@ def schedule_environment_deletion(environment, immediately=False):
     a worker is free when `immediately`."""
     Environment = apps.get_model("api", "Environment")
 
-    values = _scheduled(timezone.now(), immediately)
+    # A primary environment on its way out stops being one: another can take
+    # its place, and a restore brings it back as an ordinary environment.
+    values = {**_scheduled(timezone.now(), immediately), "is_primary": False}
     # update(), not save(): Environment.save() triggers the environment's syncs.
     scheduled = Environment.all_objects.filter(
         id=environment.id, deleted_at__isnull=True
