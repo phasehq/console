@@ -26,7 +26,7 @@ from api.utils.rest import (
 )
 from api.throttling import PlanBasedRateThrottle
 from api.utils.access.middleware import IsIPAllowed
-from backend.quotas import can_add_environment, can_use_custom_envs
+from backend.quotas import can_add_environment
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -104,7 +104,6 @@ class PublicEnvironmentsView(APIView):
 
     def post(self, request, *args, **kwargs):
         app = request.auth["app"]
-        org = app.organisation
 
         name = request.data.get("name")
 
@@ -117,12 +116,6 @@ class PublicEnvironmentsView(APIView):
         if not can_add_environment(app):
             return Response(
                 {"error": "Environment quota exceeded for this app's plan."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        if not can_use_custom_envs(org):
-            return Response(
-                {"error": "Custom environments are not available on the Free plan."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -241,7 +234,6 @@ class PublicEnvironmentDetailView(APIView):
 
     def put(self, request, env_id, *args, **kwargs):
         app = request.auth["app"]
-        org = app.organisation
         env = self._get_environment(env_id, app)
         if not env:
             return Response(
@@ -264,12 +256,6 @@ class PublicEnvironmentDetailView(APIView):
                     "hyphens and underscores are allowed (max 64 characters)."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if env.env_type not in ("dev", "staging", "prod") and not can_use_custom_envs(org):
-            return Response(
-                {"error": "Custom environments are not available on the Free plan."},
-                status=status.HTTP_403_FORBIDDEN,
             )
 
         # Check for duplicate name (case-insensitive, excluding self)
@@ -331,12 +317,6 @@ class PublicEnvironmentDetailView(APIView):
                     "This environment contains rotating secrets. You need "
                     "permission to delete rotating secrets to remove it."
                 )
-
-        if env.env_type not in ("dev", "staging", "prod") and not can_use_custom_envs(org):
-            return Response(
-                {"error": "Custom environments are not available on the Free plan."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
 
         # Locked now and purged by a background job after the grace period.
         env_name = env.name

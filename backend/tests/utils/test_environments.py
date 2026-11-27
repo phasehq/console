@@ -650,6 +650,57 @@ class TestCreateEnvironment:
     @patch("api.utils.environments.env_keypair")
     @patch("api.utils.environments._generate_env_salt")
     @patch("api.utils.environments._generate_env_seed")
+    def test_a_production_environment_is_primary_unless_the_app_has_one(
+        self,
+        mock_seed,
+        mock_salt,
+        mock_keypair,
+        mock_wrap_user,
+        mock_wrap_server,
+        mock_get_members,
+        mock_get_ssk_sa,
+        mock_env_model,
+        mock_env_key_model,
+        mock_server_key_model,
+        mock_transaction,
+    ):
+        mock_seed.return_value = "aa" * 32
+        mock_salt.return_value = "bb" * 32
+        mock_keypair.return_value = ("pub", "priv")
+        mock_wrap_server.return_value = ("ws", "wsa", "pk")
+        mock_get_ssk_sa.return_value = []
+        owner = MagicMock()
+        owner.id = "owner-id"
+        owner.identity_key = "key"
+        owner.role.managed_key = "owner"
+        mock_get_members.return_value = [owner]
+        mock_wrap_user.return_value = ("ws", "wsa")
+        mock_env_model.all_objects.filter.return_value.aggregate.return_value = {
+            "index__max": 2
+        }
+        locked = mock_env_model.all_objects.select_for_update.return_value.filter
+
+        def primary_after(env_type, siblings):
+            locked.return_value = siblings
+            create_environment(MagicMock(), f"env-{env_type}", env_type)
+            return mock_env_model.objects.create.call_args[1]["is_primary"]
+
+        assert primary_after("prod", []) is True
+        assert primary_after("prod", [MagicMock(is_primary=True)]) is False
+        assert primary_after("custom", []) is False
+        assert primary_after("dev", []) is False
+
+    @patch("api.utils.environments.transaction")
+    @patch("api.utils.environments.ServerEnvironmentKey")
+    @patch("api.utils.environments.EnvironmentKey")
+    @patch("api.utils.environments.Environment")
+    @patch("api.utils.environments.get_ssk_service_accounts_for_app")
+    @patch("api.utils.environments.get_global_access_members")
+    @patch("api.utils.environments._wrap_for_server")
+    @patch("api.utils.environments._wrap_for_user")
+    @patch("api.utils.environments.env_keypair")
+    @patch("api.utils.environments._generate_env_salt")
+    @patch("api.utils.environments._generate_env_seed")
     def test_env_type_indices(
         self,
         mock_seed,

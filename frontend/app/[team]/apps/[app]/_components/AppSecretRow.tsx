@@ -180,17 +180,19 @@ const AppSecretRowComponent = ({
   // Rotating values belong to the engine; delete them through its manage dialog
   const userCanDeleteSecrets = !isRotating && (canDeleteSecrets || secretIsNew)
 
-  const prodEntry = clientAppSecret.envs.find(
-    (entry) => entry.env.envType?.toLowerCase() === 'prod'
-  )
+  // The App's primary environment, like a repository's main branch: other envs' values that repeat
+  // its own are marked. Read from the columns, which change when it does; the row's own envs may not
+  const primaryEnv = columns.find((column) => column.env.isPrimary && !column.deleted)?.env ?? null
+  const primarySecret = primaryEnv ? clientByEnv.get(primaryEnv.id)?.secret : null
   // Plain secrets only: configs repeat across envs by design, and sealed values can't be read to compare
   const isPlainSecret = (secret?: EnvEntry['secret']) =>
     Boolean(secret) && (secret!.type ?? ApiSecretTypeChoices.Secret) === ApiSecretTypeChoices.Secret
-  const repeatsProd = (entry: EnvEntry) =>
-    entry !== prodEntry &&
+  const repeatsPrimary = (entry: EnvEntry) =>
+    primaryEnv !== null &&
+    entry.env.id !== primaryEnv.id &&
     isPlainSecret(entry.secret) &&
-    isPlainSecret(prodEntry?.secret) &&
-    entry.secret!.value === prodEntry!.secret!.value
+    isPlainSecret(primarySecret) &&
+    entry.secret!.value === primarySecret!.value
 
   const keyInputRef = useRef<HTMLInputElement>(null)
 
@@ -454,7 +456,7 @@ const AppSecretRowComponent = ({
               serverEntry={serverEntry}
               rowKey={clientAppSecret.key}
               keyIsStagedForDelete={stagedForDelete}
-              sameAsProd={repeatsProd(clientEntry) ? (prodEntry!.env as EnvironmentType) : null}
+              sameAsPrimary={repeatsPrimary(clientEntry) ? primaryEnv : null}
               inRotatingGroup={isRotating}
               envRevealed={revealedEnvIds.has(env.id)}
               revealOnHover={revealOnHover}

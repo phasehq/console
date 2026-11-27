@@ -40,9 +40,6 @@ def env_mocks():
         stack.enter_context(
             patch(f"{ENV_MUTATIONS}.user_has_permission", return_value=True)
         )
-        stack.enter_context(
-            patch(f"{ENV_MUTATIONS}.can_use_custom_envs", return_value=True)
-        )
         m.user_can_access_environment = stack.enter_context(
             patch(f"{ENV_MUTATIONS}.user_can_access_environment")
         )

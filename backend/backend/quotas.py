@@ -14,7 +14,7 @@ PLAN_CONFIG = {
         "name": "Free",
         "max_users": 5 if CLOUD_HOSTED else None,
         "max_apps": 3 if CLOUD_HOSTED else None,
-        "max_envs_per_app": 3,
+        "max_envs_per_app": 3 if CLOUD_HOSTED else None,
     },
     "PR": {
         "name": "Pro",
@@ -134,10 +134,6 @@ def can_add_environments(organisation, count):
     if max_envs is None:
         return True
     return count <= max_envs
-
-
-def can_use_custom_envs(organisation):
-    return organisation.plan != "FR"
 
 
 def can_use_teams(organisation):

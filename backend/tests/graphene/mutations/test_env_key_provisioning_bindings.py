@@ -235,7 +235,6 @@ def _patch_create_environment(monkeypatch, admin_members, global_access=True):
     monkeypatch.setattr(
         mutations, "role_has_global_access", MagicMock(return_value=global_access)
     )
-    monkeypatch.setattr(mutations, "can_use_custom_envs", MagicMock(return_value=True))
     monkeypatch.setattr(mutations, "can_add_environment", MagicMock(return_value=True))
     monkeypatch.setattr(
         mutations,

@@ -452,19 +452,6 @@ class TestPublicAppsViewCreate:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Duplicate environment name" in response.data["error"]
 
-    @patch("api.views.apps.can_use_custom_envs", return_value=False)
-    @patch("api.views.apps.user_has_permission", return_value=True)
-    @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)
-    @patch("api.views.apps.IsIPAllowed.has_permission", return_value=True)
-    def test_create_custom_envs_free_plan_returns_403(self, _ip, _throttle, _perm, _custom):
-        request = _build_list_request(
-            "post", "/public/v1/apps/", self.org,
-            data={"name": "my-app", "environments": ["test", "live"]},
-        )
-        response = self.view(request)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-        assert "Free plan" in response.data["error"]
-
     @patch("api.views.apps.AppSerializer")
     @patch("api.views.apps.create_environment")
     @patch("api.views.apps.OrganisationMember")
@@ -473,12 +460,11 @@ class TestPublicAppsViewCreate:
     @patch("api.views.apps.transaction")
     @patch("api.views.apps.can_add_environments", return_value=True)
     @patch("api.views.apps.can_add_app", return_value=True)
-    @patch("api.views.apps.can_use_custom_envs", return_value=True)
     @patch("api.views.apps.user_has_permission", return_value=True)
     @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.apps.IsIPAllowed.has_permission", return_value=True)
     def test_create_app_with_custom_envs(
-        self, _ip, _throttle, _perm, _custom, _quota, _env_quota,
+        self, _ip, _throttle, _perm, _quota, _env_quota,
         _txn, mock_app_model, mock_role, mock_org_member, mock_create_env, mock_serializer,
     ):
         new_app = _make_app(org=self.org, name="test-app")
@@ -504,15 +490,14 @@ class TestPublicAppsViewCreate:
 
     @patch("api.views.apps.create_environment")
     @patch("api.views.apps.can_add_environments", return_value=False)
-    @patch("api.views.apps.can_use_custom_envs", return_value=True)
     @patch("api.views.apps.user_has_permission", return_value=True)
     @patch("api.views.apps.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.apps.IsIPAllowed.has_permission", return_value=True)
     def test_create_custom_envs_quota_exceeded_returns_403(
-        self, _ip, _throttle, _perm, _custom, _env_quota, mock_create_env
+        self, _ip, _throttle, _perm, _env_quota, mock_create_env
     ):
-        # A paid org (custom envs allowed) requesting more environments than its
-        # per-app limit is rejected before any environment is created.
+        # More environments than the plan's per-app limit are rejected before
+        # any environment is created.
         request = _build_list_request(
             "post", "/public/v1/apps/", self.org,
             data={"name": "my-app", "environments": ["e1", "e2", "e3", "e4"]},

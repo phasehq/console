@@ -239,6 +239,8 @@ export const columnsSignature = (columns: GridColumn[]) =>
         c.env.id,
         c.env.name,
         c.env.color,
+        // Rows mark the values that repeat the primary environment's
+        c.env.isPrimary ? 1 : 0,
         c.checked ? 1 : 0,
         c.pending ? 1 : 0,
         c.deleted

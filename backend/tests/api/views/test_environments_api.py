@@ -212,13 +212,12 @@ class TestPublicEnvironmentsViewCreate:
 
     @patch("api.views.environments.EnvironmentSerializer")
     @patch("api.views.environments.create_environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=True)
     @patch("api.views.environments.can_add_environment", return_value=True)
     @patch("api.views.environments.user_has_permission", return_value=True)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
     def test_create_environment_success(
-        self, _ip, _throttle, _perm, _quota, _custom, mock_create, mock_serializer
+        self, _ip, _throttle, _perm, _quota, mock_create, mock_serializer
     ):
         new_env = _make_env(app=self.app, name="test-env", env_type="custom", index=3)
         mock_create.return_value = new_env
@@ -249,13 +248,12 @@ class TestPublicEnvironmentsViewCreate:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     @patch("api.views.environments.create_environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=True)
     @patch("api.views.environments.can_add_environment", return_value=True)
     @patch("api.views.environments.user_has_permission", return_value=True)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
     def test_create_invalid_name_returns_400(
-        self, _ip, _throttle, _perm, _quota, _custom, mock_create
+        self, _ip, _throttle, _perm, _quota, mock_create
     ):
         mock_create.side_effect = ValueError("Environment name is invalid.")
 
@@ -267,13 +265,12 @@ class TestPublicEnvironmentsViewCreate:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     @patch("api.views.environments.create_environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=True)
     @patch("api.views.environments.can_add_environment", return_value=True)
     @patch("api.views.environments.user_has_permission", return_value=True)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
     def test_create_duplicate_name_returns_400(
-        self, _ip, _throttle, _perm, _quota, _custom, mock_create
+        self, _ip, _throttle, _perm, _quota, mock_create
     ):
         mock_create.side_effect = ValueError("An environment named 'staging' already exists")
 
@@ -292,21 +289,6 @@ class TestPublicEnvironmentsViewCreate:
         request = _build_request(
             "post", "/public/v1/environments/", self.app,
             data={"name": "new-env"},
-        )
-        response = self.view(request)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-    @patch("api.views.environments.can_use_custom_envs", return_value=False)
-    @patch("api.views.environments.can_add_environment", return_value=True)
-    @patch("api.views.environments.user_has_permission", return_value=True)
-    @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
-    @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
-    def test_create_custom_env_free_plan_returns_403(
-        self, _ip, _throttle, _perm, _quota, _custom
-    ):
-        request = _build_request(
-            "post", "/public/v1/environments/", self.app,
-            data={"name": "my-env"},
         )
         response = self.view(request)
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -399,7 +381,6 @@ class TestPublicEnvironmentDetailViewUpdate:
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.EnvironmentSerializer")
     @patch("api.views.environments.Environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=True)
     @patch("api.views.environments.user_has_permission", return_value=True)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
@@ -408,7 +389,6 @@ class TestPublicEnvironmentDetailViewUpdate:
         _ip,
         _throttle,
         _perm,
-        _custom,
         mock_env_model,
         mock_serializer,
         _access,
@@ -432,11 +412,10 @@ class TestPublicEnvironmentDetailViewUpdate:
 
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.Environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=True)
     @patch("api.views.environments.user_has_permission", return_value=True)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
-    def test_update_invalid_name_returns_400(self, _ip, _throttle, _perm, _custom, mock_env_model, _access):
+    def test_update_invalid_name_returns_400(self, _ip, _throttle, _perm, mock_env_model, _access):
         env = _make_env(app=self.app, name="staging", env_type="staging", index=1)
         mock_env_model.objects.select_related.return_value.get.return_value = env
 
@@ -457,12 +436,11 @@ class TestPublicEnvironmentDetailViewUpdate:
     )
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.Environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=True)
     @patch("api.views.environments.user_has_permission", return_value=True)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
     def test_update_duplicate_name_returns_409(
-        self, _ip, _throttle, _perm, _custom, mock_env_model, _access, conflict, message
+        self, _ip, _throttle, _perm, mock_env_model, _access, conflict, message
     ):
         env = _make_env(app=self.app, name="staging", env_type="staging", index=1)
         mock_env_model.objects.select_related.return_value.get.return_value = env
@@ -479,25 +457,6 @@ class TestPublicEnvironmentDetailViewUpdate:
         assert response.status_code == status.HTTP_409_CONFLICT
         assert message in response.data["error"]
         env.save.assert_not_called()
-
-    @patch("api.views.environments.user_can_access_environment", return_value=True)
-    @patch("api.views.environments.Environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=False)
-    @patch("api.views.environments.user_has_permission", return_value=True)
-    @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
-    @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
-    def test_update_custom_env_free_plan_returns_403(
-        self, _ip, _throttle, _perm, _custom, mock_env_model, _access
-    ):
-        env = _make_env(app=self.app, name="my-env", env_type="custom", index=3)
-        mock_env_model.objects.select_related.return_value.get.return_value = env
-
-        request = _build_request(
-            "put", f"/public/v1/environments/{env.id}/", self.app,
-            data={"name": "renamed"},
-        )
-        response = self.view(request, env_id=env.id)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.Environment")
@@ -566,7 +525,6 @@ class TestPublicEnvironmentDetailViewDelete:
     @patch("api.views.environments.user_can_access_app", return_value=True)
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.Environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=True)
     @patch("api.views.environments.user_has_permission")
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
@@ -575,7 +533,6 @@ class TestPublicEnvironmentDetailViewDelete:
         _ip,
         _throttle,
         permission,
-        _custom,
         mock_env_model,
         _env_access,
         _app_access,
@@ -607,12 +564,11 @@ class TestPublicEnvironmentDetailViewDelete:
 
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.Environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=True)
     @patch("api.views.environments.user_has_permission", return_value=True)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
     def test_delete_with_rotating_secrets_and_the_permission(
-        self, _ip, _throttle, _perm, _custom, mock_env_model, _access
+        self, _ip, _throttle, _perm, mock_env_model, _access
     ):
         env = _make_env(app=self.app, name="test-env", env_type="custom", index=3)
         mock_env_model.objects.select_related.return_value.get.return_value = env
@@ -625,11 +581,10 @@ class TestPublicEnvironmentDetailViewDelete:
 
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.Environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=True)
     @patch("api.views.environments.user_has_permission", return_value=True)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
-    def test_delete_environment_success(self, _ip, _throttle, _perm, _custom, mock_env_model, _access):
+    def test_delete_environment_success(self, _ip, _throttle, _perm, mock_env_model, _access):
         env = _make_env(app=self.app, name="test-env", env_type="custom", index=3)
         mock_env_model.objects.select_related.return_value.get.return_value = env
 
@@ -653,12 +608,11 @@ class TestPublicEnvironmentDetailViewDelete:
 
     @patch("api.views.environments.user_can_access_environment", return_value=True)
     @patch("api.views.environments.Environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=True)
     @patch("api.views.environments.user_has_permission", return_value=True)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
     def test_delete_environment_already_scheduled_returns_409(
-        self, _ip, _throttle, _perm, _custom, mock_env_model, _access
+        self, _ip, _throttle, _perm, mock_env_model, _access
     ):
         env = _make_env(app=self.app, name="test-env", env_type="custom", index=3)
         mock_env_model.objects.select_related.return_value.get.return_value = env
@@ -684,22 +638,6 @@ class TestPublicEnvironmentDetailViewDelete:
         request = _build_request("delete", "/public/v1/environments/fake/", self.app)
         response = self.view(request, env_id=uuid.uuid4())
         assert response.status_code == status.HTTP_404_NOT_FOUND
-
-    @patch("api.views.environments.user_can_access_environment", return_value=True)
-    @patch("api.views.environments.Environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=False)
-    @patch("api.views.environments.user_has_permission", return_value=True)
-    @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
-    @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
-    def test_delete_custom_env_free_plan_returns_403(
-        self, _ip, _throttle, _perm, _custom, mock_env_model, _access
-    ):
-        env = _make_env(app=self.app, name="my-env", env_type="custom", index=3)
-        mock_env_model.objects.select_related.return_value.get.return_value = env
-
-        request = _build_request("delete", f"/public/v1/environments/{env.id}/", self.app)
-        response = self.view(request, env_id=env.id)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @patch("api.views.environments.user_can_access_environment", return_value=False)
     @patch("api.views.environments.Environment")
@@ -880,13 +818,12 @@ class TestServiceAccountAppMembership:
 
     @patch("api.views.environments.EnvironmentSerializer")
     @patch("api.views.environments.create_environment")
-    @patch("api.views.environments.can_use_custom_envs", return_value=True)
     @patch("api.views.environments.can_add_environment", return_value=True)
     @patch("api.views.environments.user_has_permission", return_value=True)
     @patch("api.views.environments.PlanBasedRateThrottle.allow_request", return_value=True)
     @patch("api.views.environments.IsIPAllowed.has_permission", return_value=True)
     def test_sa_app_member_can_create(
-        self, _ip, _throttle, _perm, _quota, _custom, mock_create, mock_serializer
+        self, _ip, _throttle, _perm, _quota, mock_create, mock_serializer
     ):
         new_env = _make_env(app=self.app, name="test-env", env_type="custom", index=3)
         mock_create.return_value = new_env

@@ -624,6 +624,21 @@ class TestScheduleEnvironmentDeletion:
         save.assert_not_called()
         delete.assert_not_called()
 
+    def test_a_primary_environment_stops_being_one(self):
+        """Another environment can take its place meanwhile, and a restore
+        brings it back as an ordinary one."""
+        model = MagicMock()
+        model.all_objects.filter.return_value.update.return_value = 1
+        environment = _environment()
+        environment.is_primary = True
+
+        with _models(Environment=model):
+            deletion.schedule_environment_deletion(environment)
+
+        update = model.all_objects.filter.return_value.update.call_args.kwargs
+        assert update["is_primary"] is False
+        assert environment.is_primary is False
+
     def test_skips_the_grace_period_when_asked(self):
         model = MagicMock()
         model.all_objects.filter.return_value.update.return_value = 1

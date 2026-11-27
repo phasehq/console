@@ -844,6 +844,7 @@ class EnvironmentType(DjangoObjectType):
             "env_type",
             "color",
             "index",
+            "is_primary",
             "identity_key",
             "wrapped_seed",
             "wrapped_salt",

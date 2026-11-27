@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { FaCheck } from 'react-icons/fa'
+import { FaCheck, FaMinus } from 'react-icons/fa'
 
 const sizeStyles = {
   sm: { box: 'h-4 w-4', icon: 'text-[8px]', offset: 'mt-[3px]' },
@@ -9,22 +9,27 @@ const sizeStyles = {
 
 export const Checkbox = (props: {
   checked: boolean
+  /** Some of what it stands for is checked: shown as a dash, and a click checks all of it */
+  indeterminate?: boolean
   onChange: (checked: boolean) => void
   label?: string
   /** Names the checkbox for assistive tech when it has no visible label */
   'aria-label'?: string
+  title?: string
   disabled?: boolean
   size?: 'sm' | 'md' | 'lg'
 }) => {
-  const { checked, onChange, label, disabled, size = 'md' } = props
+  const { checked, indeterminate = false, onChange, label, disabled, size = 'md' } = props
   const styles = sizeStyles[size]
+  const mixed = indeterminate && !checked
 
   return (
     <button
       type="button"
       role="checkbox"
-      aria-checked={checked}
+      aria-checked={mixed ? 'mixed' : checked}
       aria-label={props['aria-label']}
+      title={props.title}
       disabled={disabled}
       onClick={(e) => {
         e.stopPropagation()
@@ -37,12 +42,13 @@ export const Checkbox = (props: {
           'flex items-center justify-center shrink-0 rounded-full ring-1 ring-inset transition ease',
           styles.box,
           label && styles.offset,
-          checked
+          checked || mixed
             ? 'bg-emerald-500 ring-emerald-500 dark:bg-emerald-400/20 dark:ring-emerald-400/20'
             : 'bg-zinc-100 dark:bg-zinc-800 ring-neutral-500/40 group-hover:ring-neutral-500/60'
         )}
       >
         {checked && <FaCheck className={clsx('text-white dark:text-emerald-400', styles.icon)} />}
+        {mixed && <FaMinus className={clsx('text-white dark:text-emerald-400', styles.icon)} />}
       </div>
       {label && <span className="text-xs text-neutral-500 text-left select-none">{label}</span>}
     </button>

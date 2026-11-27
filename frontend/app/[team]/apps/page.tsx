@@ -64,12 +64,7 @@ export default function AppsHome() {
       </div>
 
       {allowNewApp() && organisation && (
-        <NewAppDialog
-          organisation={organisation}
-          appCount={apps?.length}
-          ref={dialogRef}
-          showButton={false}
-        />
+        <NewAppDialog organisation={organisation} ref={dialogRef} showButton={false} />
       )}
       {userCanViewApps ? (
         <>
