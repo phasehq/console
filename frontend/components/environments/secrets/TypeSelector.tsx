@@ -13,10 +13,13 @@ export const TypeSelector = ({
   currentType,
   onChange,
   disabled,
+  condensed,
 }: {
   currentType: ApiSecretTypeChoices
   onChange: (type: ApiSecretTypeChoices) => void
   disabled?: boolean
+  /** Icon-only segments for tight containers (e.g. the cross-env key menu) */
+  condensed?: boolean
 }) => {
   const isLocked = currentType === ApiSecretTypeChoices.Sealed && disabled
   const containerRef = useRef<HTMLDivElement>(null)
@@ -54,12 +57,12 @@ export const TypeSelector = ({
       ? 'bg-red-500/20'
       : currentType === ApiSecretTypeChoices.Config
         ? 'bg-blue-500/20'
-        : 'bg-zinc-300 dark:bg-zinc-600'
+        : 'bg-zinc-100 dark:bg-zinc-600'
 
   return (
     <div
       ref={containerRef}
-      className="relative flex items-center gap-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 p-0.5 font-sans"
+      className="relative flex items-center gap-0.5 rounded-full bg-zinc-300/60 dark:bg-zinc-900/40 p-0.5 font-sans"
     >
       {indicator && (
         <div
@@ -89,7 +92,8 @@ export const TypeSelector = ({
                 : `Change secret type to ${label}`
             }
             className={clsx(
-              'relative z-[1] flex items-center gap-1 px-2 py-1 2xl:py-1.5 rounded-full text-2xs font-medium transition-colors duration-200',
+              'relative z-[1] flex items-center gap-1 rounded-full text-2xs font-medium transition-colors duration-200',
+              condensed ? 'px-1.5 py-2' : 'px-2 py-1 2xl:py-1.5',
               isActive
                 ? value === ApiSecretTypeChoices.Sealed
                   ? 'text-red-600 dark:text-red-400'
@@ -100,8 +104,8 @@ export const TypeSelector = ({
               isDisabled && 'opacity-50 cursor-not-allowed'
             )}
           >
-            <Icon className="text-3xs" />
-            <span className="hidden 2xl:block">{label}</span>
+            <Icon className={condensed ? 'text-2xs' : 'text-3xs'} />
+            {!condensed && <span className="hidden 2xl:block">{label}</span>}
           </button>
         )
       })}

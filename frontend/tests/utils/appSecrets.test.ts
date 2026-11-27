@@ -1,0 +1,1367 @@
+import { ApiSecretTypeChoices, EnvironmentType, SecretType } from '@/apollo/graphql'
+import { AppSecret } from '@/app/[team]/apps/[app]/types'
+import {
+  alignServerRows,
+  appSecretRowIsEdited,
+  buildAppSecretRows,
+  carryRowKeys,
+  deployReferenceErrors,
+  dirtyEnvIds,
+  duplicateKeyRowIds,
+  dynamicKeyNames,
+  envSecretsEqual,
+  flattenAppSecrets,
+  groupRotatingRows,
+  mergeAppSecretsUpdate,
+  mergeImportedRows,
+  moveAppSecretRows,
+  readBackDeploy,
+  referenceKeysOf,
+  repeatedKeyToFix,
+  restoreAppSecretEntries,
+  revertAppSecretEntries,
+  rotationSourceByEnv,
+  searchedFolders,
+  selectionExport,
+  selectionTraits,
+  snapshotHasDeploy,
+  staleAppSecretEntries,
+} from '@/utils/appSecrets'
+import {
+  ReferenceContext,
+  buildInsertionText,
+  computeSuggestions,
+  getActiveReferenceToken,
+} from '@/utils/secretReferences'
+
+const dev = { id: 'dev', name: 'Development' } as EnvironmentType
+const staging = { id: 'staging', name: 'Staging' } as EnvironmentType
+const prod = { id: 'prod', name: 'Production' } as EnvironmentType
+const envs = [dev, staging, prod]
+
+const secret = (id: string, key: string, value: string, extra: Partial<SecretType> = {}) =>
+  ({
+    id,
+    key,
+    value,
+    comment: '',
+    tags: [],
+    path: '/',
+    type: ApiSecretTypeChoices.Secret,
+    ...extra,
+  }) as SecretType
+
+const row = (key: string, values: Record<string, SecretType | null>): AppSecret => ({
+  id: `app-${key}`,
+  key,
+  path: '/',
+  envs: envs.map((env) => ({ env, secret: values[env.id] ?? null })),
+})
+
+describe('envSecretsEqual', () => {
+  it('treats two missing values as equal', () => {
+    expect(envSecretsEqual(null, undefined)).toBe(true)
+  })
+
+  it('detects value, key, folder, type, comment, tag and delete-flag changes', () => {
+    const base = secret('1', 'A', 'x')
+    expect(envSecretsEqual(base, { ...base })).toBe(true)
+    expect(envSecretsEqual(base, { ...base, value: 'y' })).toBe(false)
+    expect(envSecretsEqual(base, { ...base, key: 'B' })).toBe(false)
+    expect(envSecretsEqual(base, { ...base, path: '/workers' })).toBe(false)
+    expect(envSecretsEqual(base, { ...base, type: ApiSecretTypeChoices.Config })).toBe(false)
+    expect(envSecretsEqual(base, { ...base, comment: 'note' })).toBe(false)
+    expect(
+      envSecretsEqual(base, { ...base, tags: [{ id: 't', name: 't', color: '#fff' }] } as SecretType)
+    ).toBe(false)
+    expect(envSecretsEqual(base, { ...base, stagedForDelete: true } as SecretType)).toBe(false)
+  })
+})
+
+describe('buildAppSecretRows', () => {
+  it('combines one row per key across envs, with null where a key is missing', () => {
+    const rows = buildAppSecretRows('app', [
+      { env: dev, secrets: [secret('d1', 'A', '1'), secret('d2', 'B', '2')] },
+      { env: staging, secrets: [secret('s1', 'A', '3')] },
+      { env: prod, secrets: [] },
+    ])
+
+    expect(rows.map((r) => r.id)).toEqual(['app:/:A', 'app:/:B'])
+    expect(rows[0].path).toBe('/')
+    expect(rows[0].envs.map((e) => e.secret?.id ?? null)).toEqual(['d1', 's1', null])
+    expect(rows[1].envs.map((e) => e.secret?.id ?? null)).toEqual(['d2', null, null])
+  })
+
+  it('keeps duplicate keys within an env as separate rows', () => {
+    const rows = buildAppSecretRows('app', [
+      { env: dev, secrets: [secret('d1', 'A', '1'), secret('d2', 'A', '2')] },
+      { env: staging, secrets: [secret('s1', 'A', '3')] },
+    ])
+
+    expect(rows.map((r) => r.id)).toEqual(['app:/:A', 'app:/:A#2'])
+    expect(rows[0].envs.map((e) => e.secret?.id ?? null)).toEqual(['d1', 's1'])
+    expect(rows[1].envs.map((e) => e.secret?.id ?? null)).toEqual(['d2', null])
+  })
+
+  it('keeps a key that ends in #2 apart from the second copy of a duplicated key', () => {
+    const rows = buildAppSecretRows('app', [
+      {
+        env: dev,
+        secrets: [secret('d1', 'A', '1'), secret('d2', 'A', '2'), secret('d3', 'A#2', '3')],
+      },
+    ])
+
+    expect(rows.map((r) => [r.key, r.envs[0].secret?.id])).toEqual([
+      ['A', 'd1'],
+      ['A', 'd2'],
+      ['A#2', 'd3'],
+    ])
+  })
+})
+
+describe('buildAppSecretRows with folders', () => {
+  it('keeps the same key in different folders as separate rows', () => {
+    const rows = buildAppSecretRows('app', [
+      {
+        env: dev,
+        secrets: [secret('d1', 'A', '1'), secret('d2', 'A', '2', { path: '/backend' })],
+      },
+      { env: staging, secrets: [secret('s1', 'A', '3', { path: '/backend' })] },
+    ])
+
+    expect(rows.map((r) => [r.id, r.path])).toEqual([
+      ['app:/:A', '/'],
+      ['app:/backend:A', '/backend'],
+    ])
+    expect(rows[1].envs.map((e) => e.secret?.id ?? null)).toEqual(['d2', 's1'])
+  })
+
+  it('keeps a key with a colon apart from a key in a folder whose name has one', () => {
+    const rows = buildAppSecretRows('app', [
+      {
+        env: dev,
+        secrets: [
+          secret('d1', 'Y:Z', '1', { path: '/x' }),
+          secret('d2', 'Z', '2', { path: '/x:Y' }),
+        ],
+      },
+      { env: staging, secrets: [secret('s1', 'Z', '3', { path: '/x:Y' })] },
+    ])
+
+    expect(rows.map((r) => [r.key, r.path, r.envs.map((e) => e.secret?.id ?? null)])).toEqual([
+      ['Y:Z', '/x', ['d1', null]],
+      ['Z', '/x:Y', ['d2', 's1']],
+    ])
+  })
+})
+
+describe('dirtyEnvIds', () => {
+  it('reports only the envs whose entries changed', () => {
+    const server = [row('A', { dev: secret('d1', 'A', '1'), prod: secret('p1', 'A', '9') })]
+    const client = [
+      row('A', { dev: secret('d1', 'A', 'changed'), prod: secret('p1', 'A', '9') }),
+    ]
+    expect([...dirtyEnvIds(server, client)]).toEqual(['dev'])
+  })
+
+  it('counts new rows and staged deletions against their envs', () => {
+    const server = [row('A', { prod: secret('p1', 'A', '9') })]
+    const client = [
+      row('A', { prod: { ...secret('p1', 'A', '9'), stagedForDelete: true } as SecretType }),
+      { ...row('NEW', { staging: secret('new-1', 'NEW', '') }), id: 'client-row' },
+    ]
+    expect([...dirtyEnvIds(server, client)].sort()).toEqual(['prod', 'staging'])
+  })
+
+  it('is empty when nothing changed', () => {
+    const server = [row('A', { dev: secret('d1', 'A', '1') })]
+    expect(dirtyEnvIds(server, server).size).toBe(0)
+  })
+})
+
+describe('appSecretRowIsEdited', () => {
+  it('flags new rows and renames', () => {
+    const server = row('A', { dev: secret('d1', 'A', '1') })
+    expect(appSecretRowIsEdited(undefined, server)).toBe(true)
+    expect(appSecretRowIsEdited(server, { ...server, key: 'B' })).toBe(true)
+    expect(appSecretRowIsEdited(server, server)).toBe(false)
+  })
+})
+
+describe('mergeAppSecretsUpdate', () => {
+  it('keeps edited entries and takes the new server copy everywhere else', () => {
+    const prevServer = [row('A', { dev: secret('d1', 'A', '1'), staging: secret('s1', 'A', '2') })]
+    const prevClient = [
+      row('A', { dev: secret('d1', 'A', 'edited'), staging: secret('s1', 'A', '2') }),
+    ]
+    // The background decrypt of production lands while dev has an unsaved edit
+    const nextServer = [
+      row('A', {
+        dev: secret('d1', 'A', '1'),
+        staging: secret('s1', 'A', '2'),
+        prod: secret('p1', 'A', '3'),
+      }),
+      row('PROD_ONLY', { prod: secret('p2', 'PROD_ONLY', '4') }),
+    ]
+
+    const merged = mergeAppSecretsUpdate(prevServer, prevClient, nextServer, envs)
+
+    expect(merged.map((r) => r.id)).toEqual(['app-A', 'app-PROD_ONLY'])
+    expect(merged[0].envs.map((e) => e.secret?.value ?? null)).toEqual(['edited', '2', '3'])
+    expect(merged[1]).toBe(nextServer[1])
+  })
+
+  it('reuses the server row when nothing in it was edited', () => {
+    const prevServer = [row('A', { dev: secret('d1', 'A', '1') })]
+    const nextServer = [row('A', { dev: secret('d1', 'A', '1'), prod: secret('p1', 'A', '2') })]
+    const merged = mergeAppSecretsUpdate(prevServer, prevServer, nextServer, envs)
+    expect(merged[0]).toBe(nextServer[0])
+  })
+
+  it('keeps client-only rows and a renamed key', () => {
+    const prevServer = [row('A', { dev: secret('d1', 'A', '1') })]
+    const renamed = { ...row('A', { dev: secret('d1', 'B', '1') }), key: 'B' }
+    const created = { ...row('NEW', { dev: secret('new-1', 'NEW', 'v') }), id: 'client-row' }
+    const nextServer = [row('A', { dev: secret('d1', 'A', '1'), prod: secret('p1', 'A', '2') })]
+
+    const merged = mergeAppSecretsUpdate(prevServer, [renamed, created], nextServer, envs)
+
+    expect(merged.map((r) => [r.id, r.key])).toEqual([
+      ['app-A', 'B'],
+      ['client-row', 'NEW'],
+    ])
+    // Production was hidden during the rename, so it keeps its own key
+    expect(merged[0].envs.map((e) => e.secret?.key ?? null)).toEqual(['B', null, 'A'])
+  })
+
+  it('drops untouched rows that were deleted upstream', () => {
+    const prevServer = [row('A', { dev: secret('d1', 'A', '1') })]
+    expect(mergeAppSecretsUpdate(prevServer, prevServer, [], envs)).toEqual([])
+  })
+})
+
+describe('revertAppSecretEntries', () => {
+  const server = [
+    row('A', { dev: secret('d1', 'A', '1'), staging: secret('s1', 'A', '2'), prod: secret('p1', 'A', '3') }),
+  ]
+  const renamed = {
+    ...row('A', { dev: secret('d1', 'B', '1'), staging: secret('s1', 'B', '2'), prod: secret('p1', 'B', '3') }),
+    key: 'B',
+  }
+  type Entry = AppSecret['envs'][number]
+  const bySecret = (id: string) => (entry: Entry) => entry.secret?.id === id
+  const byEnv = (envId: string) => (entry: Entry) => entry.env.id === envId
+  const everything = (entry: Entry) => Boolean(entry.secret)
+  const rowIds = () => {
+    let n = 0
+    return () => `split-${++n}`
+  }
+  const shape = (rows: AppSecret[]) =>
+    Object.fromEntries(rows.map((r) => [r.id, [r.key, ...r.envs.map((e) => e.secret?.key ?? null)]]))
+
+  it('puts one value back and keeps the edits in other envs', () => {
+    const client = [row('A', { dev: secret('d1', 'A', 'x'), staging: secret('s1', 'A', 'y'), prod: secret('p1', 'A', '3') })]
+    const [reverted] = revertAppSecretEntries(client, server, bySecret('d1'))
+    expect(reverted.envs.map((e) => e.secret?.value ?? null)).toEqual(['1', 'y', '3'])
+  })
+
+  it('hands back the server row, key included, once nothing is left to deploy', () => {
+    expect(revertAppSecretEntries([renamed], server, everything)[0]).toBe(server[0])
+  })
+
+  it('splits a key whose rename is put back in one env: the old key there, the new one in the rest', () => {
+    const split = revertAppSecretEntries([renamed], server, byEnv('dev'), rowIds())
+    expect(shape(split)).toEqual({ 'app-A': ['B', null, 'B', 'B'], 'split-1': ['A', 'A', null, null] })
+
+    // Each row compares with the server copies of the values it holds
+    const aligned = alignServerRows(server, split)
+    expect(shape(aligned)).toEqual({ 'app-A': ['A', null, 'A', 'A'], 'split-1': ['A', 'A', null, null] })
+    expect([...dirtyEnvIds(aligned, split)].sort()).toEqual(['prod', 'staging'])
+    expect(appSecretRowIsEdited(aligned.find((r) => r.id === 'split-1'), split[1])).toBe(false)
+  })
+
+  it('gathers values put back later under the old key, down to the server row', () => {
+    const newRowId = rowIds()
+    const once = revertAppSecretEntries([renamed], server, byEnv('dev'), newRowId)
+    const twice = revertAppSecretEntries(once, server, bySecret('s1'), newRowId)
+    expect(shape(twice)).toEqual({ 'app-A': ['B', null, null, 'B'], 'split-1': ['A', 'A', 'A', null] })
+    const thrice = revertAppSecretEntries(twice, server, byEnv('prod'), newRowId)
+    expect(thrice).toHaveLength(1)
+    expect(thrice[0]).toBe(server[0])
+  })
+
+  it('takes a value a hidden env kept under the old key along', () => {
+    // Production was hidden during the rename
+    const mixed = { ...renamed, envs: renamed.envs.map((e) => (e.env.id === 'prod' ? server[0].envs[2] : e)) }
+    const split = revertAppSecretEntries([mixed], server, byEnv('dev'), rowIds())
+    expect(shape(split)).toEqual({ 'app-A': ['B', null, 'B', null], 'split-1': ['A', 'A', null, 'A'] })
+  })
+
+  it('unstages a delete, drops a new value, and drops a new row left empty', () => {
+    const client = [
+      row('A', {
+        dev: { ...secret('d1', 'A', '1'), stagedForDelete: true } as SecretType,
+        staging: secret('s1', 'A', '2'),
+        prod: secret('p1', 'A', '3'),
+      }),
+      { ...row('NEW', { dev: secret('new-d', 'NEW', 'v'), staging: secret('new-s', 'NEW', 'w') }), id: 'client-row' },
+    ]
+    const reverted = revertAppSecretEntries(client, server, byEnv('dev'))
+    expect(reverted[0]).toBe(server[0])
+    expect(shape(reverted)['client-row']).toEqual(['NEW', null, 'NEW', null])
+    expect(revertAppSecretEntries(reverted, server, bySecret('new-s'))).toEqual([server[0]])
+  })
+
+  it('leaves rows without a matching edit untouched', () => {
+    const client = [row('A', { dev: secret('d1', 'A', 'x'), staging: secret('s1', 'A', '2'), prod: secret('p1', 'A', '3') })]
+    expect(revertAppSecretEntries(client, server, byEnv('staging'))[0]).toBe(client[0])
+    expect(alignServerRows(server, client)).toBe(server)
+  })
+
+  it('keeps a split key apart when a fresh snapshot is rebased onto', () => {
+    const split = revertAppSecretEntries([renamed], server, byEnv('dev'), rowIds())
+    const next = [
+      row('A', { dev: secret('d1', 'A', 'upstream'), staging: secret('s1', 'A', '2'), prod: secret('p1', 'A', '3') }),
+    ]
+    const merged = mergeAppSecretsUpdate(
+      alignServerRows(server, split),
+      split,
+      alignServerRows(next, split),
+      envs
+    )
+    expect(shape(merged)).toEqual({ 'app-A': ['B', null, 'B', 'B'], 'split-1': ['A', 'A', null, null] })
+    // The untouched value follows the server
+    expect(merged.find((r) => r.id === 'split-1')!.envs[0].secret!.value).toBe('upstream')
+    expect([...dirtyEnvIds(alignServerRows(next, merged), merged)].sort()).toEqual(['prod', 'staging'])
+  })
+
+  describe('undone', () => {
+    it('joins a split key back into its row', () => {
+      const discarded = staleAppSecretEntries([renamed], server, byEnv('dev'))
+      const split = revertAppSecretEntries([renamed], server, byEnv('dev'), rowIds())
+      expect(restoreAppSecretEntries(split, server, discarded)).toEqual([renamed])
+    })
+
+    it('renames the row again after a whole rename was put back', () => {
+      const discarded = staleAppSecretEntries([renamed], server, everything)
+      const reverted = revertAppSecretEntries([renamed], server, everything)
+      expect(restoreAppSecretEntries(reverted, server, discarded)).toEqual([renamed])
+    })
+
+    it('brings back a new row where it was, a staged delete and an edit', () => {
+      const client = [
+        row('A', {
+          dev: { ...secret('d1', 'A', '1'), stagedForDelete: true } as SecretType,
+          staging: secret('s1', 'A', 'edited'),
+          prod: secret('p1', 'A', '3'),
+        }),
+        { ...row('NEW', { dev: secret('new-d', 'NEW', 'v') }), id: 'client-row' },
+      ]
+      const discarded = staleAppSecretEntries(client, server, everything)
+      expect(discarded).toHaveLength(3)
+      const reverted = revertAppSecretEntries(client, server, everything)
+      expect(reverted).toEqual([server[0]])
+      expect(restoreAppSecretEntries(reverted, server, discarded)).toEqual(client)
+    })
+
+    it('restores one discard without touching a later one', () => {
+      const client = [row('A', { dev: secret('d1', 'A', 'x'), staging: secret('s1', 'A', 'y'), prod: secret('p1', 'A', '3') })]
+      const first = staleAppSecretEntries(client, server, byEnv('dev'))
+      const afterFirst = revertAppSecretEntries(client, server, byEnv('dev'))
+      const afterSecond = revertAppSecretEntries(afterFirst, server, byEnv('staging'))
+      expect(afterSecond[0]).toBe(server[0])
+      const [restored] = restoreAppSecretEntries(afterSecond, server, first)
+      expect(restored.envs.map((e) => e.secret?.value ?? null)).toEqual(['x', '2', '3'])
+    })
+  })
+})
+
+describe('moveAppSecretRows', () => {
+  const server = [
+    row('A', { dev: secret('d1', 'A', '1'), staging: secret('s1', 'A', '2'), prod: secret('p1', 'A', '3') }),
+  ]
+  const everyEnv = new Set(['dev', 'staging', 'prod'])
+  const chosen = new Set(['app-A'])
+  const rowIds = () => {
+    let n = 0
+    return () => `split-${++n}`
+  }
+  const folders = (rows: AppSecret[]) =>
+    Object.fromEntries(rows.map((r) => [r.id, [r.path, ...r.envs.map((e) => e.secret?.path ?? null)]]))
+
+  it('moves a whole row, which keeps its identity and counts as changed in every env', () => {
+    const moved = moveAppSecretRows(server, server, chosen, '/workers', everyEnv)
+    expect(folders(moved)).toEqual({ 'app-A': ['/workers', '/workers', '/workers', '/workers'] })
+    expect(appSecretRowIsEdited(server[0], moved[0])).toBe(true)
+    expect([...dirtyEnvIds(alignServerRows(server, moved), moved)].sort()).toEqual(['dev', 'prod', 'staging'])
+  })
+
+  it('hands back the server row once moved home again', () => {
+    const moved = moveAppSecretRows(server, server, chosen, '/workers', everyEnv)
+    expect(moveAppSecretRows(moved, server, chosen, '/', everyEnv)[0]).toBe(server[0])
+  })
+
+  it('splits the row when only some envs can be edited: the others stay where they are', () => {
+    const moved = moveAppSecretRows(server, server, chosen, '/workers', new Set(['dev']), rowIds())
+    expect(folders(moved)).toEqual({
+      'app-A': ['/', null, '/', '/'],
+      'split-1': ['/workers', '/workers', null, null],
+    })
+    expect([...dirtyEnvIds(alignServerRows(server, moved), moved)]).toEqual(['dev'])
+  })
+
+  it("leaves a rotation's secret where the rotation was set up", () => {
+    const rotating = [
+      row('K', {
+        dev: secret('r1', 'K', '1', { rotatingSecretId: 'rotation-1' } as Partial<SecretType>),
+        staging: secret('s9', 'K', '2'),
+      }),
+    ]
+    const moved = moveAppSecretRows(rotating, rotating, new Set(['app-K']), '/workers', everyEnv, rowIds())
+    expect(folders(moved)).toEqual({
+      'app-K': ['/', '/', null, null],
+      'split-1': ['/workers', null, '/workers', null],
+    })
+  })
+
+  it('returns a value to its old row when its move is discarded, down to the server row', () => {
+    const moved = moveAppSecretRows(server, server, chosen, '/workers', everyEnv)
+    const back = revertAppSecretEntries(moved, server, (entry) => entry.env.id === 'dev', rowIds())
+    expect(folders(back)).toEqual({
+      'app-A': ['/workers', null, '/workers', '/workers'],
+      'split-1': ['/', '/', null, null],
+    })
+    const home = revertAppSecretEntries(back, server, () => true, rowIds())
+    expect(home).toHaveLength(1)
+    expect(home[0]).toBe(server[0])
+  })
+})
+
+describe('selectionTraits', () => {
+  const tag = (id: string) => ({ id, name: id, color: '#fff' })
+  const tagged = (id: string, key: string, ...tags: string[]) =>
+    secret(id, key, 'x', { tags: tags.map(tag) } as Partial<SecretType>)
+  const rows = [
+    row('A', { dev: tagged('1', 'A', 'pii', 'ops'), staging: tagged('2', 'A', 'pii') }),
+    row('B', { dev: tagged('3', 'B', 'pii'), staging: null }),
+    row('C', { dev: secret('4', 'C', 'x', { type: ApiSecretTypeChoices.Config }) }),
+  ]
+  const shown = new Set(['dev', 'staging'])
+
+  it('reports the type the selected values share, and none when they differ', () => {
+    expect(selectionTraits(rows, new Set(['app-A', 'app-B']), shown).type).toBe(
+      ApiSecretTypeChoices.Secret
+    )
+    expect(selectionTraits(rows, new Set(['app-A', 'app-C']), shown).type).toBeNull()
+    expect(selectionTraits(rows, new Set(), shown).type).toBeNull()
+  })
+
+  it('tells a tag on every selected value from one on some or none', () => {
+    const { tagState } = selectionTraits(rows, new Set(['app-A', 'app-B']), shown)
+    expect(tagState('pii')).toBe('all')
+    expect(tagState('ops')).toBe('some')
+    expect(tagState('payments')).toBe('none')
+  })
+
+  it('counts only the selected rows and the given envs', () => {
+    expect(selectionTraits(rows, new Set(['app-A']), new Set(['dev'])).tagState('ops')).toBe('all')
+    expect(selectionTraits(rows, new Set(['app-C']), shown).tagState('pii')).toBe('none')
+  })
+})
+
+describe('snapshotHasDeploy', () => {
+  const at = (id: string, key: string, updatedAt: string) =>
+    secret(id, key, '1', { updatedAt } as Partial<SecretType>)
+  const before = [row('A', { dev: at('d1', 'A', 't1') }), row('B', { dev: at('d2', 'B', 't1') })]
+  const deployed = {
+    createdIds: ['saved-1'],
+    deletedIds: ['d2'],
+    editedAt: new Map([['d1', 't1']]),
+  }
+
+  it('turns down the snapshot from before the deploy when it is published again', () => {
+    expect(snapshotHasDeploy(before, deployed)).toBe(false)
+  })
+
+  it('waits for every change to show', () => {
+    const created = row('C', { dev: at('saved-1', 'C', 't2') })
+    expect(snapshotHasDeploy([before[0], created], deployed)).toBe(false)
+    expect(snapshotHasDeploy([row('A', { dev: at('d1', 'A', 't2') }), before[1], created], deployed)).toBe(false)
+    expect(snapshotHasDeploy([row('A', { dev: at('d1', 'A', 't2') })], deployed)).toBe(false)
+  })
+
+  it('accepts the snapshot with the new secret, without the deleted one, and the edit by its timestamp alone', () => {
+    // A sealed value reads the same before and after, so only updatedAt tells
+    const after = [row('A', { dev: at('d1', 'A', 't2') }), row('C', { dev: at('saved-1', 'C', 't2') })]
+    expect(snapshotHasDeploy(after, deployed)).toBe(true)
+  })
+
+  it('accepts an edited secret that someone else has since deleted', () => {
+    expect(snapshotHasDeploy([], { createdIds: [], deletedIds: [], editedAt: new Map([['d1', 't1']]) })).toBe(true)
+  })
+})
+
+describe('readBackDeploy', () => {
+  const ANSWERS_WITHIN = 20000
+  const RETRY_AFTER = 3000
+  const never = new Promise<never>(() => {})
+  const wait = { answersWithin: ANSWERS_WITHIN, retryAfter: RETRY_AFTER }
+  const SAVED = ['the rows as saved']
+  /** A promise the test settles by hand */
+  const landing = () => {
+    let land = () => {}
+    const landed = new Promise<void>((resolve) => (land = resolve))
+    return { landed, land }
+  }
+
+  beforeEach(() => jest.useFakeTimers())
+  afterEach(() => jest.useRealTimers())
+
+  it('hands over the saved rows as soon as they are read', async () => {
+    const read = jest.fn().mockResolvedValue(SAVED)
+
+    await expect(readBackDeploy(read, never, wait)).resolves.toEqual({ saved: SAVED })
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('ends when the snapshot with the deploy lands by another road', async () => {
+    const { landed, land } = landing()
+    const outcome = readBackDeploy(() => never, landed, wait)
+
+    await jest.advanceTimersByTimeAsync(ANSWERS_WITHIN / 2)
+    land()
+
+    await expect(outcome).resolves.toBe('landed')
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('reads again when the read after the deploy fails, for as long as it takes', async () => {
+    const onUnread = jest.fn()
+    // Not read, or read but not decrypted: either way there are no rows to hand over
+    const read = jest.fn().mockRejectedValue(new Error('Failed to fetch'))
+    let settled: unknown
+    readBackDeploy(read, never, { ...wait, onUnread }).then((outcome) => (settled = outcome))
+
+    // The rows on the page are still from before the deploy: no answer yet, however long it takes
+    await jest.advanceTimersByTimeAsync(10 * 60000)
+    expect(settled).toBeUndefined()
+    expect(read.mock.calls.length).toBeGreaterThan(100)
+    expect(onUnread).toHaveBeenCalledTimes(1)
+
+    // The connection is back: the next read is answered
+    read.mockResolvedValue(SAVED)
+    await jest.advanceTimersByTimeAsync(RETRY_AFTER)
+    expect(settled).toEqual({ saved: SAVED })
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('sends another read when one goes unanswered', async () => {
+    const onUnread = jest.fn()
+    const read = jest.fn().mockReturnValueOnce(never).mockResolvedValue(SAVED)
+    let settled: unknown
+    readBackDeploy(read, never, { ...wait, onUnread }).then((outcome) => (settled = outcome))
+
+    await jest.advanceTimersByTimeAsync(ANSWERS_WITHIN - 1)
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(onUnread).not.toHaveBeenCalled()
+    expect(settled).toBeUndefined()
+
+    await jest.advanceTimersByTimeAsync(1 + RETRY_AFTER)
+    expect(read).toHaveBeenCalledTimes(2)
+    expect(onUnread).toHaveBeenCalledTimes(1)
+    expect(settled).toEqual({ saved: SAVED })
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('takes a read that is answered late, in the pause before the next one', async () => {
+    let answer = (rows: string[]) => {}
+    const late = new Promise<string[]>((resolve) => (answer = resolve))
+    const read = jest.fn().mockReturnValueOnce(late).mockReturnValue(never)
+    const { landed, land } = landing()
+    let settled: unknown
+    readBackDeploy(read, landed, wait).then((outcome) => (settled = outcome))
+
+    await jest.advanceTimersByTimeAsync(ANSWERS_WITHIN + 1)
+    // Its snapshot is published by whoever read it, and lands
+    answer(SAVED)
+    land()
+    await jest.advanceTimersByTimeAsync(0)
+
+    expect(settled).toBe('landed')
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('does not hand the editor back for the time alone', async () => {
+    const left = new AbortController()
+    let settled: unknown
+    readBackDeploy(() => never, never, { ...wait, signal: left.signal }).then(
+      (outcome) => (settled = outcome)
+    )
+
+    await jest.advanceTimersByTimeAsync(10 * 60000)
+    expect(settled).toBeUndefined()
+
+    left.abort()
+    await jest.advanceTimersByTimeAsync(0)
+    expect(settled).toBe('left')
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('stops reading once the page is left', async () => {
+    const left = new AbortController()
+    const read = jest.fn().mockRejectedValue(new Error('Failed to fetch'))
+    let settled: unknown
+    readBackDeploy(read, never, { ...wait, signal: left.signal }).then(
+      (outcome) => (settled = outcome)
+    )
+
+    await jest.advanceTimersByTimeAsync(RETRY_AFTER * 2)
+    const sent = read.mock.calls.length
+    left.abort()
+    await jest.advanceTimersByTimeAsync(10 * 60000)
+
+    expect(settled).toBe('left')
+    expect(read).toHaveBeenCalledTimes(sent)
+    expect(jest.getTimerCount()).toBe(0)
+  })
+})
+
+describe('carryRowKeys', () => {
+  const ownKey = (id: string) => id
+  const deployed = (key: string, id: string) => row(key, { dev: secret(id, key, '1') })
+
+  it('hands a new row and a renamed row the keys they had, and leaves the rest alone', () => {
+    const before = [
+      deployed('A', 'd1'),
+      { ...deployed('B', 'd2'), key: 'RENAMED' },
+      { ...deployed('NEW', 'new'), id: 'client-row' },
+    ]
+    const after = [deployed('A', 'd1'), deployed('RENAMED', 'd2'), deployed('NEW', 'saved')]
+    expect([...carryRowKeys(before, after, ownKey)]).toEqual([
+      ['app-RENAMED', 'app-B'],
+      ['app-NEW', 'client-row'],
+    ])
+  })
+
+  it('keeps carrying a key through a later deploy', () => {
+    const earlier = new Map([['app-NEW', 'client-row']])
+    const before = [{ ...deployed('NEW', 'saved'), key: 'NEWER' }]
+    const carried = carryRowKeys(before, [deployed('NEWER', 'saved')], (id) => earlier.get(id) ?? id)
+    expect([...carried]).toEqual([['app-NEWER', 'client-row']])
+  })
+
+  it('carries nothing rather than give two rows one key', () => {
+    // Someone else re-created the old key while it was being renamed here
+    const before = [{ ...deployed('A', 'd1'), key: 'B' }]
+    const after = [deployed('B', 'd1'), deployed('A', 'theirs')]
+    expect(carryRowKeys(before, after, ownKey).size).toBe(0)
+  })
+})
+
+describe('flattenAppSecrets', () => {
+  it('emits one secret per present env value with its env and own key', () => {
+    const rows = [
+      { ...row('B', { dev: secret('d1', 'B', '1'), prod: secret('p1', 'A', '2') }), key: 'B' },
+    ]
+    const flat = flattenAppSecrets(rows)
+    expect(flat.map((s) => [s.id, s.key, s.environment.id])).toEqual([
+      ['d1', 'B', 'dev'],
+      ['p1', 'A', 'prod'],
+    ])
+  })
+
+  it('falls back to the row key for values without one', () => {
+    const rows = [row('A', { dev: secret('new-1', '', '1') })]
+    expect(flattenAppSecrets(rows)[0].key).toBe('A')
+  })
+})
+
+describe('duplicateKeyRowIds', () => {
+  it('flags rows that share a key within the same env only', () => {
+    const rows = [
+      row('A', { dev: secret('d1', 'A', '1') }),
+      { ...row('A', { prod: secret('p1', 'A', '2') }), id: 'other-env' },
+      { ...row('A', { dev: secret('new-1', 'A', '') }), id: 'same-env' },
+    ]
+    expect([...duplicateKeyRowIds(rows)].sort()).toEqual(['app-A', 'same-env'])
+  })
+
+  it("flags rows that reuse a dynamic secret's key in the same env and folder", () => {
+    const rows = [
+      row('AWS_ACCESS_KEY_ID', { dev: secret('d1', 'AWS_ACCESS_KEY_ID', 'x') }),
+      row('DATABASE_URL', { dev: secret('d2', 'DATABASE_URL', 'y') }),
+    ]
+    const dynamicKeys = [{ envId: 'dev', path: '/', key: 'AWS_ACCESS_KEY_ID' }]
+    expect([...duplicateKeyRowIds(rows, dynamicKeys)]).toEqual(['app-AWS_ACCESS_KEY_ID'])
+  })
+
+  it("does not flag a dynamic secret's key in another env or folder", () => {
+    const rows = [row('AWS_ACCESS_KEY_ID', { dev: secret('d1', 'AWS_ACCESS_KEY_ID', 'x') })]
+    const dynamicKeys = [
+      { envId: 'prod', path: '/', key: 'AWS_ACCESS_KEY_ID' },
+      { envId: 'dev', path: '/backend', key: 'AWS_ACCESS_KEY_ID' },
+    ]
+    expect(duplicateKeyRowIds(rows, dynamicKeys).size).toBe(0)
+  })
+
+  it('does not flag the same key in different folders', () => {
+    const rows = [
+      row('A', { dev: secret('d1', 'A', '1') }),
+      {
+        ...row('A', { dev: secret('d2', 'A', '2', { path: '/backend' }) }),
+        id: 'nested',
+        path: '/backend',
+      },
+    ]
+    expect(duplicateKeyRowIds(rows).size).toBe(0)
+  })
+
+  it('ignores values staged for deletion', () => {
+    const rows = [
+      row('A', { dev: { ...secret('d1', 'A', '1'), stagedForDelete: true } as SecretType }),
+      { ...row('A', { dev: secret('new-1', 'A', '') }), id: 'replacement' },
+    ]
+    expect(duplicateKeyRowIds(rows).size).toBe(0)
+  })
+})
+
+describe('repeatedKeyToFix', () => {
+  const inFolder = (id: string, path: string, values: Record<string, SecretType | null>) => ({
+    ...row('A', values),
+    id,
+    path,
+  })
+  // Two saved values under one key in Production's /api, as two sessions can leave them
+  const twice = [
+    inFolder('one', '/api', { prod: secret('p1', 'A', '1', { path: '/api' }) }),
+    inFolder('two', '/api', { prod: secret('p2', 'A', '2', { path: '/api' }) }),
+  ]
+
+  it('leaves a repeat the saved copy already holds to an edit elsewhere', () => {
+    const saved = [...twice, row('B', { dev: secret('d1', 'B', 'x') })]
+    const edited = [...twice, row('B', { dev: secret('d1', 'B', 'y') })]
+    expect(repeatedKeyToFix(edited, saved)).toBeNull()
+  })
+
+  it('leaves it to an edit of one of the two values, which repeats nothing new', () => {
+    const edited = [
+      twice[0],
+      inFolder('two', '/api', { prod: secret('p2', 'A', 'changed', { path: '/api' }) }),
+    ]
+    expect(repeatedKeyToFix(edited, twice)).toBeNull()
+  })
+
+  it('names a key that a new value repeats, and its folder', () => {
+    const saved = [inFolder('one', '/api', { dev: secret('d1', 'A', '1', { path: '/api' }) })]
+    const added = [
+      ...saved,
+      inFolder('new', '/api', { dev: secret('new-1', 'A', '', { path: '/api' }) }),
+    ]
+    expect(repeatedKeyToFix(added, saved)).toEqual({ key: 'A', path: '/api' })
+  })
+
+  it('names a key that a rename or a move brings where it is taken', () => {
+    const saved = [
+      row('A', { dev: secret('d1', 'A', '1') }),
+      row('B', { dev: secret('d2', 'B', '2') }),
+      inFolder('nested', '/api', { dev: secret('d3', 'A', '3', { path: '/api' }) }),
+    ]
+    const renamed = [
+      saved[0],
+      { ...row('A', { dev: secret('d2', 'A', '2') }), id: 'app-B' },
+      saved[2],
+    ]
+    expect(repeatedKeyToFix(renamed, saved)).toEqual({ key: 'A', path: '/' })
+
+    const moved = [saved[0], saved[1], inFolder('nested', '/', { dev: secret('d3', 'A', '3') })]
+    expect(repeatedKeyToFix(moved, saved)).toEqual({ key: 'A', path: '/' })
+  })
+
+  it('names a new key that a dynamic secret maps, not one saved beside it before', () => {
+    const dynamicKeys = [{ envId: 'dev', path: '/', key: 'AWS_ACCESS_KEY_ID' }]
+    const saved = [row('AWS_ACCESS_KEY_ID', { dev: secret('d1', 'AWS_ACCESS_KEY_ID', 'x') })]
+    expect(repeatedKeyToFix(saved, saved, dynamicKeys)).toBeNull()
+
+    const added = [row('AWS_ACCESS_KEY_ID', { dev: secret('new-1', 'AWS_ACCESS_KEY_ID', 'x') })]
+    expect(repeatedKeyToFix(added, [], dynamicKeys)).toEqual({
+      key: 'AWS_ACCESS_KEY_ID',
+      path: '/',
+    })
+  })
+
+  it('ignores values staged for deletion', () => {
+    const replaced = [
+      row('A', { dev: { ...secret('d1', 'A', '1'), stagedForDelete: true } as SecretType }),
+      { ...row('A', { dev: secret('new-1', 'A', '') }), id: 'replacement' },
+    ]
+    expect(repeatedKeyToFix(replaced, [row('A', { dev: secret('d1', 'A', '1') })])).toBeNull()
+  })
+
+  it("goes by each value's own key, which an env that isn't shown keeps in a rename", () => {
+    // B renamed to A with Production not shown: Production's value is still B, beside its A
+    const saved = [
+      row('A', { prod: secret('p1', 'A', '1') }),
+      row('B', { dev: secret('d2', 'B', '2'), prod: secret('p2', 'B', '2') }),
+    ]
+    const renamed = [
+      saved[0],
+      { ...row('A', { dev: secret('d2', 'A', '2'), prod: secret('p2', 'B', '2') }), id: 'app-B' },
+    ]
+    expect(repeatedKeyToFix(renamed, saved)).toBeNull()
+
+    // Shown, Production's value is renamed too and lands on the A it already has
+    const renamedEverywhere = [
+      saved[0],
+      { ...row('A', { dev: secret('d2', 'A', '2'), prod: secret('p2', 'A', '2') }), id: 'app-B' },
+    ]
+    expect(repeatedKeyToFix(renamedEverywhere, saved)).toEqual({ key: 'A', path: '/' })
+  })
+})
+
+describe('deployReferenceErrors', () => {
+  const context: ReferenceContext = {
+    teamSlug: 'team',
+    appId: 'app',
+    envIds: { development: 'dev', staging: 'staging', production: 'prod' },
+    secretIdLookup: {},
+    secretKeys: [],
+    envSecretKeys: {},
+    envRootKeys: {},
+    envNames: ['Development', 'Staging', 'Production'],
+    folderPaths: [],
+    folderSecretKeys: {},
+    envFolderKeys: {},
+    orgApps: [],
+    deletedKeys: [],
+  }
+  const shown = new Set(['dev', 'staging', 'prod'])
+  const host = row('HOST', { dev: secret('d1', 'HOST', 'db'), prod: secret('p1', 'HOST', 'db') })
+  const url = (values: Record<string, string>) =>
+    row(
+      'URL',
+      Object.fromEntries(
+        Object.entries(values).map(([env, value]) => [env, secret(`url-${env}`, 'URL', value)])
+      )
+    )
+  const references = (errors: ReturnType<typeof deployReferenceErrors>) =>
+    errors.map((error) => `${error.secretKey} in ${error.envName}: ${error.reference}`)
+
+  it('asks about a reference in an untouched value whose key the deploy renames', () => {
+    const saved = [host, url({ dev: '${HOST}' })]
+    const renamed = {
+      ...host,
+      key: 'DB_HOST',
+      envs: host.envs.map((entry) =>
+        entry.secret ? { ...entry, secret: { ...entry.secret, key: 'DB_HOST' } } : entry
+      ),
+    }
+    const errors = deployReferenceErrors([renamed, saved[1]], saved, shown, context)
+    expect(references(errors)).toEqual(['URL in Development: ${HOST}'])
+  })
+
+  it('asks about one whose key the deploy moves to another folder', () => {
+    const saved = [host, url({ dev: '${HOST}' })]
+    const moved = {
+      ...host,
+      path: '/db',
+      envs: host.envs.map((entry) =>
+        entry.secret ? { ...entry, secret: { ...entry.secret, path: '/db' } } : entry
+      ),
+    }
+    const errors = deployReferenceErrors([moved, saved[1]], saved, shown, context)
+    expect(references(errors)).toEqual(['URL in Development: ${HOST}'])
+  })
+
+  it('asks about a reference into another env to a key staged for deletion there', () => {
+    const saved = [host, url({ dev: '${production.HOST}' })]
+    const deleted = row('HOST', {
+      dev: secret('d1', 'HOST', 'db'),
+      prod: { ...secret('p1', 'HOST', 'db'), stagedForDelete: true } as SecretType,
+    })
+    const errors = deployReferenceErrors([deleted, saved[1]], saved, shown, context)
+    expect(references(errors)).toEqual(['URL in Development: ${production.HOST}'])
+    expect(errors[0].deleted).toBe(true)
+  })
+
+  it('stays quiet about a reference that was broken already and is not touched', () => {
+    const saved = [host, url({ dev: '${NOWHERE}' }), row('B', { dev: secret('b1', 'B', '1') })]
+    const edited = [saved[0], saved[1], row('B', { dev: secret('b1', 'B', '2') })]
+    expect(deployReferenceErrors(edited, saved, shown, context)).toEqual([])
+  })
+
+  it('reports every broken reference in a row the deploy changes, once', () => {
+    const saved = [host, url({ dev: '${NOWHERE}' })]
+    const edited = [host, url({ dev: 'x ${NOWHERE} ${HOST}' })]
+    const errors = deployReferenceErrors(edited, saved, shown, context)
+    expect(references(errors)).toEqual(['URL in Development: ${NOWHERE}'])
+  })
+
+  it("resolves a reference by the key the other env's value has, not the row's", () => {
+    // Renamed with Production not shown: the row is DB_HOST, Production's value is still HOST
+    const renamedInDev = row('DB_HOST', {
+      dev: secret('d1', 'DB_HOST', 'db'),
+      prod: secret('p1', 'HOST', 'db'),
+    })
+    const savedHost = { ...host, id: renamedInDev.id }
+    const onlyDev = new Set(['dev'])
+    const errorsFor = (value: string) =>
+      references(
+        deployReferenceErrors(
+          [renamedInDev, url({ dev: value })],
+          [savedHost, url({ dev: 'x' })],
+          onlyDev,
+          context
+        )
+      )
+
+    expect(errorsFor('${production.DB_HOST}')).toEqual([
+      'URL in Development: ${production.DB_HOST}',
+    ])
+    expect(errorsFor('${production.HOST}')).toEqual([])
+  })
+
+  it("asks about an unshown env's value that points at a key renamed in a shown one", () => {
+    const saved = [host, url({ prod: '${development.HOST}' })]
+    const renamedInDev = row('DB_HOST', {
+      dev: secret('d1', 'DB_HOST', 'db'),
+      prod: secret('p1', 'HOST', 'db'),
+    })
+    const errors = deployReferenceErrors(
+      [{ ...renamedInDev, id: host.id }, saved[1]],
+      saved,
+      new Set(['dev']),
+      context
+    )
+    expect(references(errors)).toEqual(['URL in Production: ${development.HOST}'])
+  })
+})
+
+describe('referenceKeysOf', () => {
+  const inFolder = (key: string, path: string, values: Record<string, SecretType | null>) => ({
+    ...row(key, values),
+    id: `app:${path}:${key}`,
+    path,
+  })
+  const rows = [
+    row('HOST', { dev: secret('d1', 'HOST', 'db'), prod: secret('p1', 'HOST', 'db') }),
+    inFolder('STRIPE_KEY', '/Payments', {
+      prod: secret('p2', 'STRIPE_KEY', 'sk', { path: '/Payments' }),
+    }),
+  ]
+
+  it('lists the keys an env holds, each with its folder as it is named', () => {
+    expect(referenceKeysOf(rows, 'prod')).toEqual([
+      { path: '/', key: 'HOST' },
+      { path: '/Payments', key: 'STRIPE_KEY' },
+    ])
+    expect(referenceKeysOf(rows, 'dev')).toEqual([{ path: '/', key: 'HOST' }])
+    expect(referenceKeysOf(rows, 'staging')).toEqual([])
+  })
+
+  it("goes by a value's own key and folder, and leaves out the unnamed and the staged for deletion", () => {
+    const edited = [
+      // Renamed and moved where dev is shown: prod, not shown, keeps its own
+      {
+        ...row('DB_HOST', {
+          dev: secret('d1', 'DB_HOST', 'db', { path: '/db' }),
+          prod: secret('p1', 'HOST', 'db'),
+        }),
+        path: '/db',
+      },
+      row('OLD', { dev: { ...secret('d2', 'OLD', 'x'), stagedForDelete: true } as SecretType }),
+      row('', { dev: secret('d3', '', '') }),
+    ]
+    expect(referenceKeysOf(edited, 'dev')).toEqual([{ path: '/db', key: 'DB_HOST' }])
+    expect(referenceKeysOf(edited, 'prod')).toEqual([{ path: '/', key: 'HOST' }])
+  })
+
+  it('offers what a deploy then accepts: the same rows answer both', () => {
+    const context: ReferenceContext = {
+      teamSlug: 'team',
+      appId: 'app',
+      envIds: { development: 'dev', staging: 'staging', production: 'prod' },
+      secretIdLookup: {},
+      secretKeys: [],
+      envSecretKeys: {},
+      envRootKeys: {},
+      envNames: ['Development', 'Staging', 'Production'],
+      folderPaths: [],
+      folderSecretKeys: {},
+      envFolderKeys: {},
+      orgApps: [],
+      deletedKeys: [],
+      keysOf: (envId) => referenceKeysOf(rows, envId),
+    }
+    // Typed in lowercase, then the folder and the key are picked from the dropdown
+    let value = '${production.pay'
+    for (const pick of ['Payments/', 'STRIPE_KEY']) {
+      const token = getActiveReferenceToken(value, value.length)!
+      const origin = { key: 'CHECKOUT_KEY', envId: 'dev', path: '/' }
+      const suggestion = computeSuggestions(token, context, origin).find((s) => s.label === pick)!
+      value = buildInsertionText(suggestion, token, value).newValue
+    }
+    expect(value).toBe('${production.Payments/STRIPE_KEY}')
+
+    const withReference = [
+      ...rows,
+      row('CHECKOUT_KEY', { dev: secret('d9', 'CHECKOUT_KEY', value) }),
+    ]
+    expect(deployReferenceErrors(withReference, rows, new Set(['dev']), context)).toEqual([])
+    // Spelled in lowercase it points at a folder that is not there
+    const lowercase = [
+      ...rows,
+      row('CHECKOUT_KEY', {
+        dev: secret('d9', 'CHECKOUT_KEY', '${production.payments/STRIPE_KEY}'),
+      }),
+    ]
+    expect(
+      deployReferenceErrors(lowercase, rows, new Set(['dev']), context).map((e) => e.error)
+    ).toEqual(['Referenced key "STRIPE_KEY" does not exist in "production"'])
+  })
+})
+
+describe('selectionExport', () => {
+  const inFolder = (path: string, values: Record<string, SecretType | null>) => ({
+    ...row('TOKEN', values),
+    id: `app:${path}:TOKEN`,
+    path,
+  })
+
+  it('lists the saved values of one env, skipping rows that have none there', () => {
+    const rows = [
+      row('A', { dev: secret('d1', 'A', '1') }),
+      row('B', { prod: secret('p1', 'B', '2') }),
+      undefined,
+    ]
+    const { secrets, repeatedKey, readIds } = selectionExport(rows, 'dev')
+    expect(secrets.map((s) => [s.key, s.value])).toEqual([['A', '1']])
+    expect(repeatedKey).toBeNull()
+    expect(readIds).toEqual(['d1'])
+  })
+
+  it('names a key that two of the rows share: the same key in two folders', () => {
+    const rows = [
+      inFolder('/api', { dev: secret('d1', 'TOKEN', '1', { path: '/api' }) }),
+      inFolder('/worker', { dev: secret('d2', 'TOKEN', '2', { path: '/worker' }) }),
+    ]
+    expect(selectionExport(rows, 'dev').repeatedKey).toBe('TOKEN')
+    expect(selectionExport(rows, 'prod').repeatedKey).toBeNull()
+  })
+
+  it('counts no read for a sealed value, which the file cannot hold', () => {
+    const rows = [
+      row('A', { dev: secret('d1', 'A', '', { type: ApiSecretTypeChoices.Sealed }) }),
+      row('B', { dev: secret('d2', 'B', '2') }),
+    ]
+    const { secrets, readIds } = selectionExport(rows, 'dev')
+    expect(secrets.map((s) => s.key)).toEqual(['A', 'B'])
+    expect(readIds).toEqual(['d2'])
+  })
+})
+
+describe('searchedFolders', () => {
+  const folder = (path: string, name: string) => ({ path, name })
+  const folders = [
+    folder('/', 'apps'),
+    folder('/apps', 'payments'),
+    folder('/apps/payments', 'eu'),
+    folder('/', 'workers'),
+    folder('/workers', 'queues'),
+  ]
+  const names = (found: { folders: { path: string; name: string }[] }) =>
+    found.folders.map((f) => `${f.path === '/' ? '' : f.path}/${f.name}`)
+
+  it('shows a nested folder named like the search, and opens the way to it', () => {
+    const found = searchedFolders(folders, [], ['payments'], '/')
+    expect(names(found)).toEqual(['/apps', '/apps/payments'])
+    expect([...found.open]).toEqual(['/apps'])
+  })
+
+  it('shows and opens the folders on the way to a matching row', () => {
+    const found = searchedFolders(folders, ['/workers/queues'], ['nothing-named-so'], '/')
+    expect(names(found)).toEqual(['/workers', '/workers/queues'])
+    expect([...found.open].sort()).toEqual(['/workers', '/workers/queues'])
+  })
+
+  it('searches no folder names when given none', () => {
+    expect(names(searchedFolders(folders, [], null, '/'))).toEqual([])
+  })
+
+  it('stops at the folder in view', () => {
+    const inApps = folders.filter((f) => f.path.startsWith('/apps'))
+    const found = searchedFolders(inApps, [], ['eu'], '/apps')
+    expect(names(found)).toEqual(['/apps/payments', '/apps/payments/eu'])
+    expect([...found.open]).toEqual(['/apps/payments'])
+  })
+})
+
+describe('groupRotatingRows', () => {
+  const rotating = (id: string, key: string, rid: string) =>
+    secret(id, key, 'v', { rotatingSecretId: rid } as Partial<SecretType>)
+
+  it('groups rows sharing a rotating secret across envs, in input order', () => {
+    const rows = [
+      row('A', { dev: secret('d1', 'A', '1') }),
+      row('USER', { dev: rotating('d2', 'USER', 'rs-dev'), prod: rotating('p2', 'USER', 'rs-prod') }),
+      row('B', { dev: secret('d3', 'B', '1') }),
+      row('PASS', { prod: rotating('p3', 'PASS', 'rs-prod') }),
+    ]
+    const items = groupRotatingRows(rows, new Set(['dev', 'staging', 'prod']))
+
+    expect(items.map((item) => item.kind)).toEqual(['single', 'group', 'single'])
+    const group = items[1] as Extract<(typeof items)[number], { kind: 'group' }>
+    expect(group.appSecrets.map((r) => r.key)).toEqual(['USER', 'PASS'])
+    expect(group.groupKey).toBe('rs-dev,rs-prod')
+  })
+
+  it('only follows rotation in the given envs', () => {
+    const rows = [row('PASS', { prod: rotating('p3', 'PASS', 'rs-prod') })]
+    expect(groupRotatingRows(rows, new Set(['dev']))[0].kind).toBe('single')
+  })
+
+  it("leaves a hidden env's rotation out of the group, but not out of where it is set up", () => {
+    const rows = [
+      row('USER', {
+        dev: rotating('d2', 'USER', 'rs-dev'),
+        prod: rotating('p2', 'USER', 'rs-prod'),
+      }),
+      row('PASS', {
+        dev: rotating('d3', 'PASS', 'rs-dev'),
+        prod: rotating('p3', 'PASS', 'rs-prod'),
+      }),
+    ]
+    // Production's column is hidden
+    const shown = new Set(['dev', 'staging'])
+    const [group] = groupRotatingRows(rows, shown)
+    if (group.kind !== 'group') throw new Error('expected a group')
+    expect(group.rotatingSecretIds).toEqual(['rs-dev'])
+
+    // Staging is the only env the rotation could still be set up in
+    const own = new Map([['dev', 'rs-dev']])
+    expect([...rotationSourceByEnv(own, group.appSecrets, shown)]).toEqual([
+      ['dev', 'rs-dev'],
+      ['prod', 'rs-prod'],
+    ])
+  })
+
+  it("counts a hidden env's rotation only once the group's own have loaded", () => {
+    const rows = [
+      row('PASS', {
+        dev: rotating('d3', 'PASS', 'rs-dev'),
+        staging: rotating('s3', 'PASS', 'rs-staging'),
+        prod: rotating('p3', 'PASS', 'rs-prod'),
+      }),
+    ]
+    // Production's column is hidden
+    const shown = new Set(['dev', 'staging'])
+
+    // Nothing loaded: Production alone would leave Development and Staging looking like gaps
+    expect(rotationSourceByEnv(new Map(), rows, shown).size).toBe(0)
+
+    // A shown env counts by its loaded rotation, never by what its secrets say
+    const own = new Map([['dev', 'rs-dev']])
+    expect([...rotationSourceByEnv(own, rows, shown)]).toEqual([
+      ['dev', 'rs-dev'],
+      ['prod', 'rs-prod'],
+    ])
+  })
+})
+
+describe('dynamicKeyNames', () => {
+  const keys = (...names: string[]) => ({ keyMap: names.map((keyName) => ({ keyName })) })
+  // Development's lease returns a user name; Production's a secret key instead
+  const inEnvs = [
+    { env: dev, dynamicSecret: keys('AWS_IAM_USERNAME', 'AWS_ACCESS_KEY_ID') },
+    { env: staging, dynamicSecret: null },
+    { env: prod, dynamicSecret: keys('AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY') },
+  ]
+
+  it("lists an env's own keys when it alone is shown", () => {
+    expect(dynamicKeyNames(inEnvs, new Set(['prod']))).toEqual([
+      'AWS_ACCESS_KEY_ID',
+      'AWS_SECRET_ACCESS_KEY',
+    ])
+  })
+
+  it('lists every key the shown envs map, once each', () => {
+    expect(dynamicKeyNames(inEnvs, new Set(['dev', 'staging', 'prod']))).toEqual([
+      'AWS_IAM_USERNAME',
+      'AWS_ACCESS_KEY_ID',
+      'AWS_SECRET_ACCESS_KEY',
+    ])
+  })
+
+  it('still lists the keys where no shown env has the dynamic secret, to offer set-up there', () => {
+    expect(dynamicKeyNames(inEnvs, new Set(['staging']))).toEqual([
+      'AWS_IAM_USERNAME',
+      'AWS_ACCESS_KEY_ID',
+      'AWS_SECRET_ACCESS_KEY',
+    ])
+  })
+})
+
+describe('mergeImportedRows', () => {
+  // As the import dialog builds them: a secret per env it imports into, blank where it takes keys only
+  const importedRow = (key: string, values: Record<string, SecretType | null>): AppSecret => ({
+    ...row(key, values),
+    id: `imported-${key}`,
+  })
+  const all = { withValues: true, withComments: true }
+  const keysOnly = { withValues: false, withComments: false }
+
+  it('overwrites a value and comment in an env that imports them', () => {
+    const rows = [row('API_URL', { dev: secret('d1', 'API_URL', 'old', { comment: 'was' }) })]
+    const imported = [
+      importedRow('API_URL', { dev: secret('new-1', 'API_URL', 'new', { comment: 'now' }) }),
+    ]
+
+    const [merged] = mergeImportedRows(rows, imported, envs, '/', { dev: all })
+    expect(merged.id).toBe('app-API_URL')
+    expect(merged.envs[0].secret).toMatchObject({ id: 'd1', value: 'new', comment: 'now' })
+  })
+
+  it('keeps the value and comment an env already has when it takes keys only', () => {
+    const rows = [
+      row('API_URL', {
+        dev: secret('d1', 'API_URL', 'dev-old'),
+        prod: secret('p1', 'API_URL', 'prod-live', { comment: 'do not touch' }),
+      }),
+    ]
+    const imported = [
+      importedRow('API_URL', {
+        dev: secret('new-1', 'API_URL', 'dev-new'),
+        prod: secret('new-2', 'API_URL', ''),
+      }),
+    ]
+
+    const [merged] = mergeImportedRows(rows, imported, envs, '/', { dev: all, prod: keysOnly })
+    expect(merged.envs[0].secret?.value).toBe('dev-new')
+    expect(merged.envs[2].secret).toMatchObject({
+      id: 'p1',
+      value: 'prod-live',
+      comment: 'do not touch',
+    })
+    // Nothing changed there, so nothing is staged for it
+    expect(merged.envs[2].secret).toEqual(rows[0].envs[2].secret)
+  })
+
+  it('still adds the key, blank, to a keys-only env that lacks it', () => {
+    const rows = [row('API_URL', { dev: secret('d1', 'API_URL', 'dev-old') })]
+    const imported = [
+      importedRow('API_URL', {
+        dev: secret('new-1', 'API_URL', 'dev-new'),
+        prod: secret('new-2', 'API_URL', ''),
+      }),
+    ]
+
+    const [merged] = mergeImportedRows(rows, imported, envs, '/', { dev: all, prod: keysOnly })
+    expect(merged.envs[2].secret).toMatchObject({
+      id: 'new-2',
+      key: 'API_URL',
+      value: '',
+      path: '/',
+    })
+    expect(merged.envs[1].secret).toBeNull()
+  })
+
+  it('keeps a saved comment when the imported line has none', () => {
+    const rows = [row('API_URL', { dev: secret('d1', 'API_URL', 'old', { comment: 'why' }) })]
+    const imported = [importedRow('API_URL', { dev: secret('new-1', 'API_URL', 'new') })]
+
+    const [merged] = mergeImportedRows(rows, imported, envs, '/', { dev: all })
+    expect(merged.envs[0].secret).toMatchObject({ value: 'new', comment: 'why' })
+  })
+
+  it('takes an empty value the file states, in an env that imports values', () => {
+    const rows = [row('API_URL', { dev: secret('d1', 'API_URL', 'old') })]
+    const imported = [importedRow('API_URL', { dev: secret('new-1', 'API_URL', '') })]
+
+    const [merged] = mergeImportedRows(rows, imported, envs, '/', { dev: all })
+    expect(merged.envs[0].secret?.value).toBe('')
+  })
+
+  it('adds new keys as rows in the folder, and leaves the same key in another folder alone', () => {
+    const elsewhere = {
+      ...row('TOKEN', { dev: secret('d9', 'TOKEN', 'x', { path: '/api' }) }),
+      path: '/api',
+    }
+    const imported = [importedRow('TOKEN', { dev: secret('new-1', 'TOKEN', 'y') })]
+
+    const merged = mergeImportedRows([elsewhere], imported, envs, '/', { dev: all })
+    expect(merged).toHaveLength(2)
+    expect(merged[0]).toBe(elsewhere)
+    expect(merged[1]).toMatchObject({ id: 'imported-TOKEN', key: 'TOKEN', path: '/' })
+    expect(merged[1].envs[0].secret).toMatchObject({ value: 'y', path: '/', key: 'TOKEN' })
+  })
+
+  describe('with a key renamed while an env was hidden', () => {
+    // OLD became NEW in Development; Production, hidden then, still has it as OLD
+    const server = [
+      row('OLD', { dev: secret('d1', 'OLD', 'dev'), prod: secret('p1', 'OLD', 'prod-live') }),
+    ]
+    const renamed = [
+      {
+        ...server[0],
+        key: 'NEW',
+        envs: server[0].envs.map((entry) =>
+          entry.env.id === 'dev' ? { ...entry, secret: secret('d1', 'NEW', 'dev') } : entry
+        ),
+      },
+    ]
+    const inProd = (rows: AppSecret[]) =>
+      rows.flatMap((r) =>
+        r.envs
+          .filter((entry) => entry.env.id === 'prod' && entry.secret)
+          .map((entry) => ({ row: r.key, ...entry.secret! }))
+      )
+    const merge = (imported: AppSecret[], prodOptions = all) =>
+      mergeImportedRows(
+        renamed,
+        imported,
+        envs,
+        '/',
+        { prod: prodOptions },
+        server,
+        () => 'split-1'
+      )
+
+    it('adds the new key to that env instead of overwriting the value it keeps under the old one', () => {
+      const merged = merge([importedRow('NEW', { prod: secret('new-1', 'NEW', 'imported') })])
+
+      expect(inProd(merged)).toEqual([
+        expect.objectContaining({ row: 'NEW', id: 'new-1', key: 'NEW', value: 'imported' }),
+        expect.objectContaining({ row: 'OLD', id: 'p1', key: 'OLD', value: 'prod-live' }),
+      ])
+      // The renamed value stays with its row
+      expect(merged[0]).toMatchObject({ id: 'app-OLD', key: 'NEW' })
+      expect(merged[0].envs[0].secret).toMatchObject({ id: 'd1', key: 'NEW' })
+      expect(merged[1]).toMatchObject({ id: 'split-1', key: 'OLD' })
+    })
+
+    it('adds it blank where the env takes keys only', () => {
+      const merged = merge([importedRow('NEW', { prod: secret('new-1', 'NEW', '') })], keysOnly)
+
+      expect(inProd(merged)).toEqual([
+        expect.objectContaining({ row: 'NEW', id: 'new-1', value: '' }),
+        expect.objectContaining({ row: 'OLD', id: 'p1', value: 'prod-live' }),
+      ])
+    })
+
+    it('updates the value under the old key when that is what the file names', () => {
+      const merged = merge([importedRow('OLD', { prod: secret('new-1', 'OLD', 'imported') })])
+
+      expect(inProd(merged)).toEqual([
+        expect.objectContaining({ row: 'OLD', id: 'p1', key: 'OLD', value: 'imported' }),
+      ])
+      expect(merged.map((r) => r.key)).toEqual(['NEW', 'OLD'])
+    })
+
+    it('leaves the row as it is when the import names neither key', () => {
+      const merged = merge([importedRow('OTHER', { prod: secret('new-1', 'OTHER', 'x') })])
+
+      expect(merged[0]).toBe(renamed[0])
+    })
+  })
+})

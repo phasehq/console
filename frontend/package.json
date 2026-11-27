@@ -40,7 +40,7 @@
     "jspdf": "^4.2.1",
     "libsodium-wrappers-sumo": "^0.7.13",
     "lodash": "^4.18.1",
-    "next": "16.4.1",
+    "next": "16.4.5",
     "nextjs-toploader": "^3.8.16",
     "posthog-js": "^1.434.13",
     "qrcode.react": "^4.2.0",
@@ -76,6 +76,6 @@
     "ts-jest": "^29.1.2"
   },
   "resolutions": {
-    "eslint-config-next/@typescript-eslint/parser/@typescript-eslint/typescript-estree/minimatch": "9.0.9"
+    "@graphql-tools/utils": "^12.1.0"
   }
 }

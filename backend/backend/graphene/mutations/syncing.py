@@ -90,6 +90,14 @@ class InitEnvSync(graphene.Mutation):
         if not app_environments:
             raise GraphQLError("This App has no environments")
 
+        # One restored after this would have no server key.
+        if Environment.all_objects.filter(app=app, deleted_at__isnull=False).exists():
+            raise GraphQLError(
+                "This App has an environment that is scheduled for deletion. "
+                "Restore it, delete it now, or wait until it has been deleted, to "
+                "enable SSE."
+            )
+
         for env in app_environments.values():
             if not user_can_access_environment(user.userId, env.id):
                 raise GraphQLError(
@@ -1718,7 +1726,9 @@ class ToggleSyncActive(graphene.Mutation):
             raise GraphQLError("You don't have permission to update Integrations")
 
         env_sync.is_active = not env_sync.is_active
-        env_sync.save()
+        # Only what changed: the row was read a while ago, and its path may
+        # have been rewritten since by a folder rename.
+        env_sync.save(update_fields=["is_active", "updated_at"])
 
         if env_sync.is_active:
             trigger_sync_tasks(env_sync)
@@ -1802,7 +1812,8 @@ class UpdateSyncAuthentication(graphene.Mutation):
             )
 
         env_sync.authentication_id = credential_id
-        env_sync.save()
+        # As with the switch above: not the path a rename may have moved
+        env_sync.save(update_fields=["authentication", "updated_at"])
 
         return UpdateSyncAuthentication(sync=env_sync)
 

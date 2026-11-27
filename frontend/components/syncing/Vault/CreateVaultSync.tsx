@@ -16,6 +16,7 @@ import { organisationContext } from '@/contexts/organisationContext'
 import { ProviderCredentialPicker } from '../ProviderCredentialPicker'
 import { ProviderIcon } from '../ProviderIcon'
 import { Input } from '@/components/common/Input'
+import { SyncPathInput } from '@/components/syncing/SyncPathInput'
 
 export const CreateVaultSync = (props: { appId: string; closeModal: () => void }) => {
   const { activeOrganisation: organisation } = useContext(organisationContext)
@@ -162,7 +163,7 @@ export const CreateVaultSync = (props: { appId: string; closeModal: () => void }
                 </div>
               </RadioGroup>
 
-              <Input value={path} setValue={setPath} label="Path" />
+              <SyncPathInput appId={appId} env={phaseEnv} path={path} setPath={setPath} />
             </div>
 
             <div className="flex justify-between items-center gap-4 py-4">

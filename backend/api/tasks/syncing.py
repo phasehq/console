@@ -1,6 +1,7 @@
 from django.utils import timezone
 from api.services import ServiceConfig
 from api.utils.organisation_deletion import organisation_is_locked
+from api.utils.resource_deletion import environment_is_locked
 from api.utils.syncing.aws.auth import (
     get_aws_secrets_manager_credentials,
     get_aws_assume_role_credentials,
@@ -50,6 +51,7 @@ from ..utils.syncing.cloudflare.workers import (
     sync_cloudflare_worker_secrets,
 )
 from django.apps import apps
+from django.db import transaction
 from ..utils.syncing.secrets import get_environment_secrets
 from django_rq import job
 from rq.timeouts import JobTimeoutException
@@ -64,12 +66,16 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 3600
 
+# A job holds the sync as it was queued, and the request that queues it as it was loaded: saving the
+# whole row would undo a path or pause changed since
+_STATUS_FIELDS = ["status", "updated_at"]
+
 
 def trigger_sync_tasks(env_sync):
     EnvironmentSync = apps.get_model("api", "EnvironmentSync")
     EnvironmentSyncEvent = apps.get_model("api", "EnvironmentSyncEvent")
 
-    if _pause_if_org_locked(env_sync):
+    if _pause_if_locked(env_sync):
         return
 
     cancel_sync_tasks(env_sync)  # cancel any running or queued jobs for this sync
@@ -97,7 +103,7 @@ def trigger_sync_tasks(env_sync):
         return
 
     env_sync.status = EnvironmentSync.QUEUED
-    env_sync.save()
+    env_sync.save(update_fields=_STATUS_FIELDS)
 
     try:
         job = sync_func.delay(env_sync)
@@ -106,23 +112,31 @@ def trigger_sync_tasks(env_sync):
     except Exception as e:
         logger.error(f"Failed to dispatch sync job for {env_sync.id}: {e}")
         env_sync.status = EnvironmentSync.FAILED
-        env_sync.save()
+        env_sync.save(update_fields=_STATUS_FIELDS)
 
 
-def _pause_if_org_locked(env_sync, sync_event=None):
-    """Syncs pause while the org is pending deletion. Restoring the org
-    re-triggers every sync left cancelled here."""
-    if not organisation_is_locked(env_sync.environment.app.organisation_id):
+def _sync_is_locked(env_sync):
+    """What is pending deletion and so pauses the sync, or None."""
+    if organisation_is_locked(env_sync.environment.app.organisation_id):
+        return "the organisation"
+    if environment_is_locked(env_sync.environment_id):
+        return "the environment or its app"
+    return None
+
+
+def _pause_if_locked(env_sync, sync_event=None):
+    """Syncs pause while the org, the app or the environment is pending
+    deletion. Restoring it runs them again."""
+    locked = _sync_is_locked(env_sync)
+    if locked is None:
         return False
 
     EnvironmentSync = apps.get_model("api", "EnvironmentSync")
     env_sync.status = EnvironmentSync.CANCELLED
-    env_sync.save()
+    env_sync.save(update_fields=_STATUS_FIELDS)
     if sync_event:
         sync_event.status = EnvironmentSync.CANCELLED
-        sync_event.meta = {
-            "message": "Paused: the organisation is scheduled for deletion"
-        }
+        sync_event.meta = {"message": f"Paused: {locked} is scheduled for deletion"}
         sync_event.completed_at = timezone.now()
         sync_event.save()
     return True
@@ -164,20 +178,28 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
         .first()
     )
 
-    if _pause_if_org_locked(environment_sync, sync_event):
+    if _pause_if_locked(environment_sync, sync_event):
         return
 
     # Mark as in-progress now that the worker has picked up the job
     environment_sync.status = EnvironmentSync.IN_PROGRESS
-    environment_sync.save()
+    environment_sync.save(update_fields=_STATUS_FIELDS)
     if sync_event:
         sync_event.status = EnvironmentSync.IN_PROGRESS
         sync_event.save()
 
     try:
-        secrets = get_environment_secrets(
-            environment_sync.environment, environment_sync.path
-        )
+        # The job holds the sync as it was queued. Its folder may have been renamed
+        # or moved since, and the old path would read as empty, which most providers
+        # take as "delete everything". Locking the row holds such a change off, so
+        # the path and the secrets under it are read as one.
+        with transaction.atomic():
+            path = (
+                EnvironmentSync.objects.select_for_update()
+                .values_list("path", flat=True)
+                .get(id=environment_sync.id)
+            )
+            secrets = get_environment_secrets(environment_sync.environment, path)
 
         if environment_sync.authentication is None:
             sync_data = (
@@ -227,7 +249,7 @@ def handle_sync_event(environment_sync, sync_function, *args, **kwargs):
 
     finally:
         environment_sync.last_sync = timezone.now()
-        environment_sync.save()
+        environment_sync.save(update_fields=[*_STATUS_FIELDS, "last_sync"])
         sync_event.completed_at = timezone.now()
         sync_event.save()
 
@@ -406,12 +428,12 @@ def perform_gitlab_sync(environment_sync):
 
     # Syncs created before July 2024 only stored the path of the project or group.
     # Store its ID once, so other syncs to it are recognised even after a rename.
-    # Not while the org is pending deletion: handle_sync_event pauses the sync.
+    # Not while the sync is locked: handle_sync_event pauses it.
     if (
         resource_id is None
         and resource_path
         and auth_id
-        and not organisation_is_locked(environment_sync.environment.app.organisation_id)
+        and _sync_is_locked(environment_sync) is None
     ):
         try:
             resource_id = resolve_gitlab_resource_id(
@@ -653,11 +675,15 @@ def perform_gcp_sm_sync(environment_sync):
     handle_sync_event(environment_sync, sync)
 
 
-def trigger_syncs_for_referencing_envs(changed_env):
+def trigger_syncs_for_referencing_envs(changed_env, also_changed=()):
     """
     Finds environments with active syncs whose secrets reference the changed
     environment — directly or transitively through a chain of references — and
     triggers those syncs to keep the resolved values up to date.
+
+    `also_changed` are the ids of other environments of the same organisation
+    that changed with it (an app restore): one pass covers them all, so the
+    reference graph is built once and each sync is triggered once.
 
     Reference resolution is recursive (see decrypt_secret_value), so a sync's
     resolved output can depend on the changed environment through intermediate
@@ -679,15 +705,15 @@ def trigger_syncs_for_referencing_envs(changed_env):
     App = apps.get_model("api", "App")
 
     org = changed_env.app.organisation
-    changed_env_id = str(changed_env.id)
+    changed_env_ids = {str(changed_env.id), *(str(i) for i in also_changed)}
 
-    # Find all active syncs in the org, excluding the changed environment
+    # Find all active syncs in the org, excluding the changed environments
     candidate_syncs = EnvironmentSync.objects.filter(
         environment__app__organisation=org,
         is_active=True,
         deleted_at=None,
     ).exclude(
-        environment=changed_env
+        environment_id__in=changed_env_ids
     ).select_related("environment", "environment__app")
 
     # Group syncs by environment to avoid redundant reference checks
@@ -738,7 +764,7 @@ def trigger_syncs_for_referencing_envs(changed_env):
                 continue
             visited.add(current)
             refs = direct_refs(current)
-            if changed_env_id in refs:
+            if changed_env_ids & refs:
                 return True
             stack.extend(refs - visited)
         return False
@@ -747,8 +773,9 @@ def trigger_syncs_for_referencing_envs(changed_env):
         try:
             if references_changed_env(env_id):
                 logger.info(
-                    f"Environment {env_id} references changed environment "
-                    f"{changed_env.id} (directly or transitively), triggering syncs"
+                    f"Environment {env_id} references changed environment(s) "
+                    f"{sorted(changed_env_ids)} (directly or transitively), "
+                    "triggering syncs"
                 )
                 for sync in syncs:
                     trigger_sync_tasks(sync)
@@ -779,3 +806,20 @@ def detect_and_trigger_referencing_syncs(changed_env_id):
     except Environment.DoesNotExist:
         return
     trigger_syncs_for_referencing_envs(changed_env)
+
+
+@job("default", timeout=DEFAULT_TIMEOUT, retry=Retry(max=3, interval=[10, 30, 60]))
+def detect_and_trigger_referencing_syncs_for(changed_env_ids):
+    """As detect_and_trigger_referencing_syncs, for environments of one
+    organisation that changed together, in a single pass."""
+    Environment = apps.get_model("api", "Environment")
+    changed_envs = list(
+        Environment.objects.select_related("app", "app__organisation").filter(
+            id__in=changed_env_ids
+        )
+    )
+    if not changed_envs:
+        return
+    trigger_syncs_for_referencing_envs(
+        changed_envs[0], also_changed=[env.id for env in changed_envs[1:]]
+    )

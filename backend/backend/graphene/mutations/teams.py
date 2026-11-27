@@ -501,10 +501,9 @@ class AddTeamMembersMutation(graphene.Mutation):
                 .values_list("app_id", flat=True)
                 .distinct()
             )
-            for app_id in app_ids:
-                app = App.objects.get(id=app_id)
-                if app.sse_enabled:
-                    provision_team_environment_keys(team, app, members=new_memberships)
+            # A filter, not a get per ID: apps pending deletion are left out.
+            for app in App.objects.filter(id__in=app_ids, sse_enabled=True):
+                provision_team_environment_keys(team, app, members=new_memberships)
 
         if added_detail:
             actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=org)
@@ -825,7 +824,9 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
         if not app.sse_enabled:
             raise GraphQLError("Team-based access requires server-side encryption.")
 
-        # Determine which environments to add/remove
+        # Determine which environments to add/remove. Those pending deletion
+        # count as current: they can't be in the new scope, and access
+        # dropped here must not come back with a restore.
         current_env_ids = set(
             TeamAppEnvironment.objects.filter(team=team, app=app).values_list(
                 "environment_id", flat=True
@@ -849,14 +850,14 @@ class UpdateTeamAppEnvironmentsMutation(graphene.Mutation):
         to_add = new_env_ids - current_env_ids
 
         old_env_names = sorted(
-            Environment.objects.filter(id__in=current_env_ids).values_list(
+            Environment.all_objects.filter(id__in=current_env_ids).values_list(
                 "name", flat=True
             )
         )
 
         # Remove environments no longer in scope
         if to_remove:
-            envs_to_remove = Environment.objects.filter(id__in=to_remove)
+            envs_to_remove = Environment.all_objects.filter(id__in=to_remove)
             revoke_team_environment_keys(team, app=app, environments=envs_to_remove)
             TeamAppEnvironment.objects.filter(
                 team=team, app=app, environment_id__in=to_remove

@@ -22,6 +22,7 @@ from api.tasks.organisation_deletion import (
     enqueue_deletion_requested,
     enqueue_organisation_restored,
 )
+from api.utils.resource_deletion import restart_grace_periods
 from api.utils.organisation_deletion import (
     deletion_scheduled_for,
     has_pending_invoices,
@@ -1026,6 +1027,7 @@ class RestoreOrganisationMutation(graphene.Mutation):
             org.deleted_at = None
             org.purge_blocked_at = None
             org.save(update_fields=["deleted_at", "purge_blocked_at", "updated_at"])
+            restart_grace_periods(org)
 
             _log_organisation_event(
                 info, org, "U", f"Restored organisation '{org.name}'"

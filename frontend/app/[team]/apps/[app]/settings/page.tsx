@@ -16,7 +16,7 @@ import { UpdateAppInfoOp } from '@/graphql/mutations/apps/updateAppInfo.gql'
 import { Button } from '@/components/common/Button'
 import { toast } from 'react-toastify'
 import { AppDescriptionEditor } from './_components/AppDescriptionEditor'
-import { MAX_APP_NAME_LENGTH } from '@/constants'
+import { DELETION_GRACE_PERIOD, MAX_APP_NAME_LENGTH } from '@/constants'
 
 export default function AppSettings(props: { params: Promise<{ team: string; app: string }> }) {
   const params = use(props.params)
@@ -164,14 +164,14 @@ export default function AppSettings(props: { params: Promise<{ team: string; app
                   </div>
                 </div>
               </div>
-              <div className="flex items-center p-4 gap-2 text-sky-500 font-medium bg-sky-400/10 ring-1 ring-inset ring-sky-400/20 rounded-lg">
+              <div className="flex items-center p-4 gap-2 text-sky-600 dark:text-sky-500 font-medium bg-sky-400/10 ring-1 ring-inset ring-sky-400/20 rounded-lg">
                 <FaServer className="text-xl" />
                 <div>Server-side encryption enabled</div>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex items-center p-4 gap-2 text-emerald-500 font-medium bg-emerald-400/10 ring-1 ring-inset ring-emerald-400/20 rounded-lg">
+              <div className="flex items-center p-4 gap-2 text-emerald-600 dark:text-emerald-500 font-medium bg-emerald-400/10 ring-1 ring-inset ring-emerald-400/20 rounded-lg">
                 <FaArrowDownUpLock className="text-xl" />
                 <div>End-to-end encryption enabled</div>
               </div>
@@ -208,7 +208,10 @@ export default function AppSettings(props: { params: Promise<{ team: string; app
           <div className="flex items-center justify-between p-3 rounded-lg ring-1 ring-inset ring-red-500/40 bg-red-400/10 ">
             <div>
               <h3 className="text-red-400 font-semibold">Delete App</h3>
-              <p className="text-neutral-500">Permanently delete this App</p>
+              <p className="text-neutral-500">
+                Delete this App. It is kept for {DELETION_GRACE_PERIOD} and can be restored, unless
+                you choose to delete it immediately.
+              </p>
             </div>
 
             {organisation && app && (

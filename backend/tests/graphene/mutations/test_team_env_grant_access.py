@@ -256,3 +256,27 @@ def test_update_global_access_caller_is_exempt(mocks):
     mocks.TeamAppEnvironment.objects.get_or_create.assert_called_once_with(
         team=mocks.team, app=mocks.app, environment=PROD
     )
+
+
+def test_update_drops_an_environment_pending_deletion(mocks):
+    # It can't be in the new scope. Left alone, the team's access to it would
+    # come back with a restore, which a team member could then trigger.
+    pending = _env("env-pending", "Old")
+    _caller(mocks, ADMIN, accessible=[])
+
+    _update(mocks, current=[DEV, pending], env_ids=[DEV.id])
+
+    # The team's current scope is read whole, not narrowed to live environments.
+    mocks.TeamAppEnvironment.objects.filter.assert_any_call(
+        team=mocks.team, app=mocks.app
+    )
+    # all_objects: Environment.objects can't see the one being revoked.
+    all_environments = mocks.Environment.all_objects.filter
+    all_environments.assert_any_call(id__in={pending.id})
+    mocks.revoke_team_environment_keys.assert_called_once_with(
+        mocks.team, app=mocks.app, environments=all_environments.return_value
+    )
+    mocks.TeamAppEnvironment.objects.filter.assert_any_call(
+        team=mocks.team, app=mocks.app, environment_id__in={pending.id}
+    )
+    mocks.TeamAppEnvironment.objects.filter.return_value.delete.assert_called_once()

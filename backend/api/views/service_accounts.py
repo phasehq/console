@@ -379,6 +379,7 @@ def _serialize_sa_detail(sa):
         env_keys = EnvironmentKey.objects.filter(
             service_account=sa,
             environment__app=app,
+            environment__deleted_at=None,
             deleted_at=None,
         ).select_related("environment")
         apps_data.append(
@@ -1006,15 +1007,24 @@ class PublicServiceAccountAccessView(APIView):
         # --- Apply changes atomically ---
         with transaction.atomic():
             # 1. Remove app memberships not in the desired list
-            current_app_ids = set(
-                str(a.id) for a in sa.apps.filter(is_deleted=False)
-            )
+            # all_objects: sa.apps hides apps pending deletion. They can't be
+            # desired, and access dropped here must not come back with a
+            # restore.
+            current_apps = {
+                str(a.id): a
+                for a in App.all_objects.filter(service_accounts=sa, is_deleted=False)
+            }
+            current_app_ids = set(current_apps)
             apps_to_remove = current_app_ids - desired_app_ids
             if apps_to_remove:
-                apps_to_remove_qs = list(App.objects.filter(id__in=apps_to_remove))
-                sa.apps.remove(*apps_to_remove_qs)
-                for a in apps_to_remove_qs:
-                    revoke_individual_environment_keys(sa, app=a)
+                # Not sa.apps.remove(): it skips apps pending deletion.
+                sa.apps.through.objects.filter(
+                    serviceaccount=sa, app_id__in=apps_to_remove
+                ).delete()
+                for app_id_str in apps_to_remove:
+                    revoke_individual_environment_keys(
+                        sa, app=current_apps[app_id_str]
+                    )
 
             # 2. Add new app memberships
             apps_to_add = desired_app_ids - current_app_ids
@@ -1031,6 +1041,9 @@ class PublicServiceAccountAccessView(APIView):
                 desired_env_id_strs = set(str(e) for e in desired_envs)
 
                 # Get current env keys for this SA + app
+                # Includes environments pending deletion: they can't be
+                # desired, and access dropped here must not come back with a
+                # restore.
                 current_env_keys = list(EnvironmentKey.objects.filter(
                     service_account=sa,
                     environment__app_id=app_id_str,
@@ -1047,7 +1060,9 @@ class PublicServiceAccountAccessView(APIView):
                 if envs_to_revoke:
                     revoke_individual_environment_keys(
                         sa,
-                        environments=Environment.objects.filter(id__in=envs_to_revoke),
+                        environments=Environment.all_objects.filter(
+                            id__in=envs_to_revoke
+                        ),
                     )
 
                 # Envs the SA already had access to (via a team grant or
@@ -1114,13 +1129,13 @@ class PublicServiceAccountAccessView(APIView):
         # Audit log — build detailed access change data
         app_name_map = {
             str(a.id): a.name
-            for a in App.objects.filter(
+            for a in App.all_objects.filter(
                 id__in=desired_app_ids | apps_to_remove
             )
         }
         env_name_map = {
             str(e.id): e.name
-            for e in Environment.objects.filter(
+            for e in Environment.all_objects.filter(
                 app_id__in=desired_app_ids | apps_to_remove
             )
         }
