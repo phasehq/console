@@ -1220,6 +1220,104 @@ class TestPublicMemberAccessView:
     @patch("api.views.members.log_audit_event")
     @patch("api.views.members.get_actor_info", return_value=("user", "uid", {}))
     @patch("api.views.members.get_resolver_request_meta", return_value=("127.0.0.1", "pytest"))
+    @patch("api.views.members.revoke_individual_environment_keys")
+    @patch("api.views.members.Environment")
+    @patch("api.views.members.App")
+    @patch("api.views.members.transaction")
+    @patch("api.views.members.get_server_keypair", return_value=(b"\x00" * 32, b"\x01" * 32))
+    @patch("api.views.members._ed25519_pk_to_curve25519", return_value=b"\x02" * 32)
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_access_put_revokes_an_app_pending_deletion(
+        self, _ip, _throttle, _perm,
+        mock_member_model, _ed25519, _server_kp,
+        mock_txn, mock_app_model, mock_env_model, mock_revoke,
+        _meta, _actor, mock_audit, mock_serializer,
+    ):
+        # `member.apps` hides an app pending deletion. Left alone, the
+        # member's access would come back with a restore.
+        pending_app = self._make_sse_app()
+        target = _make_org_member(org=self.org, role_name="Developer", email="target@example.com")
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+        mock_app_model.all_objects.filter.return_value = [pending_app]
+        mock_serializer.return_value.data = {"id": str(target.id)}
+
+        request, _, _ = _build_request(
+            "put", f"/public/v1/members/{target.id}/access/", self.org, data={"apps": []},
+        )
+        response = self.view(request, member_id=target.id)
+
+        assert response.status_code == status.HTTP_200_OK
+        mock_app_model.all_objects.filter.assert_any_call(members=target, is_deleted=False)
+        memberships = target.apps.through.objects.filter
+        memberships.assert_called_once_with(
+            organisationmember=target, app_id__in={str(pending_app.id)}
+        )
+        memberships.return_value.delete.assert_called_once_with()
+        # remove() would skip it: the related manager hides it too.
+        target.apps.remove.assert_not_called()
+        mock_revoke.assert_called_once_with(target, app=pending_app)
+        revoked = mock_audit.call_args.kwargs["old_values"]["apps_revoked"]
+        assert [app["id"] for app in revoked] == [str(pending_app.id)]
+
+    @patch("api.views.members.OrganisationMemberSerializer")
+    @patch("api.views.members.log_audit_event")
+    @patch("api.views.members.get_actor_info", return_value=("user", "uid", {}))
+    @patch("api.views.members.get_resolver_request_meta", return_value=("127.0.0.1", "pytest"))
+    @patch("api.views.members.revoke_individual_environment_keys")
+    @patch("api.views.members.EnvironmentKeyGrant")
+    @patch("api.views.members.EnvironmentKey")
+    @patch("api.views.members.Environment")
+    @patch("api.views.members.App")
+    @patch("api.views.members.transaction")
+    @patch("api.views.members.get_server_keypair", return_value=(b"\x00" * 32, b"\x01" * 32))
+    @patch("api.views.members._ed25519_pk_to_curve25519", return_value=b"\x02" * 32)
+    @patch("api.views.members.OrganisationMember")
+    @patch("api.views.members.user_has_permission", return_value=True)
+    @patch("api.views.members.PlanBasedRateThrottle.allow_request", return_value=True)
+    @patch("api.views.members.IsIPAllowed.has_permission", return_value=True)
+    def test_access_put_revokes_an_environment_pending_deletion(
+        self, _ip, _throttle, _perm,
+        mock_member_model, _ed25519, _server_kp,
+        mock_txn, mock_app_model, mock_env_model, mock_ek_model, _grant_model,
+        mock_revoke, _meta, _actor, _audit, mock_serializer,
+    ):
+        app = self._make_sse_app()
+        env, pending_env = self._make_env(app), self._make_env(app)
+        target = _make_org_member(org=self.org, role_name="Developer", email="target@example.com")
+        mock_member_model.objects.select_related.return_value.get.return_value = target
+        mock_app_model.objects.get.return_value = app
+        mock_app_model.all_objects.filter.return_value = [app]
+        mock_env_model.objects.filter.return_value.values_list.return_value = [env.id]
+        # The member holds keys for both; only the live one is still wanted.
+        mock_ek_model.objects.filter.return_value = [
+            Mock(environment_id=env.id), Mock(environment_id=pending_env.id),
+        ]
+        mock_serializer.return_value.data = {"id": str(target.id)}
+
+        request, _, _ = _build_request(
+            "put", f"/public/v1/members/{target.id}/access/", self.org,
+            data={"apps": [{"id": str(app.id), "environments": [str(env.id)]}]},
+        )
+        response = self.view(request, member_id=target.id)
+
+        assert response.status_code == status.HTTP_200_OK
+        # The member's current keys are not narrowed to live environments.
+        mock_ek_model.objects.filter.assert_called_once_with(
+            user=target, environment__app_id=str(app.id), deleted_at=None
+        )
+        # all_objects: Environment.objects can't see the one being revoked.
+        mock_env_model.all_objects.filter.assert_any_call(id__in={str(pending_env.id)})
+        mock_revoke.assert_called_once_with(
+            target, environments=mock_env_model.all_objects.filter.return_value
+        )
+
+    @patch("api.views.members.OrganisationMemberSerializer")
+    @patch("api.views.members.log_audit_event")
+    @patch("api.views.members.get_actor_info", return_value=("user", "uid", {}))
+    @patch("api.views.members.get_resolver_request_meta", return_value=("127.0.0.1", "pytest"))
     @patch("api.views.members.EnvironmentKeyGrant")
     @patch("api.views.members.EnvironmentKey")
     @patch("api.views.members.ServerEnvironmentKey")

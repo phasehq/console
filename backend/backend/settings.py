@@ -399,7 +399,7 @@ RQ_SSL_OPTIONS = (
 # default: short jobs triggered by users (syncs, emails).
 # scheduled-jobs: jobs with deadlines (lease expiry, rotations, sweeps).
 # log-streams: log shipping.
-# maintenance: slow or database-heavy work nothing waits on (org purges).
+# maintenance: slow or database-heavy work nothing waits on (purges).
 RQ_QUEUES = {
     "default": {
         "HOST": REDIS_HOST,

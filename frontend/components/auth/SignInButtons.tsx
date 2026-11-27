@@ -713,7 +713,7 @@ export default function SignInButtons({
             <p className="text-neutral-500 text-xs py-4 max-w-sm">
               By continuing, you are agreeing to our{' '}
               <Link
-                className="text-emerald-400 hover:text-emerald-500 transition ease"
+                className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-500 transition ease"
                 href="https://phase.dev/legal/terms"
                 target="_blank"
                 rel="noopener"
@@ -722,7 +722,7 @@ export default function SignInButtons({
               </Link>{' '}
               and{' '}
               <Link
-                className="text-emerald-400 hover:text-emerald-500 transition ease"
+                className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-500 transition ease"
                 href="https://phase.dev/legal/privacy"
                 target="_blank"
                 rel="noopener"

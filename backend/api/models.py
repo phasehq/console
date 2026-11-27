@@ -217,7 +217,40 @@ class ActivatedPhaseLicense(models.Model):
     activated_at = models.DateTimeField(auto_now_add=True)
 
 
+DELETION_LOCK_FIELDS = (
+    "deleted_at",
+    "is_deleted",
+    "purge_blocked_at",
+    "purge_claimed_at",
+    "purge_started_at",
+    "skip_grace_period",
+)
+
+
+def _without_deletion_lock(instance, update_fields):
+    """The fields a save() of an existing app or environment writes. save()
+    writes every column by default, so a copy read before a deletion was
+    scheduled or cancelled would undo it. The lock columns are written only
+    when asked for by name."""
+    if update_fields is not None or instance._state.adding:
+        return update_fields
+    # Deferred fields stay unsaved, as in Django's own save().
+    deferred = instance.get_deferred_fields()
+    return [
+        field.name
+        for field in instance._meta.concrete_fields
+        if not field.primary_key
+        and field.name not in DELETION_LOCK_FIELDS
+        and field.attname not in deferred
+    ]
+
+
 class AppManager(models.Manager):
+    """Leaves out apps pending deletion; `App.all_objects` includes them."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
+
     def create(self, *args, **kwargs):
         organisation = kwargs.get("organisation")
         if not can_add_app(organisation):
@@ -241,11 +274,32 @@ class App(models.Model):
     wrapped_key_share = models.CharField(max_length=406)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Set when deletion is requested: locks the app until it is restored or purged.
     deleted_at = models.DateTimeField(blank=True, null=True)
+    # Only set on apps soft-deleted by releases before 2024. They stay hidden
+    # and are never purged or restored.
     is_deleted = models.BooleanField(default=False)
+    # Set while a credential that can't be revoked holds up the purge.
+    purge_blocked_at = models.DateTimeField(blank=True, null=True)
+    # Set while a purge run revokes credentials: no restore meanwhile. The
+    # run hands the row back if it stops before the point of no return.
+    purge_claimed_at = models.DateTimeField(blank=True, null=True)
+    # Set at the point of no return: no restore from then on.
+    purge_started_at = models.DateTimeField(blank=True, null=True)
+    # Deletion was asked for at once: no grace period, so no restore.
+    # db_default: a backend from before this column can still insert rows.
+    skip_grace_period = models.BooleanField(default=False, db_default=False)
     sse_enabled = models.BooleanField(default=False)
 
+    # Declared first, so it is the default manager.
     objects = AppManager()
+    all_objects = models.Manager()
+
+    def save(self, *args, **kwargs):
+        kwargs["update_fields"] = _without_deletion_lock(
+            self, kwargs.get("update_fields")
+        )
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -491,6 +545,16 @@ class OrganisationMemberInvite(models.Model):
 
 
 class EnvironmentManager(models.Manager):
+    """Leaves out environments pending deletion, their own or their app's;
+    `Environment.all_objects` includes them."""
+
+    def get_queryset(self):
+        return (
+            super()
+            .get_queryset()
+            .filter(deleted_at__isnull=True, app__deleted_at__isnull=True)
+        )
+
     def create(self, *args, **kwargs):
         app = kwargs.get("app")
         if not can_add_environment(app):
@@ -519,18 +583,38 @@ class Environment(models.Model):
         choices=ENV_TYPES,
         default=DEVELOPMENT,
     )
+    # Hex label color; null = clients derive a default from the name
+    color = models.CharField(max_length=7, blank=True, null=True)
     index = models.IntegerField(default=0)
     identity_key = models.CharField(max_length=256)
     wrapped_seed = models.CharField(max_length=256)
     wrapped_salt = models.CharField(max_length=256)
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Set when deletion is requested: locks the environment until it is
+    # restored or purged.
     deleted_at = models.DateTimeField(blank=True, null=True)
+    # No release has set this. Treated like App.is_deleted.
     is_deleted = models.BooleanField(default=False)
+    # Set while a credential that can't be revoked holds up the purge.
+    purge_blocked_at = models.DateTimeField(blank=True, null=True)
+    # Set while a purge run revokes credentials: no restore meanwhile. The
+    # run hands the row back if it stops before the point of no return.
+    purge_claimed_at = models.DateTimeField(blank=True, null=True)
+    # Set at the point of no return: no restore from then on.
+    purge_started_at = models.DateTimeField(blank=True, null=True)
+    # Deletion was asked for at once: no grace period, so no restore.
+    # db_default: a backend from before this column can still insert rows.
+    skip_grace_period = models.BooleanField(default=False, db_default=False)
 
+    # Declared first, so it is the default manager.
     objects = EnvironmentManager()
+    all_objects = models.Manager()
 
     def save(self, *args, **kwargs):
+        kwargs["update_fields"] = _without_deletion_lock(
+            self, kwargs.get("update_fields")
+        )
         super().save(*args, **kwargs)
 
         # Own syncs: synchronous, so queued status shows immediately.
@@ -1296,9 +1380,13 @@ class SecretEvent(models.Model):
         ]
 
     id = models.TextField(default=uuid4, primary_key=True, editable=False)
-    secret = models.ForeignKey(Secret, on_delete=models.CASCADE)
-    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
-    folder = models.ForeignKey(SecretFolder, on_delete=models.CASCADE, null=True)
+    # db_index=False (also on service_account_token): covered by the Meta indexes
+    secret = models.ForeignKey(Secret, on_delete=models.CASCADE, db_index=False)
+    environment = models.ForeignKey(
+        Environment, on_delete=models.CASCADE, db_index=False
+    )
+    # SET_NULL: a secret moved out of a folder keeps its history when that folder is deleted
+    folder = models.ForeignKey(SecretFolder, on_delete=models.SET_NULL, null=True)
     path = models.TextField(default="/")
     user = models.ForeignKey(
         OrganisationMember, on_delete=models.SET_NULL, blank=True, null=True
@@ -1310,7 +1398,11 @@ class SecretEvent(models.Model):
         ServiceAccount, on_delete=models.SET_NULL, blank=True, null=True
     )
     service_account_token = models.ForeignKey(
-        ServiceAccountToken, on_delete=models.SET_NULL, blank=True, null=True
+        ServiceAccountToken,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        db_index=False,
     )
     key = models.TextField()
     key_digest = models.TextField()

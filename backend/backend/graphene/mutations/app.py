@@ -6,6 +6,7 @@ from api.utils.access.permissions import (
     check_caller_can_grant_environments,
     role_has_global_access,
     user_can_access_app,
+    user_can_delete_app,
     user_has_permission,
     user_is_org_member,
 )
@@ -22,9 +23,19 @@ from api.models import (
     Role,
     ServiceAccount,
 )
-from backend.graphene.types import AppType, MemberType
-from api.utils.audit_logging import audit_app_cascade_envs, log_audit_event, get_actor_info_from_graphql, get_member_display_name
+from backend.graphene.types import AppType, DeletedAppType, MemberType
+from api.utils.audit_logging import log_audit_event, get_actor_info_from_graphql, get_member_display_name
+from api.utils.resource_deletion import (
+    ResourceDeletionError,
+    delete_app_now,
+    deletion_scheduled_for,
+    restore_app,
+    schedule_app_deletion,
+)
+from api.tasks.resource_deletion import enqueue_app_purge, enqueue_app_restored
 from api.utils.rest import get_resolver_request_meta
+import logging
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -224,18 +235,56 @@ class UpdateAppInfoMutation(graphene.Mutation):
         return UpdateAppInfoMutation(app=app)
 
 
+logger = logging.getLogger(__name__)
+
+
+def _log_app_deletion_requested(info, app):
+    """Audit a delete request. The purge is later logged as this actor's."""
+    if app.skip_grace_period:
+        description = f"Requested immediate deletion of app '{app.name}'"
+    else:
+        description = (
+            f"Scheduled app '{app.name}' for deletion on "
+            f"{deletion_scheduled_for(app):%Y-%m-%d %H:%M} UTC"
+        )
+
+    actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+        info, organisation=app.organisation
+    )
+    ip_address, user_agent = get_resolver_request_meta(info.context)
+    log_audit_event(
+        organisation=app.organisation,
+        event_type="D",
+        resource_type="app",
+        resource_id=app.id,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        actor_metadata=actor_metadata,
+        resource_metadata={"name": app.name},
+        description=description,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+
 class DeleteAppMutation(graphene.Mutation):
+    """Schedule the app for deletion. It is locked straight away and purged by
+    a background job once the grace period ends, unless restored. With
+    `immediately`, there is no grace period and no restore."""
+
     # SSO middleware reads this to resolve org from the bare `id`
     # kwarg (output is `ok`, no model implicit in return type).
     org_resource_model = "App"
 
     class Arguments:
         id = graphene.ID(required=True)
+        immediately = graphene.Boolean(default_value=False)
 
     ok = graphene.Boolean()
+    app = graphene.Field(DeletedAppType)
 
     @classmethod
-    def mutate(cls, root, info, id):
+    def mutate(cls, root, info, id, immediately=False):
         user = info.context.user
         app = App.objects.get(id=id)
 
@@ -247,34 +296,112 @@ class DeleteAppMutation(graphene.Mutation):
         ):
             raise GraphQLError("You don't have permission to delete Apps")
 
-        app_name = app.name
-        app_id = app.id
-        app_org = app.organisation
+        try:
+            schedule_app_deletion(app, immediately=bool(immediately))
+        except ResourceDeletionError as e:
+            raise GraphQLError(str(e))
 
-        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(info, organisation=app_org)
-        ip_address, user_agent = get_resolver_request_meta(info.context)
+        _log_app_deletion_requested(info, app)
+        if app.skip_grace_period:
+            transaction.on_commit(lambda: enqueue_app_purge(app.id))
 
-        audit_app_cascade_envs(
-            app, actor_type, actor_id, actor_metadata, ip_address, user_agent
+        return DeleteAppMutation(ok=True, app=app)
+
+
+class DeleteAppNowMutation(graphene.Mutation):
+    """Delete an app that is scheduled for deletion without waiting for the
+    rest of its grace period. It can no longer be restored."""
+
+    org_resource_model = "App"
+
+    class Arguments:
+        id = graphene.ID(required=True)
+
+    app = graphene.Field(DeletedAppType)
+
+    @classmethod
+    def mutate(cls, root, info, id):
+        user = info.context.user
+        # all_objects: an app pending deletion is hidden from App.objects.
+        app = App.all_objects.get(id=id)
+
+        if not user_can_access_app(user.userId, app.id, include_deleted=True):
+            raise GraphQLError("You don't have access to this app")
+
+        if not user_can_delete_app(user, app):
+            raise GraphQLError("You don't have permission to delete Apps")
+
+        try:
+            app = delete_app_now(app.id)
+        except ResourceDeletionError as e:
+            raise GraphQLError(str(e))
+
+        _log_app_deletion_requested(info, app)
+        transaction.on_commit(lambda: enqueue_app_purge(app.id))
+
+        return DeleteAppNowMutation(app=app)
+
+
+class RestoreAppMutation(graphene.Mutation):
+    """Cancel an app's pending deletion before the grace period ends, or later
+    while a credential that can't be revoked blocks the purge."""
+
+    org_resource_model = "App"
+
+    class Arguments:
+        id = graphene.ID(required=True)
+
+    app = graphene.Field(AppType)
+
+    @classmethod
+    def mutate(cls, root, info, id):
+        user = info.context.user
+        # all_objects: an app pending deletion is hidden from App.objects.
+        app = App.all_objects.get(id=id)
+
+        if not user_can_access_app(user.userId, app.id, include_deleted=True):
+            raise GraphQLError("You don't have access to this app")
+
+        # Whoever may delete an app may undo the deletion.
+        if not user_can_delete_app(user, app):
+            raise GraphQLError("You don't have permission to restore Apps")
+
+        try:
+            # In one transaction with queuing its follow-up. If that can't be
+            # queued, the restore is rolled back and can be tried again,
+            # rather than left without its syncs and rotations.
+            with transaction.atomic():
+                app = restore_app(app.id)
+                try:
+                    enqueue_app_restored(app.id)
+                except Exception:
+                    logger.exception("Failed to queue the restore of app %s", app.id)
+                    raise ResourceDeletionError(
+                        "This app could not be restored right now. Try again "
+                        "in a few minutes."
+                    )
+        except ResourceDeletionError as e:
+            raise GraphQLError(str(e))
+
+        actor_type, actor_id, actor_metadata = get_actor_info_from_graphql(
+            info, organisation=app.organisation
         )
-
-        app.delete()
-
+        ip_address, user_agent = get_resolver_request_meta(info.context)
         log_audit_event(
-            organisation=app_org,
-            event_type="D",
+            organisation=app.organisation,
+            event_type="U",
             resource_type="app",
-            resource_id=app_id,
+            resource_id=app.id,
             actor_type=actor_type,
             actor_id=actor_id,
             actor_metadata=actor_metadata,
-            resource_metadata={"name": app_name},
-            description=f"Deleted app '{app_name}'",
+            resource_metadata={"name": app.name},
+            description=f"Restored app '{app.name}'",
             ip_address=ip_address,
             user_agent=user_agent,
         )
 
-        return DeleteAppMutation(ok=True)
+        return RestoreAppMutation(app=app)
 
 
 class AppMemberInputType(graphene.InputObjectType):
