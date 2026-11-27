@@ -1,5 +1,15 @@
 import * as ipaddr from 'ipaddr.js'
 
+const parseCidrPrefix = (cidr: string): { addr: string; prefix: number } | null => {
+  const parts = cidr.split('/')
+  if (parts.length !== 2) return null
+
+  const [addr, prefixStr] = parts
+  if (!addr || !/^\d+$/.test(prefixStr)) return null
+
+  return { addr, prefix: Number(prefixStr) }
+}
+
 export const isValidIp = (ip: string): boolean => {
   try {
     if (!ip || ip.includes('/')) return false
@@ -12,17 +22,15 @@ export const isValidIp = (ip: string): boolean => {
 
 export const isValidCidr = (cidr: string): boolean => {
   try {
-    if (!cidr) return false
-    const [addr, prefixStr] = cidr.split('/')
-    if (!addr || !prefixStr) return false
+    const parsedCidr = parseCidrPrefix(cidr)
+    if (!parsedCidr) return false
 
-    const parsed = ipaddr.parse(addr)
-    const prefix = parseInt(prefixStr, 10)
+    const parsed = ipaddr.parse(parsedCidr.addr)
 
     if (parsed.kind() === 'ipv4') {
-      return prefix >= 0 && prefix <= 32
+      return parsedCidr.prefix >= 0 && parsedCidr.prefix <= 32
     } else if (parsed.kind() === 'ipv6') {
-      return prefix >= 0 && prefix <= 128
+      return parsedCidr.prefix >= 0 && parsedCidr.prefix <= 128
     } else {
       return false
     }
@@ -49,9 +57,10 @@ export const isClientIpAllowed = (ipList: string[], clientIp: string): boolean =
     return ipList.some((entry) => {
       try {
         if (entry.includes('/')) {
-          const [rangeIp, prefixLength] = entry.split('/')
-          const cidr = ipaddr.parse(rangeIp)
-          const range = cidr.match(addr, parseInt(prefixLength, 10))
+          const parsedEntry = parseCidrPrefix(entry)
+          if (!parsedEntry) return false
+          const cidr = ipaddr.parse(parsedEntry.addr)
+          const range = cidr.match(addr, parsedEntry.prefix)
           return range
         } else {
           return addr.toNormalizedString() === ipaddr.parse(entry).toNormalizedString()
