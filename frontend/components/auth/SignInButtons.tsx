@@ -11,7 +11,7 @@ import { toast } from 'react-toastify'
 import { Button } from '../common/Button'
 import { LogoWordMark } from '../common/LogoWordMark'
 import { getProviderName, orgProviderIcons, providerButtons } from './providerMeta'
-import TotpVerifyForm, { TotpVerifySuccess } from './TotpVerifyForm'
+import MfaVerifyForm, { MfaVerifySuccess } from './MfaVerifyForm'
 import Link from 'next/link'
 import { isCloudHosted } from '@/utils/appConfig'
 import { Alert } from '../common/Alert'
@@ -47,7 +47,7 @@ type SSOMethod = {
   enforced: boolean
 }
 
-type LoginStep = 'email' | 'password' | 'sso-redirect' | 'totp'
+type LoginStep = 'email' | 'password' | 'sso-redirect' | 'mfa'
 
 export default function SignInButtons({
   providers,
@@ -117,7 +117,7 @@ export default function SignInButtons({
     window.location.href = isSafeRedirectPath(callbackUrl) ? callbackUrl : '/'
   }
 
-  const handleTotpSuccess = (data: TotpVerifySuccess) => {
+  const handleMfaSuccess = (data: MfaVerifySuccess) => {
     if (pendingDeviceKeyRef.current && data.userId) {
       setDeviceKey(data.userId, pendingDeviceKeyRef.current)
       pendingDeviceKeyRef.current = null
@@ -254,11 +254,11 @@ export default function SignInButtons({
 
       if (response.status === 200) {
         if (response.data?.mfaRequired) {
-          // No session yet — hold the derived deviceKey until the TOTP
-          // code verifies (the userId only arrives with the verify
+          // No session yet — hold the derived deviceKey until the second
+          // factor verifies (the userId only arrives with the verify
           // response).
           pendingDeviceKeyRef.current = deviceKey
-          setStep('totp')
+          setStep('mfa')
           return
         }
         if (deviceKey && response.data?.userId) {
@@ -680,8 +680,8 @@ export default function SignInButtons({
               </div>
             )}
 
-            {/* Step 2c: TOTP challenge (password flow) */}
-            {step === 'totp' && (
+            {/* Step 2c: second-factor challenge (password flow) */}
+            {step === 'mfa' && (
               <div className="flex flex-col gap-4">
                 <button
                   type="button"
@@ -692,11 +692,7 @@ export default function SignInButtons({
                   {email}
                 </button>
 
-                <p className="text-sm text-neutral-500 text-center">
-                  Enter the 6-digit code from your authenticator app.
-                </p>
-
-                <TotpVerifyForm onSuccess={handleTotpSuccess} />
+                <MfaVerifyForm onSuccess={handleMfaSuccess} />
               </div>
             )}
           </div>

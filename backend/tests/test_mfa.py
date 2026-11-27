@@ -1,5 +1,6 @@
 """Tests for TOTP 2FA: crypto helpers, replay guard, recovery codes, the
-management/verify endpoints, and the login-flow deferral.
+management/verify endpoints, and the login-flow deferral. Passkeys (and how
+they share recovery codes with TOTP) are covered in test_passkeys.py.
 
 Uses unittest.TestCase with mocked ORM — no database required.
 """
@@ -226,11 +227,16 @@ class MfaManagementMutationTest(unittest.TestCase):
             EnrollMfaMutation.mutate(None, self._info(user=_make_user(), fresh=False))
         self.assertIn("reauth_required", str(ctx.exception))
 
+    @patch("backend.graphene.mutations.mfa.lock_mfa_factors")
+    @patch("backend.graphene.mutations.mfa.transaction")
     @patch("backend.graphene.mutations.mfa.user_has_active_totp", return_value=True)
-    def test_enroll_refuses_when_already_enabled(self, mock_active):
+    def test_enroll_refuses_when_already_enabled(self, mock_active, mock_tx, mock_lock):
         from graphql import GraphQLError
 
         from backend.graphene.mutations.mfa import EnrollMfaMutation
+
+        # The refusal is raised under the lock: it must propagate
+        mock_tx.atomic.return_value.__exit__ = MagicMock(return_value=False)
 
         with self.assertRaises(GraphQLError) as ctx:
             EnrollMfaMutation.mutate(None, self._info(user=_make_user()))
@@ -241,25 +247,42 @@ class MfaManagementMutationTest(unittest.TestCase):
     @patch("backend.graphene.mutations.mfa.generate_totp_secret", return_value="S" * 32)
     @patch("backend.graphene.mutations.mfa.UserTOTP")
     @patch("backend.graphene.mutations.mfa.user_has_active_totp", return_value=False)
+    @patch("backend.graphene.mutations.mfa.lock_mfa_factors")
+    @patch("backend.graphene.mutations.mfa.transaction")
     def test_enroll_creates_pending_row(
-        self, mock_active, mock_model, mock_secret, mock_encrypt, mock_uri
+        self, mock_tx, mock_lock, mock_active, mock_model, mock_secret, mock_encrypt, mock_uri
     ):
         from backend.graphene.mutations.mfa import EnrollMfaMutation
 
+        mock_tx.atomic.return_value.__exit__ = MagicMock(return_value=False)
+
         result = EnrollMfaMutation.mutate(None, self._info(user=_make_user()))
+        # Under the factor lock, so it can't reset an activation in flight
+        mock_lock.assert_called_once()
         self.assertEqual(result.secret, "S" * 32)
         self.assertEqual(result.otpauth_uri, "otpauth://totp/x")
         _, kwargs = mock_model.objects.update_or_create.call_args
         self.assertIsNone(kwargs["defaults"]["activated_at"])
         self.assertEqual(kwargs["defaults"]["encrypted_seed"], "ph:v1:ct")
 
+    @patch("backend.graphene.mutations.mfa.lock_mfa_factors")
+    @patch("backend.graphene.mutations.mfa.user_has_mfa", return_value=False)
+    @patch("backend.graphene.mutations.mfa.user_has_passkeys", return_value=False)
     @patch("backend.graphene.mutations.mfa.transaction")
     @patch("api.emails.send_totp_status_email")
     @patch("backend.graphene.mutations.mfa.generate_recovery_codes", return_value=["a-b"] * 10)
     @patch("backend.graphene.mutations.mfa.verify_totp_code", return_value=12345)
     @patch("backend.graphene.mutations.mfa.UserTOTP")
     def test_activate_with_valid_code(
-        self, mock_model, mock_verify, mock_codes, mock_email, mock_tx
+        self,
+        mock_model,
+        mock_verify,
+        mock_codes,
+        mock_email,
+        mock_tx,
+        mock_passkeys,
+        mock_has_mfa,
+        mock_lock,
     ):
         from backend.graphene.mutations.mfa import ActivateMfaMutation
 
@@ -272,8 +295,48 @@ class MfaManagementMutationTest(unittest.TestCase):
             None, self._info(user=_make_user()), code="123456"
         )
         self.assertEqual(len(result.recovery_codes), 10)
-        pending.save.assert_called_once_with(update_fields=["activated_at"])
+        # Only the seed the code was checked against is turned on
+        mock_model.objects.filter.assert_any_call(
+            pk=pending.pk, activated_at__isnull=True, encrypted_seed=pending.encrypted_seed
+        )
+        mock_model.objects.filter.return_value.update.assert_called_once()
         mock_email.assert_called_once()
+        self.assertFalse(mock_email.call_args.kwargs["other_factors"])
+
+    @patch("backend.graphene.mutations.mfa.lock_mfa_factors")
+    @patch("backend.graphene.mutations.mfa.user_has_mfa", return_value=False)
+    @patch("backend.graphene.mutations.mfa.user_has_passkeys", return_value=False)
+    @patch("backend.graphene.mutations.mfa.transaction")
+    @patch("api.emails.send_totp_status_email")
+    @patch("backend.graphene.mutations.mfa.generate_recovery_codes", return_value=["a-b"] * 10)
+    @patch("backend.graphene.mutations.mfa.verify_totp_code", return_value=12345)
+    @patch("backend.graphene.mutations.mfa.UserTOTP")
+    def test_activate_refuses_a_setup_restarted_meanwhile(
+        self,
+        mock_model,
+        mock_verify,
+        mock_codes,
+        mock_email,
+        mock_tx,
+        mock_passkeys,
+        mock_has_mfa,
+        mock_lock,
+    ):
+        """Another tab re-enrolled (new seed) between the code check and the
+        activation: nothing is turned on."""
+        from graphql import GraphQLError
+
+        from backend.graphene.mutations.mfa import ActivateMfaMutation
+
+        mock_tx.atomic.return_value.__exit__ = MagicMock(return_value=False)
+        mock_model.objects.filter.return_value.first.return_value = MagicMock()
+        mock_model.objects.filter.return_value.update.return_value = 0
+
+        with self.assertRaises(GraphQLError) as ctx:
+            ActivateMfaMutation.mutate(None, self._info(user=_make_user()), code="123456")
+        self.assertIn("restarted", str(ctx.exception))
+        mock_codes.assert_not_called()
+        mock_email.assert_not_called()
 
     @patch("backend.graphene.mutations.mfa.verify_totp_code", return_value=None)
     @patch("backend.graphene.mutations.mfa.UserTOTP")
@@ -292,12 +355,26 @@ class MfaManagementMutationTest(unittest.TestCase):
         self.assertIn("Invalid code", str(ctx.exception))
         pending.save.assert_not_called()
 
+    @patch("backend.graphene.mutations.mfa.lock_mfa_factors")
+    @patch("backend.graphene.mutations.mfa.transaction")
+    @patch("backend.graphene.mutations.mfa.user_has_passkeys", return_value=False)
+    @patch("backend.graphene.mutations.mfa.user_has_mfa", return_value=True)
+    @patch("backend.graphene.mutations.mfa.user_has_active_totp", return_value=True)
     @patch("api.emails.send_totp_status_email")
     @patch("backend.graphene.mutations.mfa.verify_totp_code", return_value=12345)
     @patch("backend.graphene.mutations.mfa.UserRecoveryCode")
     @patch("backend.graphene.mutations.mfa.UserTOTP")
     def test_disable_with_valid_code_deletes_rows(
-        self, mock_model, mock_recovery, mock_verify, mock_email
+        self,
+        mock_model,
+        mock_recovery,
+        mock_verify,
+        mock_email,
+        mock_active,
+        mock_has_mfa,
+        mock_passkeys,
+        mock_tx,
+        mock_lock,
     ):
         from backend.graphene.mutations.mfa import DisableMfaMutation
 
@@ -312,12 +389,20 @@ class MfaManagementMutationTest(unittest.TestCase):
         mock_recovery.objects.filter.return_value.delete.assert_called_once()
         mock_email.assert_called_once()
 
+    @patch("backend.graphene.mutations.mfa.user_has_mfa", return_value=True)
+    @patch("backend.graphene.mutations.mfa.user_has_active_totp", return_value=True)
     @patch("backend.graphene.mutations.mfa.consume_recovery_code", return_value=False)
     @patch("backend.graphene.mutations.mfa.verify_totp_code", return_value=None)
     @patch("backend.graphene.mutations.mfa.UserRecoveryCode")
     @patch("backend.graphene.mutations.mfa.UserTOTP")
     def test_disable_without_valid_code_refused(
-        self, mock_model, mock_recovery, mock_verify, mock_consume
+        self,
+        mock_model,
+        mock_recovery,
+        mock_verify,
+        mock_consume,
+        mock_active,
+        mock_has_mfa,
     ):
         from graphql import GraphQLError
 
@@ -333,11 +418,18 @@ class MfaManagementMutationTest(unittest.TestCase):
         self.assertIn("Invalid code", str(ctx.exception))
         mock_model.objects.filter.return_value.delete.assert_not_called()
 
+    @patch("backend.graphene.mutations.mfa.lock_mfa_factors")
+    @patch("backend.graphene.mutations.mfa.transaction")
+    @patch("backend.graphene.mutations.mfa.user_has_mfa", return_value=True)
     @patch("backend.graphene.mutations.mfa.generate_recovery_codes", return_value=["x-y"] * 10)
     @patch("backend.graphene.mutations.mfa.verify_totp_code", return_value=12345)
     @patch("backend.graphene.mutations.mfa.UserTOTP")
-    def test_regenerate_returns_new_codes(self, mock_model, mock_verify, mock_codes):
+    def test_regenerate_returns_new_codes(
+        self, mock_model, mock_verify, mock_codes, mock_has_mfa, mock_tx, mock_lock
+    ):
         from backend.graphene.mutations.mfa import RegenerateRecoveryCodesMutation
+
+        mock_tx.atomic.return_value.__exit__ = MagicMock(return_value=False)
 
         active = MagicMock()
         mock_model.objects.filter.return_value.first.return_value = active
@@ -346,6 +438,9 @@ class MfaManagementMutationTest(unittest.TestCase):
             None, self._info(user=_make_user()), code="123456"
         )
         self.assertEqual(len(result.recovery_codes), 10)
+        # Under the factor lock: a last factor removed meanwhile can't be
+        # followed by fresh codes on an account without 2FA
+        mock_lock.assert_called_once()
 
     @patch("backend.graphene.mutations.mfa.UserRecoveryCode")
     @patch("backend.graphene.mutations.mfa.UserTOTP")
@@ -355,13 +450,18 @@ class MfaManagementMutationTest(unittest.TestCase):
         row = MagicMock()
         with patch("backend.graphene.queries.account.UserTOTP") as q_totp, patch(
             "backend.graphene.queries.account.UserRecoveryCode"
-        ) as q_recovery:
+        ) as q_recovery, patch(
+            "backend.graphene.queries.account.UserPasskey"
+        ) as q_passkey:
             q_totp.objects.filter.return_value.first.return_value = row
             q_recovery.objects.filter.return_value.count.return_value = 7
+            q_passkey.objects.filter.return_value.order_by.return_value = []
 
             status = resolve_mfa_status(None, self._info(user=_make_user()))
 
         self.assertTrue(status.enabled)
+        self.assertTrue(status.totp_enabled)
+        self.assertEqual(status.passkeys, [])
         self.assertEqual(status.recovery_codes_remaining, 7)
 
 
@@ -423,18 +523,27 @@ class MfaVerifyViewTest(unittest.TestCase):
         self.assertEqual(response.status_code, 410)
         self.assertNotIn("mfa_pending_user_id", request.session)
 
+    @patch("api.views.auth_mfa.user_has_mfa", return_value=True)
+    @patch("api.views.auth_mfa.get_user_model")
     @patch("api.views.auth_mfa.mfa_locked_out", return_value=True)
-    def test_locked_out(self, mock_locked):
+    def test_locked_out(self, mock_locked, mock_get_user, mock_has_mfa):
+        mock_get_user.return_value.objects.filter.return_value.first.return_value = (
+            _make_user()
+        )
         response = self._call(self._post({"code": "123456"}))
         self.assertEqual(response.status_code, 429)
+        self.assertEqual(json.loads(response.content)["code"], "locked_out")
 
-    @patch("api.views.auth_mfa.record_mfa_failure")
+    @patch("api.views.auth_mfa.user_has_mfa", return_value=True)
+    @patch("api.views.auth_mfa.mfa_attempt", return_value=True)
     @patch("api.views.auth_mfa.verify_totp_code", return_value=None)
     @patch("api.views.auth_mfa.UserTOTP")
     @patch("api.views.auth_mfa.get_user_model")
     def test_invalid_code_records_failure(
-        self, mock_get_user, mock_model, mock_verify, mock_record
+        self, mock_get_user, mock_model, mock_verify, mock_record, mock_has_mfa
     ):
+        """The attempt is counted before the code is checked, so parallel
+        guesses can't get past the limit."""
         user = _make_user()
         mock_get_user.return_value.objects.filter.return_value.first.return_value = user
         mock_model.objects.filter.return_value.first.return_value = MagicMock()
@@ -443,13 +552,14 @@ class MfaVerifyViewTest(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         mock_record.assert_called_once_with("uuid-user-1")
 
+    @patch("api.views.auth_mfa.user_has_mfa", return_value=True)
     @patch("api.views.auth_mfa.send_login_email")
     @patch("api.views.auth_mfa.login")
     @patch("api.views.auth_mfa.verify_totp_code", return_value=12345)
     @patch("api.views.auth_mfa.UserTOTP")
     @patch("api.views.auth_mfa.get_user_model")
     def test_password_flow_success(
-        self, mock_get_user, mock_model, mock_verify, mock_login, mock_email
+        self, mock_get_user, mock_model, mock_verify, mock_login, mock_email, mock_has_mfa
     ):
         user = _make_user()
         user.socialaccount_set.first.return_value = None
@@ -470,13 +580,14 @@ class MfaVerifyViewTest(unittest.TestCase):
         self.assertNotIn("mfa_pending_user_id", request.session)
         mock_email.assert_called_once()
 
+    @patch("api.views.auth_mfa.user_has_mfa", return_value=True)
     @patch("api.views.auth_mfa.send_login_email")
     @patch("api.views.auth_mfa.login")
     @patch("api.views.auth_mfa.consume_recovery_code", return_value=True)
     @patch("api.views.auth_mfa.UserTOTP")
     @patch("api.views.auth_mfa.get_user_model")
     def test_sso_flow_restores_org_context_without_login_email(
-        self, mock_get_user, mock_model, mock_consume, mock_login, mock_email
+        self, mock_get_user, mock_model, mock_consume, mock_login, mock_email, mock_has_mfa
     ):
         user = _make_user()
         user.socialaccount_set.first.return_value = None
@@ -498,13 +609,14 @@ class MfaVerifyViewTest(unittest.TestCase):
         # SSO adapters already sent the login alert during complete_login
         mock_email.assert_not_called()
 
+    @patch("api.views.auth_mfa.user_has_mfa", return_value=True)
     @patch("api.views.auth_mfa.send_login_email")
     @patch("api.views.auth_mfa.login")
     @patch("api.views.auth_mfa.verify_totp_code", return_value=12345)
     @patch("api.views.auth_mfa.UserTOTP")
     @patch("api.views.auth_mfa.get_user_model")
     def test_unsafe_return_to_is_dropped(
-        self, mock_get_user, mock_model, mock_verify, mock_login, mock_email
+        self, mock_get_user, mock_model, mock_verify, mock_login, mock_email, mock_has_mfa
     ):
         user = _make_user()
         user.socialaccount_set.first.return_value = None
@@ -526,7 +638,7 @@ class PasswordLoginDeferralTest(unittest.TestCase):
     def setUp(self):
         cache.clear()
 
-    @patch("api.views.auth_password.user_has_active_totp", return_value=True)
+    @patch("api.views.auth_password.user_has_mfa", return_value=True)
     @patch("api.views.auth_password.login")
     @patch("api.views.auth_password.get_user_model")
     @patch("api.views.auth_password._password_auth_enabled", return_value=True)
@@ -563,7 +675,7 @@ class PasswordLoginDeferralTest(unittest.TestCase):
         self.assertEqual(request.session["mfa_pending_user_id"], "uuid-123")
         self.assertEqual(request.session["mfa_pending_method"], "password")
 
-    @patch("api.views.auth_password.user_has_active_totp", return_value=True)
+    @patch("api.views.auth_password.user_has_mfa", return_value=True)
     @patch("api.views.auth_password.login")
     @patch("api.views.auth_password.get_user_model")
     @patch("api.views.auth_password._password_auth_enabled", return_value=True)
@@ -623,7 +735,7 @@ class SsoCallbackDeferralTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     @patch("api.views.sso.login")
-    @patch("api.views.sso.user_has_active_totp", return_value=True)
+    @patch("api.views.sso.user_has_mfa", return_value=True)
     @patch("api.views.sso._complete_login_bypassing_allauth")
     @patch("api.views.sso._get_or_create_social_app")
     @patch("api.views.sso._get_adapter_instance")
@@ -676,7 +788,7 @@ class SsoCallbackDeferralTest(unittest.TestCase):
 
     @patch("api.views.sso.stamp_auth_time")
     @patch("api.views.sso.login")
-    @patch("api.views.sso.user_has_active_totp", return_value=False)
+    @patch("api.views.sso.user_has_mfa", return_value=False)
     @patch("api.views.sso._complete_login_bypassing_allauth")
     @patch("api.views.sso._get_or_create_social_app")
     @patch("api.views.sso._get_adapter_instance")

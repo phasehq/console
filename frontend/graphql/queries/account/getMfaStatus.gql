@@ -1,7 +1,25 @@
 query GetMfaStatus {
   mfaStatus {
     enabled
+    totpEnabled
     activatedAt
     recoveryCodesRemaining
+    passkeyRpId
+    passkeys {
+      id
+      name
+      credentialId
+      createdAt
+      lastUsedAt
+      synced
+      kind
+      aaguid
+      authenticatorName
+      transports
+      backedUp
+      prfEnabled
+      signCount
+      publicKey
+    }
   }
 }

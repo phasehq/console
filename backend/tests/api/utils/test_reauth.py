@@ -71,21 +71,21 @@ class TestStampAuthTimeAfterRelogin:
         request.session = {}
         return request
 
-    @patch("api.utils.mfa.user_has_active_totp", return_value=False)
+    @patch("api.utils.mfa.user_has_mfa", return_value=False)
     def test_password_only_user_is_stamped(self, _totp):
         request = self._request()
         stamp_auth_time_after_relogin(request, MagicMock())
         assert isinstance(request.session.get("auth_time"), int)
         assert abs(request.session["auth_time"] - int(time.time())) < 5
 
-    @patch("api.utils.mfa.user_has_active_totp", return_value=True)
+    @patch("api.utils.mfa.user_has_mfa", return_value=True)
     def test_totp_user_is_not_stamped(self, _totp):
         request = self._request()
         stamp_auth_time_after_relogin(request, MagicMock())
         # Password proof alone must not mint freshness for a 2FA user.
         assert "auth_time" not in request.session
 
-    @patch("api.utils.mfa.user_has_active_totp", return_value=True)
+    @patch("api.utils.mfa.user_has_mfa", return_value=True)
     def test_totp_user_keeps_prior_stale_stamp(self, _totp):
         request = self._request()
         stale = int(time.time()) - 100000

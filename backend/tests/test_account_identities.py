@@ -111,7 +111,7 @@ class AuthTimeStampingTest(unittest.TestCase):
     def setUp(self):
         cache.clear()
 
-    @patch("api.views.auth_password.user_has_active_totp", return_value=False)
+    @patch("api.views.auth_password.user_has_mfa", return_value=False)
     @patch("api.emails.send_login_email")
     @patch("api.views.auth_password.login")
     @patch("api.views.auth_password.get_user_model")
